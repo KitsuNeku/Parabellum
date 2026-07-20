@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In · Parabellum ISOS</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <!-- Google Font: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<div class="login-wrap">
+
+  <!-- ===== Left brand panel ===== -->
+  <div class="login-aside">
+    <div class="la-brand">
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" alt="Parabellum" style="width:46px;height:46px;">
+      <div>
+        <div class="brand-name">PARABELLUM</div>
+        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
+      </div>
+    </div>
+
+    <div class="la-hero">
+      <span class="badge b-gold mb-3" style="font-size:.72rem;">Inventory &amp; Service Optimization System</span>
+      <h1>Forge smarter operations with data-driven steel inventory.</h1>
+      <p>Track stock, manage projects, automate client transactions, and forecast material demand — all in one internal platform.</p>
+      <div class="la-feat">
+        <div class="lf"><i class="bi bi-box-seam"></i> Real-time Inventory</div>
+        <div class="lf"><i class="bi bi-graph-up-arrow"></i> ML Demand Forecasting</div>
+        <div class="lf"><i class="bi bi-shield-check"></i> Role-based Access</div>
+      </div>
+    </div>
+
+    <div class="la-foot">&copy; 2026 Parabellum Steel &amp; Iron Works. All rights reserved.</div>
+  </div>
+
+  <!-- ===== Login form ===== -->
+  <div class="login-form-side">
+    <div class="login-card">
+      <a href="/" class="small fw-medium d-inline-flex align-items-center mb-3" style="color:var(--primary);text-decoration:none;">
+        <i class="bi bi-arrow-left me-1"></i> Back to Home
+      </a>
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="lc-logo d-md-none" alt="Parabellum">
+      <h2>Welcome back</h2>
+      <p class="lc-sub">Sign in to your account to continue to the dashboard.</p>
+
+      <form id="loginForm" class="needs-validation" novalidate>
+        <div class="mb-3">
+          <label for="username" class="form-label">Username or Email</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person"></i></span>
+            <input type="text" class="form-control" id="username" placeholder="Enter your username" placeholder="Enter your username" required>
+            <div class="invalid-feedback">Please enter your username.</div>
+          </div>
+        </div>
+
+        <div class="mb-2">
+          <label for="password" class="form-label">Password</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+            <input type="password" class="form-control" id="password" placeholder="Enter your password" placeholder="Enter your password" required>
+            <span class="input-group-text pw-toggle" data-pw-toggle="#password" role="button"><i class="bi bi-eye-slash"></i></span>
+            <div class="invalid-feedback">Please enter your password.</div>
+          </div>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-between mb-4">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="remember" checked>
+            <label class="form-check-label small" for="remember">Remember me</label>
+          </div>
+          <a href="#" class="small text-decoration-none" style="color:var(--primary)">Forgot password?</a>
+        </div>
+
+        <div id="loginError" class="alert alert-danger py-2 small d-none" role="alert"></div>
+
+        <button type="submit" id="loginBtn" class="btn btn-primary w-100 py-2 mb-3">
+          <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+        </button>
+        <p class="small text-muted-2 text-center mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>Demo access: <strong>admin</strong> / <strong>Admin!2026</strong></p>
+      </form>
+
+      <p class="text-center small text-muted-2 mt-4 mb-0">
+        Use the demo account above, or your own account once created.
+      </p>
+    </div>
+  </div>
+  </div><!-- /.login-wrap -->
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+</body>
+</html>

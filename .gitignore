@@ -1,0 +1,6 @@
+# Never commit your database password to GitHub
+config.py
+
+__pycache__/
+*.pyc
+venv/

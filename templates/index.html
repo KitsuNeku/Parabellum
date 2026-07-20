@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</title>
+  <meta name="description" content="Internal Inventory and Service Optimization System for Parabellum Steel and Iron Works — centralized records, demand forecasting, and faster client transactions for steel fabrication operations.">
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root{
+      --primary:#b11217; --primary-rgb:177,18,23; --primary-dark:#8a1214; --primary-soft:#fff2ea;
+      --accent:#e6a817; --accent-rgb:230,168,23; --accent-dark:#c9900a;
+      --steel-top:#a8121b; --steel-bottom:#6e0f11;
+      --card:#ffffff; --bg-alt:#fbf7f1; --text:#1f2329; --text-muted:#5b6270; --border:#e6e8ec; --success:#1f9d55;
+    }
+    *{box-sizing:border-box;}
+    body{font-family:'Poppins',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--text); margin:0; overflow-x:hidden;}
+    .splash{min-height:100vh; display:flex; flex-direction:column;
+      background:linear-gradient(135deg,var(--steel-top) 0%, var(--steel-bottom) 72%); color:#fff; position:relative; overflow:hidden;}
+    .splash__bg{position:absolute; inset:0; opacity:.5; z-index:0;}
+    .splash__overlay{position:absolute; inset:0; z-index:1;
+      background:radial-gradient(900px 520px at 80% 12%, rgba(230,168,23,.14), transparent 60%);}
+
+    /* Brand bar */
+    .brandbar{position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between;
+      padding:18px 0;}
+    .lp-brand{display:flex; align-items:center; gap:.65rem;}
+    .lp-brand .logo-mark{width:40px; height:40px;}
+    .lp-brand .bname{font-size:1.22rem; font-weight:800; letter-spacing:.05em; line-height:1; color:#fff;}
+    .lp-brand .bsub{font-size:.56rem; letter-spacing:.18em; font-weight:600; color:rgba(255,255,255,.78); margin-top:3px;}
+    .sys-pill{font-size:.72rem; font-weight:600; letter-spacing:.05em; color:rgba(255,255,255,.85);
+      background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.18); border-radius:30px; padding:.4rem .9rem;}
+
+    /* Hero */
+    .hero{position:relative; z-index:2; flex:1 1 auto; display:flex; align-items:center; padding:24px 0 32px;}
+    .pill-gold{display:inline-flex; align-items:center; gap:.4rem; font-weight:600; font-size:.74rem; letter-spacing:.04em;
+      text-transform:uppercase; padding:.42em .9em; border-radius:30px;
+      background:rgba(var(--accent-rgb),.2); color:var(--accent); border:1px solid rgba(var(--accent-rgb),.35);}
+    .hero h1{font-size:clamp(2rem,3.8vw,3rem); font-weight:800; line-height:1.1; letter-spacing:-.02em; margin:.6rem 0 .4rem;}
+    .hero .tagline{font-size:1.15rem; font-weight:600; color:var(--accent);}
+    .hero .service-line{color:rgba(255,255,255,.82); font-size:1rem; max-width:520px; margin:.9rem 0 1.2rem;}
+    .btn-gold{background:var(--accent); border:none; color:#4a3300; font-weight:600; border-radius:10px; padding:.75rem 1.6rem;}
+    .btn-gold:hover{background:var(--accent-dark); color:#3d2a00; box-shadow:0 10px 24px rgba(var(--accent-rgb),.34);}
+
+    /* Sales figure */
+    .sales-callout{display:flex; align-items:baseline; gap:.5rem; margin:1.4rem 0 .2rem;}
+    .sales-callout .fig{font-size:2.8rem; font-weight:800; color:#fff; line-height:1;}
+    .sales-callout .lbl{font-size:.95rem; color:rgba(255,255,255,.75);}
+
+    /* Differentiator cards */
+    .value-card{background:rgba(255,255,255,.97); border-radius:14px; padding:16px 18px; height:100%;
+      box-shadow:0 12px 30px rgba(110,15,17,.14);}
+    .value-card .vc-ic{width:40px; height:40px; border-radius:11px; display:grid; place-items:center; font-size:1.15rem;
+      background:var(--primary-soft); color:var(--primary); margin-bottom:9px;}
+    .value-card.gold .vc-ic{background:rgba(var(--accent-rgb),.16); color:var(--accent-dark);}
+    .value-card h6{font-weight:700; margin:0 0 3px; color:var(--text); font-size:.98rem;}
+    .value-card p{font-size:.82rem; color:var(--text-muted); margin:0; line-height:1.4;}
+
+    /* Footer bar */
+    .foot{position:relative; z-index:2; border-top:1px solid rgba(255,255,255,.14); padding:16px 0;
+      display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px;
+      font-size:.82rem; color:rgba(255,255,255,.7);}
+    .foot a{color:rgba(255,255,255,.85); text-decoration:none;}
+    .foot a:hover{color:var(--accent);}
+    @media (max-width:575.98px){ .sales-callout .fig{font-size:2.2rem;} .hero{padding:12px 0 20px;} }
+  </style>
+</head>
+<body>
+<div class="splash">
+  <!-- Steel girder background motif -->
+  <svg class="splash__bg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect width="1200" height="800" fill="#6e0f11"/>
+    <g stroke="#ffffff" stroke-opacity="0.07" stroke-width="3" fill="none">
+      <path d="M0 200 L1200 120 M0 380 L1200 300 M0 560 L1200 480 M0 740 L1200 660"/>
+      <path d="M200 0 L200 800 M450 0 L450 800 M700 0 L700 800 M950 0 L950 800"/>
+      <path d="M200 200 L450 120 L450 300 L700 220 L700 400 L950 320"/>
+    </g>
+    <g fill="#e6a817" fill-opacity="0.5"><circle cx="450" cy="120" r="5"/><circle cx="700" cy="220" r="5"/><circle cx="950" cy="320" r="5"/></g>
+  </svg>
+  <div class="splash__overlay"></div>
+
+  <div class="container" style="max-width:1160px; display:flex; flex-direction:column; min-height:100vh;">
+    <!-- Brand bar -->
+    <div class="brandbar">
+      <div class="lp-brand">
+        <svg class="logo-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#e6a817"/><stop offset="1" stop-color="#c9900a"/></linearGradient></defs>
+          <path d="M32 3 56 11v18c0 16-10.5 27-24 32C18.5 56 8 45 8 29V11L32 3Z" fill="url(#lg)"/>
+          <g fill="#7a1012"><rect x="20" y="20" width="24" height="5" rx="1"/><rect x="20" y="39" width="24" height="5" rx="1"/><rect x="29.5" y="23" width="5" height="18" rx="1"/></g>
+        </svg>
+        <span class="d-flex flex-column">
+          <span class="bname">PARABELLUM</span>
+          <span class="bsub">STEEL &amp; IRON WORKS</span>
+        </span>
+      </div>
+      <span class="sys-pill"><i class="bi bi-shield-lock me-1"></i>Internal System</span>
+    </div>
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="row align-items-center g-4 w-100">
+        <div class="col-lg-6">
+          <span class="pill-gold"><i class="bi bi-hammer"></i> Inventory &amp; Service Optimization System</span>
+          <h1>Parabellum Steel<br>&amp; Iron Works</h1>
+          <div class="tagline">Smarter inventory, faster projects, better service.</div>
+
+          <div class="sales-callout">
+            <span class="fig">₱4.82M</span>
+            <span class="lbl">in monthly sales across active fabrication projects</span>
+          </div>
+
+          <p class="service-line">While many steel and iron works still rely on manual tracking and guesswork, Parabellum plans ahead — so projects stay on schedule and materials are always available.</p>
+
+          <a href="/login" class="btn btn-gold"><i class="bi bi-box-arrow-in-right me-2"></i>Login to System</a>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="row g-3">
+            <div class="col-12">
+              <div class="value-card">
+                <div class="vc-ic"><i class="bi bi-diagram-3"></i></div>
+                <h6>Centralized digital records</h6>
+                <p>One system for inventory, customers, projects, and client transactions — no more scattered logbooks and spreadsheets common in the industry.</p>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="value-card gold">
+                <div class="vc-ic"><i class="bi bi-graph-up-arrow"></i></div>
+                <h6>Smart demand forecasting</h6>
+                <p>Materials are predicted and ready before a project needs them, instead of reactive, last-minute ordering.</p>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="value-card">
+                <div class="vc-ic"><i class="bi bi-lightning-charge"></i></div>
+                <h6>Faster, transparent transactions</h6>
+                <p>Automated invoicing and commission computation replace slow, error-prone manual paperwork.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compact footer -->
+    <div class="foot">
+      <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
+      <span><i class="bi bi-geo-alt-fill me-1" style="color:var(--accent)"></i>Lipa City, Batangas &nbsp;·&nbsp; <a href="mailto:info@parabellumsteel.ph">info@parabellumsteel.ph</a></span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

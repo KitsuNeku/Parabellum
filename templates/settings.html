@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings · Parabellum ISOS</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <!-- Google Font: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand d-flex align-items-center gap-2">
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
+      <div>
+        <div class="brand-name">PARABELLUM</div>
+        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
+      </div>
+    </div>
+
+    <div class="sidebar__user">
+      <div class="avatar-gold">{{ current_user_initials }}</div>
+      <div>
+        <div class="u-name">{{ current_user.name }}</div>
+        <div class="u-role">{{ current_user.role }}</div>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <div class="nav-section">MAIN</div>
+      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
+      <div class="nav-section">INVENTORY &amp; SALES</div>
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
+      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
+      {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
+      {% if 'commissions' in allowed_pages %}<a class="nav-link" href="/commissions"><i class="bi bi-cash-coin"></i><span>Commissions</span></a>{% endif %}
+      <div class="nav-section">INTELLIGENCE</div>
+      {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
+      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
+      <div class="nav-section">SYSTEM</div>
+      {% if 'settings' in allowed_pages %}<a class="nav-link active" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
+      {% if 'profile' in allowed_pages %}<a class="nav-link" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
+    </nav>
+
+    <div class="sidebar__footer">
+      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
+        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
+      </a>
+    </div>
+  </aside>
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <!-- ============ TOPBAR ============ -->
+    <header class="topbar">
+      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
+
+      <div class="topbar__search dropdown">
+        <i class="bi bi-search"></i>
+        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
+               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
+        <ul class="dropdown-menu dropdown-panel mt-2">
+          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
+          <a href="/inventory" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
+            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/customers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
+            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
+          </a>
+          <a href="/projects" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
+            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
+          </a>
+          <a href="/transactions" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
+            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
+          </a>
+        </ul>
+      </div>
+
+      <div class="topbar__actions">
+        <!-- Notifications -->
+        <div class="dropdown">
+          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
+            <i class="bi bi-bell"></i><span class="dot"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
+            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
+          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
+          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
+          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
+          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
+        </a>
+            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <button class="icon-btn" data-bs-toggle="tooltip" title="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
+
+        <!-- Profile -->
+        <div class="dropdown">
+          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
+            <div class="avatar-sm">{{ current_user_initials }}</div>
+            <div class="p-meta">
+              <div class="p-name">{{ current_user.name }}</div>
+              <div class="p-role">{{ current_user.role }}</div>
+            </div>
+            <i class="bi bi-chevron-down small text-muted-2"></i>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
+            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
+            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><a class="dropdown-item py-2" href="#"><i class="bi bi-shield-lock me-2"></i>Security</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+    <main class="page">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Settings</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">System Settings</h1>
+          <p class="page-subtitle">Configure your company, users, and preferences.</p>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-3"><div class="card"><div class="card-body p-2">
+          <div class="nav flex-column nav-pills" role="tablist" id="settingsTabs">
+            <button class="nav-link active text-start" data-bs-toggle="pill" data-bs-target="#tab-company"><i class="bi bi-building me-2"></i>Company</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-users"><i class="bi bi-people me-2"></i>User Management</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-roles"><i class="bi bi-shield-lock me-2"></i>Roles &amp; Permissions</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-theme"><i class="bi bi-palette me-2"></i>Theme</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-notif"><i class="bi bi-bell me-2"></i>Notifications</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-security"><i class="bi bi-lock me-2"></i>Security</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-backup"><i class="bi bi-cloud-arrow-up me-2"></i>Backup</button>
+            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-logs"><i class="bi bi-journal-text me-2"></i>System Logs</button>
+          </div>
+        </div></div></div>
+
+        <div class="col-lg-9"><div class="tab-content">
+          <!-- Company -->
+          <div class="tab-pane fade show active" id="tab-company"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Company Information</h3><p class="panel-sub mb-3">Basic details shown across documents and invoices.</p>
+            <form class="needs-validation row g-3" novalidate data-success-msg="Company information saved">
+              <div class="col-md-8"><label class="form-label">Company Name</label><input class="form-control" value="Parabellum Steel &amp; Iron Works" required></div>
+              <div class="col-md-4"><label class="form-label">TIN</label><input class="form-control" value="009-123-456-000"></div>
+              <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" value="info@parabellumsteel.com.ph" required></div>
+              <div class="col-md-6"><label class="form-label">Phone</label><input class="form-control" value="(046) 123-4567"></div>
+              <div class="col-12"><label class="form-label">Address</label><input class="form-control" value="Brgy. Salawag, Dasmariñas, Cavite, Philippines"></div>
+              <div class="col-md-6"><label class="form-label">Default Currency</label><select class="form-select"><option>PHP — Philippine Peso (₱)</option><option>USD — US Dollar ($)</option></select></div>
+              <div class="col-md-6"><label class="form-label">VAT Rate</label><div class="input-group"><input class="form-control" value="12"><span class="input-group-text">%</span></div></div>
+              <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Save Changes</button></div>
+            </form>
+          </div></div></div>
+
+          <!-- Users -->
+          <div class="tab-pane fade" id="tab-users"><div class="card"><div class="card-body">
+            <div class="card-title-row"><h3 class="panel-title">User Management</h3><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#userModal"><i class="bi bi-person-plus me-1"></i>Add User</button></div>
+            <div class="table-wrap mt-2"><table class="table">
+              <thead><tr><th>User</th><th>Role</th><th>Department</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
+              <tbody id="usersBody">
+              </tbody>
+            </table></div>
+          </div></div></div>
+
+          <!-- Roles -->
+          <div class="tab-pane fade" id="tab-roles"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Roles &amp; Permissions</h3><p class="panel-sub mb-3">Module access per role.</p>
+            <div class="table-wrap"><table class="table" id="rolesMatrix">
+              <thead id="rolesMatrixHead"></thead>
+              <tbody id="rolesMatrixBody"></tbody>
+            </table></div>
+            <p class="small text-muted-2 mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>This matrix reflects the same role permissions the sidebar navigation enforces (per the capstone's User Roles and Responsibilities).</p>
+          </div></div></div>
+
+          <!-- Theme -->
+          <div class="tab-pane fade" id="tab-theme"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Theme &amp; Appearance</h3><p class="panel-sub mb-3">Customize the look of your workspace.</p>
+            <label class="form-label">Accent Color</label>
+            <div class="d-flex gap-2 mb-4">
+              <button class="theme-swatch active" data-theme-swatch style="width:42px;height:42px;border-radius:10px;border:2px solid var(--primary);background:#b11217"></button>
+              <button class="theme-swatch" data-theme-swatch style="width:42px;height:42px;border-radius:10px;border:2px solid transparent;background:#1d4ed8"></button>
+              <button class="theme-swatch" data-theme-swatch style="width:42px;height:42px;border-radius:10px;border:2px solid transparent;background:#047857"></button>
+              <button class="theme-swatch" data-theme-swatch style="width:42px;height:42px;border-radius:10px;border:2px solid transparent;background:#7c3aed"></button>
+              <button class="theme-swatch" data-theme-swatch style="width:42px;height:42px;border-radius:10px;border:2px solid transparent;background:#0f172a"></button>
+            </div>
+            <div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="sw-dark"><label class="form-check-label" for="sw-dark">Dark mode (preview)</label></div>
+            <div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="sw-compact" checked><label class="form-check-label" for="sw-compact">Compact tables</label></div>
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="sw-sidebar" checked><label class="form-check-label" for="sw-sidebar">Collapsible sidebar</label></div>
+          </div></div></div>
+
+          <!-- Notifications -->
+          <div class="tab-pane fade" id="tab-notif"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Notification Settings</h3><p class="panel-sub mb-3">Choose what alerts you receive.</p>
+            <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="n1" checked><label class="form-check-label" for="n1"><strong>Low stock alerts</strong><div class="small text-muted-2">Notify when an item drops below reorder level.</div></label></div>
+            <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="n2" checked><label class="form-check-label" for="n2"><strong>Forecast completed</strong><div class="small text-muted-2">Alert when a new demand forecast is ready.</div></label></div>
+            <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="n3" checked><label class="form-check-label" for="n3"><strong>Transaction updates</strong><div class="small text-muted-2">Payment status changes and new invoices.</div></label></div>
+            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="n4"><label class="form-check-label" for="n4"><strong>Email digest</strong><div class="small text-muted-2">Weekly summary delivered to your inbox.</div></label></div>
+          </div></div></div>
+
+          <!-- Security -->
+          <div class="tab-pane fade" id="tab-security"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Security Settings</h3><p class="panel-sub mb-3">Protect your account and data.</p>
+            <div class="result-line d-flex justify-content-between align-items-center mb-2"><div><div class="fw-medium">Two-Factor Authentication</div><div class="small text-muted-2">Add an extra layer of security.</div></div><div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" checked></div></div>
+            <div class="result-line d-flex justify-content-between align-items-center mb-2"><div><div class="fw-medium">Login Alerts</div><div class="small text-muted-2">Email me on new device sign-in.</div></div><div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" checked></div></div>
+            <div class="result-line d-flex justify-content-between align-items-center mb-3"><div><div class="fw-medium">Session Timeout</div><div class="small text-muted-2">Auto sign-out after inactivity.</div></div><select class="form-select form-select-sm" style="max-width:120px"><option>15 min</option><option selected>30 min</option><option>1 hour</option></select></div>
+            <button class="btn btn-outline-primary" data-backend-action="Reset Password"><i class="bi bi-key me-1"></i>Reset Password</button>
+          </div></div></div>
+
+          <!-- Backup -->
+          <div class="tab-pane fade" id="tab-backup"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Backup &amp; Restore</h3><p class="panel-sub mb-3">Keep your system data safe.</p>
+            <div class="alert alert-soft-success"><i class="bi bi-check-circle me-1"></i>Last backup: <strong>June 25, 2026 — 11:45 PM</strong> (auto)</div>
+            <div class="d-flex gap-2 flex-wrap"><button class="btn btn-primary" data-backend-action="Create Backup"><i class="bi bi-cloud-arrow-up me-1"></i>Create Backup</button>
+            <button class="btn btn-light-2" data-backend-action="Restore Backup"><i class="bi bi-cloud-arrow-down me-1"></i>Restore</button>
+            <button class="btn btn-light-2" data-export="backup file"><i class="bi bi-download me-1"></i>Download</button></div>
+            <div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" checked><label class="form-check-label">Enable automatic daily backups</label></div>
+          </div></div></div>
+
+          <!-- Logs / Audit Trail -->
+          <div class="tab-pane fade" id="tab-logs"><div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">System Logs &amp; Audit Trail</h3><p class="panel-sub mb-3">Recent system activity.</p>
+            <div class="table-wrap"><table class="table">
+              <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Module</th></tr></thead>
+              <tbody id="logsBody">
+              </tbody>
+            </table></div>
+          </div></div></div>
+        </div></div>
+      </div>
+
+      <!-- Add / Edit User Modal -->
+      <div class="modal fade" id="userModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-person-plus me-2" style="color:var(--primary)"></i><span id="userModalTitle">Add User</span></h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form class="needs-validation" novalidate data-reset data-entity="users" id="userForm" data-success-msg="User saved">
+        <div class="modal-body"><div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Full Name</label><input class="form-control" name="name" required><div class="invalid-feedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" name="email" required><div class="invalid-feedback">Valid email required.</div></div>
+          <div class="col-md-6"><label class="form-label">Role</label><select class="form-select" name="role" required>
+            <option value="">Select…</option>
+            <option>System Administrator</option><option>Inventory Personnel</option>
+            <option>Operations Personnel</option><option>Management/Owner</option>
+          </select></div>
+          <div class="col-md-6"><label class="form-label">Department</label><input class="form-control" name="dept" placeholder="e.g. Warehouse"></div>
+          <div class="col-md-6"><label class="form-label">Status</label><select class="form-select" name="status"><option>Active</option><option>Suspended</option></select></div>
+        </div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="userModalSubmit">Save User</button></div>
+        </form>
+      </div></div></div>
+
+    </main>
+      <footer class="app-footer">
+        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
+        <div class="d-flex gap-3">
+          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
+          <span class="text-muted-2">v1.0.0</span>
+        </div>
+      </footer>
+  </div>
+</div>
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const roleBadge = (r) => {
+        const m = { 'System Administrator':'badge-soft', 'Inventory Personnel':'b-info',
+                    'Operations Personnel':'b-info', 'Management/Owner':'b-gold' };
+        return `<span class="badge ${m[r]||'b-neutral'}">${r}</span>`;
+      };
+      const userForm  = document.getElementById('userForm');
+      const userModal = new bootstrap.Modal('#userModal');
+
+      /* ---------- User Management (data-driven, per capstone roles) ---------- */
+      function renderUsers(){
+        const tb = document.getElementById('usersBody');
+        tb.innerHTML = '';
+        userStore.all().forEach(u => {
+          tb.insertAdjacentHTML('beforeend', `<tr>
+            <td><div class="fw-medium">${escapeHTML(u.name)}</div><div class="small text-muted-2">${escapeHTML(u.email)}</div></td>
+            <td>${roleBadge(u.role)}</td><td>${escapeHTML(u.dept)}</td>
+            <td><span class="badge ${u.status==='Active'?'b-success':'b-warning'}">${u.status}</span></td>
+            <td class="text-center"><button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${u.id}"><i class="bi bi-pencil"></i></button></td></tr>`);
+        });
+        initTooltips(tb);
+      }
+      document.getElementById('usersBody').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-act="edit"]'); if (!btn) return;
+        const u = userStore.find(btn.dataset.id); if (!u) return;
+        userForm.setAttribute('data-edit-id', u.id);
+        document.getElementById('userModalTitle').textContent = 'Edit User';
+        document.getElementById('userModalSubmit').textContent = 'Save Changes';
+        const f = userForm.elements;
+        f.name.value = u.name; f.email.value = u.email; f.role.value = u.role;
+        f.dept.value = u.dept; f.status.value = u.status;
+        userModal.show();
+      });
+      document.getElementById('userModal').addEventListener('hidden.bs.modal', () => {
+        userForm.removeAttribute('data-edit-id');
+        document.getElementById('userModalTitle').textContent = 'Add User';
+        document.getElementById('userModalSubmit').textContent = 'Save User';
+      });
+      /* TODO(backend): replace store calls with POST/PATCH /api/users. */
+      document.addEventListener('entity:submit', (e) => {
+        const { entity, data, editId } = e.detail;
+        if (entity !== 'users') return;
+        const rec = { name:data.name.trim(), email:data.email.trim(), role:data.role,
+                      dept:(data.dept||'').trim() || '—', status:data.status };
+        if (editId) userStore.update(editId, rec);
+        else userStore.add({ id:nextId('USR-', USERS), ...rec });
+        renderUsers();
+      });
+
+      /* ---------- Roles & Permissions matrix — generated from ROLE_PERMISSIONS ----------
+         Single source of truth: the same map that hides sidebar links renders this table. */
+      const MODULES = [
+        ['dashboard','Dashboard'], ['inventory','Inventory'], ['customers','Customers'],
+        ['projects','Projects'], ['transactions','Client Transactions'], ['commissions','Commissions'],
+        ['forecasting','Forecasting'], ['reports','Reports'], ['settings','Settings'],
+      ];
+      const roles = Object.keys(ROLE_PERMISSIONS);
+      document.getElementById('rolesMatrixHead').innerHTML =
+        `<tr><th>Module</th>${roles.map(r => `<th class="text-center">${r}</th>`).join('')}</tr>`;
+      document.getElementById('rolesMatrixBody').innerHTML = MODULES.map(([key,label]) =>
+        `<tr><td class="fw-medium">${label}</td>${roles.map(r =>
+          `<td class="text-center">${ROLE_PERMISSIONS[r].includes(key)
+            ? '<i class="bi bi-check-circle-fill" style="color:var(--success)"></i>'
+            : '<i class="bi bi-dash-circle text-muted-2"></i>'}</td>`).join('')}</tr>`).join('');
+
+      /* ---------- System Logs (data-driven like every other table) ---------- */
+      const lb = document.getElementById('logsBody');
+      ACTIVITY_LOG.forEach(l => {
+        lb.insertAdjacentHTML('beforeend', `<tr>
+          <td class="text-muted-2">${l.time}</td><td>${escapeHTML(l.user)}</td>
+          <td>${escapeHTML(l.action)}</td><td><span class="tag-chip">${l.module}</span></td></tr>`);
+      });
+
+      renderUsers();
+    });
+  </script>
+
+</body>
+</html>

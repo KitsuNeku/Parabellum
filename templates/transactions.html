@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transactions · Parabellum ISOS</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <!-- Google Font: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand d-flex align-items-center gap-2">
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
+      <div>
+        <div class="brand-name">PARABELLUM</div>
+        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
+      </div>
+    </div>
+
+    <div class="sidebar__user">
+      <div class="avatar-gold">{{ current_user_initials }}</div>
+      <div>
+        <div class="u-name">{{ current_user.name }}</div>
+        <div class="u-role">{{ current_user.role }}</div>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <div class="nav-section">MAIN</div>
+      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
+      <div class="nav-section">INVENTORY &amp; SALES</div>
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
+      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
+      {% if 'transactions' in allowed_pages %}<a class="nav-link active" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
+      {% if 'commissions' in allowed_pages %}<a class="nav-link" href="/commissions"><i class="bi bi-cash-coin"></i><span>Commissions</span></a>{% endif %}
+      <div class="nav-section">INTELLIGENCE</div>
+      {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
+      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
+      <div class="nav-section">SYSTEM</div>
+      {% if 'settings' in allowed_pages %}<a class="nav-link" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
+      {% if 'profile' in allowed_pages %}<a class="nav-link" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
+    </nav>
+
+    <div class="sidebar__footer">
+      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
+        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
+      </a>
+    </div>
+  </aside>
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <!-- ============ TOPBAR ============ -->
+    <header class="topbar">
+      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
+
+      <div class="topbar__search dropdown">
+        <i class="bi bi-search"></i>
+        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
+               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
+        <ul class="dropdown-menu dropdown-panel mt-2">
+          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
+          <a href="/inventory" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
+            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/customers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
+            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
+          </a>
+          <a href="/projects" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
+            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
+          </a>
+          <a href="/transactions" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
+            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
+          </a>
+        </ul>
+      </div>
+
+      <div class="topbar__actions">
+        <!-- Notifications -->
+        <div class="dropdown">
+          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
+            <i class="bi bi-bell"></i><span class="dot"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
+            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
+          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
+          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
+          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
+          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
+        </a>
+            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <button class="icon-btn" data-bs-toggle="tooltip" title="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
+
+        <!-- Profile -->
+        <div class="dropdown">
+          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
+            <div class="avatar-sm">{{ current_user_initials }}</div>
+            <div class="p-meta">
+              <div class="p-name">{{ current_user.name }}</div>
+              <div class="p-role">{{ current_user.role }}</div>
+            </div>
+            <i class="bi bi-chevron-down small text-muted-2"></i>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
+            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
+            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><a class="dropdown-item py-2" href="#"><i class="bi bi-shield-lock me-2"></i>Security</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+    <main class="page">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Transactions</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Client Transaction Management</h1>
+          <p class="page-subtitle">Invoices, payments, and sales records.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap"><button class="btn btn-light-2 btn-sm" data-print><i class="bi bi-printer me-1"></i>Print</button></div>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-receipt-cutoff"></i></div>
+          <div class="stat-label">Total Transactions</div><div class="stat-value">10</div><div class="stat-desc">This month</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
+          <div class="stat-label">Paid</div><div class="stat-value">5</div><div class="stat-desc">Fully settled</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-hourglass-split"></i></div>
+          <div class="stat-label">Pending / Partial</div><div class="stat-value">5</div><div class="stat-desc">Awaiting payment</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-cash-stack"></i></div>
+          <div class="stat-label">Monthly Revenue</div><div class="stat-value" style="font-size:1.55rem">₱4.82M</div><div class="stat-desc">Incl. 12% VAT</div></div></div>
+      </div>
+
+      <div class="card"><div class="card-body">
+        <div class="toolbar">
+          <div class="search-box"><i class="bi bi-search"></i>
+            <input type="text" class="form-control" placeholder="Search invoice or customer…" data-table-search="#txnTable"></div>
+          <select class="form-select" style="max-width:170px" data-filter-target="#txnTable" data-filter-col="6"><option value="">All Payments</option><option>Paid</option><option>Partial</option><option>Pending</option></select>
+          <div class="ms-auto"><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTxnModal"><i class="bi bi-plus-lg me-1"></i>Create Transaction</button></div>
+        </div>
+        <div class="table-wrap"><table class="table" id="txnTable">
+          <thead><tr><th>Invoice</th><th>Customer</th><th>Material</th><th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Total</th><th>Payment</th><th>Date</th><th class="text-center">Actions</th></tr></thead>
+          <tbody id="txnBody"></tbody>
+        </table></div>
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <span class="small text-muted-2">Showing 1–10 of 10 transactions</span>
+          <nav><ul class="pagination"><li class="page-item disabled"><a class="page-link" href="#"><i class="bi bi-chevron-left"></i></a></li><li class="page-item active"><a class="page-link" href="#">1</a></li><li class="page-item"><a class="page-link" href="#"><i class="bi bi-chevron-right"></i></a></li></ul></nav>
+        </div>
+      </div></div>
+
+      <!-- Invoice Modal -->
+      <div class="modal fade" id="invoiceModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2" style="color:var(--primary)"></i>Invoice Preview</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="invoiceBody"></div>
+        <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" data-print><i class="bi bi-printer me-1"></i>Print Invoice</button></div>
+      </div></div></div>
+
+      <!-- Create Transaction Modal -->
+      <div class="modal fade" id="addTxnModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-lg me-2" style="color:var(--primary)"></i>Create Transaction</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form class="needs-validation" novalidate data-reset data-entity="transactions" id="txnForm" data-success-msg="Transaction created successfully">
+        <div class="modal-body"><div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Customer</label><select class="form-select" name="custId" id="txnCustSelect" required><option value="">Select…</option></select></div>
+          <div class="col-md-6"><label class="form-label">Project</label><select class="form-select" name="proj" id="txnProjSelect"><option value="">None</option></select></div>
+          <div class="col-md-6"><label class="form-label">Material</label><select class="form-select" name="material" id="txnMatSelect" required><option value="">Select…</option></select></div>
+          <div class="col-md-3"><label class="form-label">Quantity</label><input type="number" class="form-control" name="qty" value="1" min="1" required></div>
+          <div class="col-md-3"><label class="form-label">Unit Price (₱)</label><input type="number" class="form-control" name="price" value="0.00" step="0.01" required></div>
+          <div class="col-md-4"><label class="form-label">Discount (%)</label><input type="number" class="form-control" name="discount" value="0" min="0" max="100"></div>
+          <div class="col-md-4"><label class="form-label">Payment Method</label><select class="form-select" name="method"><option>Bank Transfer</option><option>Check</option><option>Cash</option><option>On Account</option></select></div>
+          <div class="col-md-4"><label class="form-label">Payment Status</label><select class="form-select" name="pay"><option>Paid</option><option>Partial</option><option>Pending</option></select></div>
+        </div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Transaction</button></div>
+        </form>
+      </div></div></div>
+
+    </main>
+      <footer class="app-footer">
+        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
+        <div class="d-flex gap-3">
+          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
+          <span class="text-muted-2">v1.0.0</span>
+        </div>
+      </footer>
+  </div>
+</div>
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tb = document.getElementById('txnBody');
+      function renderTransactions(){
+        tb.innerHTML = '';
+        TRANSACTIONS.forEach(t => {
+        const sub = t.qty * t.price; const total = sub * 1.12;
+        tb.insertAdjacentHTML('beforeend', `<tr>
+          <td class="fw-id">${t.inv}</td><td class="fw-medium">${t.cust}</td>
+          <td>${t.material}</td><td class="text-end">${NUM(t.qty)}</td>
+          <td class="text-end">${PESO(t.price)}</td><td class="text-end fw-medium">${PESO(total)}</td>
+          <td>${payBadge(t.pay)}</td><td class="text-muted-2">${t.date}</td>
+          <td class="text-center">
+            <button class="act-btn print-inv" data-bs-toggle="tooltip" title="Invoice" data-inv="${t.inv}"><i class="bi bi-receipt"></i></button>
+            <button class="act-btn view-txn" data-bs-toggle="tooltip" title="View" data-inv="${t.inv}"><i class="bi bi-eye"></i></button>
+          </td></tr>`);
+        });
+        initTooltips();
+      }
+      renderTransactions();
+      window.renderTransactions = renderTransactions;   // hook: app.js refreshes after DB writes
+
+      /* View: read-only transaction details (same data, lighter than the invoice) */
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="txnDetailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt-cutoff me-2" style="color:var(--primary)"></i>Transaction Details</h5>
+            <button class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body" id="txnDetailBody"></div>
+          <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button>
+            <button class="btn btn-primary" id="txnDetailInvoiceBtn"><i class="bi bi-receipt me-1"></i>Open Invoice</button></div>
+        </div></div></div>`);
+      const detailModal = new bootstrap.Modal('#txnDetailModal');
+      let currentTxn = null;
+      tb.addEventListener('click', (e) => {
+        const btn = e.target.closest('.view-txn'); if (!btn) return;
+        const t = transactionStore.find(btn.dataset.inv); if (!t) return;
+        currentTxn = t.inv;
+        const sub = t.qty * t.price, vat = sub*0.12, total = sub+vat;
+        document.getElementById('txnDetailBody').innerHTML = `
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div><h5 class="mb-0">${t.inv}</h5><div class="small text-muted-2">${t.date}</div></div>
+            ${payBadge(t.pay)}
+          </div>
+          <div class="row g-2 small">
+            <div class="col-6"><div class="text-muted-2">Customer</div><div class="fw-medium">${escapeHTML(t.cust)}</div></div>
+            <div class="col-6"><div class="text-muted-2">Project</div><div class="fw-medium">${t.proj}</div></div>
+            <div class="col-6"><div class="text-muted-2">Material</div><div class="fw-medium">${escapeHTML(t.material)}</div></div>
+            <div class="col-6"><div class="text-muted-2">Quantity</div><div class="fw-medium">${NUM(t.qty)}</div></div>
+            <div class="col-6"><div class="text-muted-2">Unit Price</div><div class="fw-medium">${PESO(t.price)}</div></div>
+            <div class="col-6"><div class="text-muted-2">Payment Method</div><div class="fw-medium">${t.method}</div></div>
+            <div class="col-6"><div class="text-muted-2">VAT (12%)</div><div class="fw-medium">${PESO(vat)}</div></div>
+            <div class="col-6"><div class="text-muted-2">Total</div><div class="fw-bold" style="color:var(--primary)">${PESO(total)}</div></div>
+          </div>`;
+        detailModal.show();
+      });
+      document.getElementById('txnDetailInvoiceBtn').addEventListener('click', () => {
+        detailModal.hide();
+        document.querySelector(`.print-inv[data-inv="${currentTxn}"]`)?.click();
+      });
+
+      const modal = new bootstrap.Modal('#invoiceModal');
+      tb.addEventListener('click', (e) => {
+        const btn = e.target.closest('.print-inv'); if (!btn) return;
+        const t = TRANSACTIONS.find(x => x.inv === btn.dataset.inv); if (!t) return;
+        const sub = t.qty * t.price; const vat = sub*0.12; const total = sub+vat;
+        document.getElementById('invoiceBody').innerHTML = `
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div class="d-flex gap-2 align-items-center"><img src="{{ url_for('static', filename='assets/img/logo.svg') }}" style="width:40px"><div><div class="fw-bold" style="color:var(--primary)">PARABELLUM</div><div class="small text-muted-2">Steel &amp; Iron Works</div></div></div>
+            <div class="text-end"><div class="h5 mb-0">INVOICE</div><div class="small text-muted-2">${t.inv}</div></div>
+          </div><hr>
+          <div class="row small mb-3"><div class="col-6"><div class="text-muted-2">Billed To</div><div class="fw-medium">${t.cust}</div><div>Project: ${t.proj}</div></div>
+          <div class="col-6 text-end"><div class="text-muted-2">Date</div><div class="fw-medium">${t.date}</div><div>Method: ${t.method}</div></div></div>
+          <div class="table-responsive"><table class="table table-soft"><thead><tr><th>Material</th><th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Amount</th></tr></thead>
+          <tbody><tr><td>${t.material}</td><td class="text-end">${NUM(t.qty)}</td><td class="text-end">${PESO(t.price)}</td><td class="text-end">${PESO(sub)}</td></tr></tbody></table></div>
+          <div class="d-flex justify-content-end"><div class="table-responsive"><table class="small" style="min-width:240px">
+            <tr><td class="text-muted-2 pe-4 py-1">Subtotal</td><td class="text-end">${PESO(sub)}</td></tr>
+            <tr><td class="text-muted-2 pe-4 py-1">VAT (12%)</td><td class="text-end">${PESO(vat)}</td></tr>
+            <tr><td class="text-muted-2 pe-4 py-1">Discount</td><td class="text-end">₱0.00</td></tr>
+            <tr style="border-top:2px solid var(--primary)"><td class="fw-bold pe-4 py-2">TOTAL</td><td class="text-end fw-bold py-2" style="color:var(--primary);font-size:1.1rem">${PESO(total)}</td></tr>
+          </table></div>
+          <div class="mt-3">${payBadge(t.pay)} <span class="small text-muted-2 ms-1">Payment status</span></div>`;
+        modal.show();
+      });
+    });
+  </script>
+</body>
+</html>

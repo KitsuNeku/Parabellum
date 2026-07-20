@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forecasting · Parabellum ISOS</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <!-- Google Font: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand d-flex align-items-center gap-2">
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
+      <div>
+        <div class="brand-name">PARABELLUM</div>
+        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
+      </div>
+    </div>
+
+    <div class="sidebar__user">
+      <div class="avatar-gold">{{ current_user_initials }}</div>
+      <div>
+        <div class="u-name">{{ current_user.name }}</div>
+        <div class="u-role">{{ current_user.role }}</div>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <div class="nav-section">MAIN</div>
+      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
+      <div class="nav-section">INVENTORY &amp; SALES</div>
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
+      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
+      {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
+      {% if 'commissions' in allowed_pages %}<a class="nav-link" href="/commissions"><i class="bi bi-cash-coin"></i><span>Commissions</span></a>{% endif %}
+      <div class="nav-section">INTELLIGENCE</div>
+      {% if 'forecasting' in allowed_pages %}<a class="nav-link active" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
+      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
+      <div class="nav-section">SYSTEM</div>
+      {% if 'settings' in allowed_pages %}<a class="nav-link" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
+      {% if 'profile' in allowed_pages %}<a class="nav-link" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
+    </nav>
+
+    <div class="sidebar__footer">
+      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
+        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
+      </a>
+    </div>
+  </aside>
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <!-- ============ TOPBAR ============ -->
+    <header class="topbar">
+      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
+
+      <div class="topbar__search dropdown">
+        <i class="bi bi-search"></i>
+        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
+               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
+        <ul class="dropdown-menu dropdown-panel mt-2">
+          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
+          <a href="/inventory" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
+            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/customers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
+            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
+          </a>
+          <a href="/projects" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
+            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
+          </a>
+          <a href="/transactions" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
+            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
+          </a>
+        </ul>
+      </div>
+
+      <div class="topbar__actions">
+        <!-- Notifications -->
+        <div class="dropdown">
+          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
+            <i class="bi bi-bell"></i><span class="dot"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
+            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
+          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
+          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
+          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
+          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
+        </a>
+            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <button class="icon-btn" data-bs-toggle="tooltip" title="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
+
+        <!-- Profile -->
+        <div class="dropdown">
+          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
+            <div class="avatar-sm">{{ current_user_initials }}</div>
+            <div class="p-meta">
+              <div class="p-name">{{ current_user.name }}</div>
+              <div class="p-role">{{ current_user.role }}</div>
+            </div>
+            <i class="bi bi-chevron-down small text-muted-2"></i>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
+            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
+            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><a class="dropdown-item py-2" href="#"><i class="bi bi-shield-lock me-2"></i>Security</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+    <main class="page">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Intelligence</li><li class="breadcrumb-item active" aria-current="page">Forecasting</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Demand Forecasting</h1>
+          <p class="page-subtitle">Predicted material demand for the upcoming month, based on past usage and activity.</p>
+        </div>
+      </div>
+
+      <!-- Intro banner (plain language) -->
+      <div class="card accent-card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center gap-3">
+          <div style="flex:0 0 52px;width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary);font-size:1.5rem;"><i class="bi bi-graph-up-arrow"></i></div>
+          <div class="flex-grow-1" style="min-width:240px;">
+            <h2 class="panel-title mb-1">Smart Demand Forecasting</h2>
+            <p class="mb-0 text-muted-2">The system studies past inventory usage, client transactions, current stock, and active projects to estimate how much material will be needed next month — so you can restock before you run short.</p>
+          </div>
+          <span class="badge b-neutral align-self-center"><i class="bi bi-clock-history me-1"></i>Updated <span id="fcUpdated">—</span></span>
+        </div>
+      </div>
+
+      <!-- KPI cards -->
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4"><div class="kpi"><div class="kpi-label">Material</div><div class="kpi-value" id="kpiMaterial" style="font-size:1.4rem">Steel Bar</div><div class="kpi-sub">Selected material</div></div></div>
+        <div class="col-12 col-md-4"><div class="kpi"><div class="kpi-label">Predicted Demand</div><div class="kpi-value" id="kpiPredicted">150</div><div class="kpi-sub">Expected units next month</div></div></div>
+        <div class="col-12 col-md-4"><div class="kpi"><div class="kpi-label">Recommended Restock</div><div class="kpi-value" id="kpiReorder">0</div><div class="kpi-sub">Suggested quantity to order</div></div></div>
+      </div>
+
+      <!-- Read-only forecast viewer + explanation -->
+      <div class="row g-3 mb-4">
+        <div class="col-lg-7"><div class="card h-100"><div class="card-body">
+          <div class="card-title-row">
+            <h2 class="panel-title">Predicted Demand</h2>
+            <span class="badge b-neutral">Read-only</span>
+          </div>
+          <p class="panel-sub mb-3">Choose a material to view its forecast for the upcoming month.</p>
+          <div class="mb-3" style="max-width:380px;">
+            <label class="form-label">Material</label>
+            <button type="button" class="btn btn-primary w-100 mb-3" id="fcRunBtn"><i class="bi bi-lightning-charge me-1"></i>Run Forecast</button>
+            <select class="form-select" id="fcMaterialSelect">
+              <option>Deformed Steel Bar 16mm</option>
+              <option>GI Sheet Corrugated 0.5mm</option>
+              <option>MS Plate 4x8 (6mm)</option>
+              <option>Angle Bar 50x50x6mm</option>
+              <option>H-Beam 200x200</option>
+              <option>C-Purlins 2x6 (1.6mm)</option>
+              <option>Square Tube 2x2 (1.5mm)</option>
+            </select>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6"><div class="result-line"><div class="rl-label">Material</div><div class="rl-value" id="fcResMaterial">—</div></div></div>
+            <div class="col-md-6"><div class="result-line"><div class="rl-label">Forecast Month</div><div class="rl-value" id="fcResMonth">—</div></div></div>
+            <div class="col-md-6"><div class="highlight-panel"><div class="rl-label">Predicted Demand</div><div class="rl-value" id="fcResPredicted">—</div></div></div>
+            <div class="col-md-6"><div class="result-line"><div class="rl-label">Current Stock</div><div class="rl-value" id="fcResStock">—</div></div></div>
+            <div class="col-md-6"><div class="result-line"><div class="rl-label">Expected Trend</div><div class="rl-value" id="fcResTrend" style="color:var(--accent-dark)">—</div></div></div>
+            <div class="col-md-6"><div class="result-line"><div class="rl-label">Confidence</div><div class="rl-value" id="fcResConf" style="color:var(--success)">—</div></div></div>
+          </div>
+          <div class="alert alert-soft-info mb-0 mt-3"><div class="fw-bold mb-1"><i class="bi bi-lightbulb me-1"></i>Recommended Action</div><div id="fcResReorder">—</div></div>
+
+          <hr class="my-3">
+          <div class="card-title-row mb-2">
+            <h2 class="panel-title mb-0"><i class="bi bi-clipboard-data me-1"></i>Model Evaluation</h2>
+            <span class="badge b-neutral">Multiple Linear Regression</span>
+          </div>
+          <p class="panel-sub mb-3">Error metrics computed from the trained model.</p>
+          <div class="row g-3">
+            <div class="col-6 col-md-3"><div class="result-line"><div class="rl-label">MAE</div><div class="rl-value" id="fcMAE">—</div></div></div>
+            <div class="col-6 col-md-3"><div class="result-line"><div class="rl-label">RMSE</div><div class="rl-value" id="fcRMSE">—</div></div></div>
+            <div class="col-6 col-md-3"><div class="result-line"><div class="rl-label">MAPE</div><div class="rl-value" id="fcMAPE">—</div></div></div>
+            <div class="col-6 col-md-3"><div class="result-line"><div class="rl-label">R²</div><div class="rl-value" id="fcR2">—</div></div></div>
+          </div>
+          <p class="panel-sub mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Evaluated on recent months the model was never trained on.</p>
+        </div></div></div>
+
+        <div class="col-lg-5"><div class="card h-100"><div class="card-body">
+          <h2 class="panel-title mb-1"><i class="bi bi-info-circle me-1"></i>How to Read This Forecast</h2>
+          <p class="panel-sub mb-3">Plain-language summary.</p>
+          <div class="alert alert-soft-info mb-2"><strong>Predicted Demand</strong> is the estimated amount of this material the company will likely use next month.</div>
+          <div class="alert alert-soft-warning mb-2"><strong>Recommended Restock</strong> is how much to order now if current stock is below the predicted demand.</div>
+          <div class="alert alert-soft-success mb-0"><strong>Confidence</strong> reflects how reliable the estimate is, based on how steady past usage has been.</div>
+        </div></div></div>
+      </div>
+
+      <!-- Forecast charts -->
+      <div class="row g-3 mb-4">
+        <div class="col-lg-8"><div class="card h-100"><div class="card-body">
+          <h2 class="panel-title mb-1">Monthly Forecast Graph</h2>
+          <p class="panel-sub mb-3">Past demand and projected forecast (dashed).</p>
+          <div class="chart-box chart-h-lg"><canvas id="chartMonthlyForecast"></canvas></div>
+        </div></div></div>
+        <div class="col-lg-4"><div class="card h-100"><div class="card-body">
+          <h2 class="panel-title mb-1">Inventory Trend</h2>
+          <p class="panel-sub mb-3">Stock level decline over time.</p>
+          <div class="chart-box chart-h-lg"><canvas id="chartInventoryTrend"></canvas></div>
+        </div></div></div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-lg-5"><div class="card h-100"><div class="card-body">
+          <h2 class="panel-title mb-1">Historical Demand</h2>
+          <p class="panel-sub mb-3">Units consumed per month.</p>
+          <div class="chart-box chart-h-md"><canvas id="chartHistoricalDemand"></canvas></div>
+        </div></div></div>
+        <div class="col-lg-7"><div class="card h-100"><div class="card-body">
+          <div class="card-title-row"><h2 class="panel-title">Prediction History</h2><span class="badge b-neutral">Auto-logged</span></div>
+          <p class="panel-sub mb-3">Past forecasts compared with actual demand.</p>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>ID</th><th>Material</th><th>Month</th><th class="text-end">Predicted</th><th class="text-end">Actual</th><th class="text-center">Confidence</th></tr></thead>
+            <tbody id="fcHistBody"></tbody>
+          </table></div>
+        </div></div></div>
+      </div>
+    </main>
+      <footer class="app-footer">
+        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
+        <div class="d-flex gap-3">
+          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
+          <span class="text-muted-2">v1.0.0</span>
+        </div>
+      </footer>
+  </div>
+</div>
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof FORECAST_UPDATED !== 'undefined') {
+        const u = document.getElementById('fcUpdated'); if (u) u.textContent = FORECAST_UPDATED;
+      }
+      const tb = document.getElementById('fcHistBody');
+      FORECAST_HISTORY.forEach(f => {
+        tb.insertAdjacentHTML('beforeend', `<tr>
+          <td class="fw-id">${f.id}</td><td class="fw-medium">${f.material}</td>
+          <td>${f.month}</td><td class="text-end">${f.predicted}</td>
+          <td class="text-end">${f.actual}</td>
+          <td class="text-center"><span class="badge b-success">${f.conf}</span></td></tr>`);
+      });
+    });
+  </script>
+</body>
+</html>

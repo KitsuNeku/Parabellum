@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile · Parabellum ISOS</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <!-- Google Font: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand d-flex align-items-center gap-2">
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
+      <div>
+        <div class="brand-name">PARABELLUM</div>
+        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
+      </div>
+    </div>
+
+    <div class="sidebar__user">
+      <div class="avatar-gold">{{ current_user_initials }}</div>
+      <div>
+        <div class="u-name">{{ current_user.name }}</div>
+        <div class="u-role">{{ current_user.role }}</div>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <div class="nav-section">MAIN</div>
+      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
+      <div class="nav-section">INVENTORY &amp; SALES</div>
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
+      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
+      {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
+      {% if 'commissions' in allowed_pages %}<a class="nav-link" href="/commissions"><i class="bi bi-cash-coin"></i><span>Commissions</span></a>{% endif %}
+      <div class="nav-section">INTELLIGENCE</div>
+      {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
+      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
+      <div class="nav-section">SYSTEM</div>
+      {% if 'settings' in allowed_pages %}<a class="nav-link" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
+      {% if 'profile' in allowed_pages %}<a class="nav-link active" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
+    </nav>
+
+    <div class="sidebar__footer">
+      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
+        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
+      </a>
+    </div>
+  </aside>
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <!-- ============ TOPBAR ============ -->
+    <header class="topbar">
+      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
+
+      <div class="topbar__search dropdown">
+        <i class="bi bi-search"></i>
+        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
+               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
+        <ul class="dropdown-menu dropdown-panel mt-2">
+          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
+          <a href="/inventory" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
+            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/customers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
+            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
+          </a>
+          <a href="/projects" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
+            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
+          </a>
+          <a href="/transactions" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
+            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
+          </a>
+        </ul>
+      </div>
+
+      <div class="topbar__actions">
+        <!-- Notifications -->
+        <div class="dropdown">
+          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
+            <i class="bi bi-bell"></i><span class="dot"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
+            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
+          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
+          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
+          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
+          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
+        </a>
+            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <button class="icon-btn" data-bs-toggle="tooltip" title="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
+
+        <!-- Profile -->
+        <div class="dropdown">
+          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
+            <div class="avatar-sm">{{ current_user_initials }}</div>
+            <div class="p-meta">
+              <div class="p-name">{{ current_user.name }}</div>
+              <div class="p-role">{{ current_user.role }}</div>
+            </div>
+            <i class="bi bi-chevron-down small text-muted-2"></i>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
+            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
+            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><a class="dropdown-item py-2" href="#"><i class="bi bi-shield-lock me-2"></i>Security</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+    <main class="page">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Profile</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">My Profile</h1>
+          <p class="page-subtitle">Manage your personal information and security.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap"><a href="/settings" class="btn btn-light-2 btn-sm"><i class="bi bi-gear me-1"></i>Settings</a></div>
+      </div>
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="card mb-3"><div class="card-body text-center">
+            <div class="avatar-gold mx-auto mb-3" style="width:92px;height:92px;font-size:2rem;overflow:hidden;" id="profileAvatar">AU</div>
+            <h4 class="mb-0 profile-user-name">{{ current_user.name }}</h4>
+            <span class="badge badge-soft mb-2 profile-role-field-badge">{{ current_user.role }}</span>
+            <p class="small text-muted-2 mb-3">admin@parabellumsteel.com.ph</p>
+            <input type="file" id="photoInput" accept="image/*" class="d-none">
+            <button class="btn btn-light-2 btn-sm w-100" id="changePhotoBtn"><i class="bi bi-camera me-1"></i>Change Photo</button>
+            <hr>
+            <div class="row text-center g-2">
+              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)">248</div><div class="small text-muted-2">Logins</div></div>
+              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)">86</div><div class="small text-muted-2">Reports</div></div>
+              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)">12</div><div class="small text-muted-2">Forecasts</div></div>
+            </div>
+          </div></div>
+
+          <div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Weekly Activity</h3><p class="panel-sub mb-3">Actions performed.</p>
+            <div class="chart-box chart-h-sm"><canvas id="chartActivity"></canvas></div>
+          </div></div>
+        </div>
+
+        <div class="col-lg-8">
+          <div class="card mb-3"><div class="card-body">
+            <h3 class="panel-title mb-1">Personal Information</h3><p class="panel-sub mb-3">Update your account details.</p>
+            <form class="needs-validation row g-3" novalidate data-success-msg="Profile updated successfully">
+              <div class="col-md-6"><label class="form-label">Full Name</label><input class="form-control" value="{{ current_user.name }}" required></div>
+              <div class="col-md-6"><label class="form-label">Employee ID</label><input class="form-control" value="EMP-00" disabled></div>
+              <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" value="admin@parabellumsteel.com.ph" required></div>
+              <div class="col-md-6"><label class="form-label">Phone</label><input class="form-control" value="0917-845-0000"></div>
+              <div class="col-md-6"><label class="form-label">Role</label><input class="form-control profile-role-field" value="{{ current_user.role }}" disabled></div>
+              <div class="col-md-6"><label class="form-label">Department</label><input class="form-control" value="Management Information Systems"></div>
+              <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Save Changes</button></div>
+            </form>
+          </div></div>
+
+          <div class="card mb-3"><div class="card-body">
+            <h3 class="panel-title mb-1">Change Password</h3><p class="panel-sub mb-3">Use a strong, unique password.</p>
+            <form class="needs-validation row g-3" novalidate data-reset data-success-msg="Password changed successfully">
+              <div class="col-md-12"><label class="form-label">Current Password</label><input type="password" class="form-control" required></div>
+              <div class="col-md-6"><label class="form-label">New Password</label><input type="password" class="form-control" required minlength="6"><div class="invalid-feedback">At least 6 characters.</div></div>
+              <div class="col-md-6"><label class="form-label">Confirm New Password</label><input type="password" class="form-control" required></div>
+              <div class="col-12"><button class="btn btn-outline-primary" type="submit"><i class="bi bi-shield-lock me-1"></i>Update Password</button></div>
+            </form>
+          </div></div>
+
+          <div class="card"><div class="card-body">
+            <h3 class="panel-title mb-1">Activity Log</h3><p class="panel-sub mb-3">Your recent actions.</p>
+            <div class="activity-item"><div class="activity-ic b-info"><i class="bi bi-box-arrow-in-right"></i></div><div class="flex-grow-1"><div class="fw-medium">Signed in</div><div class="small text-muted-2">Today, 9:14 AM · Chrome on Windows</div></div></div>
+            <div class="activity-item"><div class="activity-ic b-success"><i class="bi bi-graph-up-arrow"></i></div><div class="flex-grow-1"><div class="fw-medium">Generated forecast FC-091</div><div class="small text-muted-2">Yesterday, 5:40 PM</div></div></div>
+            <div class="activity-item"><div class="activity-ic b-gold"><i class="bi bi-file-earmark-text"></i></div><div class="flex-grow-1"><div class="fw-medium">Exported Inventory Report</div><div class="small text-muted-2">Yesterday, 2:08 PM</div></div></div>
+            <div class="activity-item"><div class="activity-ic b-neutral"><i class="bi bi-gear"></i></div><div class="flex-grow-1"><div class="fw-medium">Updated company settings</div><div class="small text-muted-2">Jun 25, 2026</div></div></div>
+          </div></div>
+        </div>
+      </div>
+
+    </main>
+      <footer class="app-footer">
+        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
+        <div class="d-flex gap-3">
+          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
+          <span class="text-muted-2">v1.0.0</span>
+        </div>
+      </footer>
+  </div>
+</div>
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      /* Identity fields (name, role) are rendered server-side from the
+         session — see current_user in app.py — so they're correct on
+         first paint. No JS overwrite needed here. */
+      /* Change Photo: real file input + live preview.
+         TODO(backend): POST the selected file to the avatar-upload endpoint here. */
+      const input = document.getElementById('photoInput');
+      const btn   = document.getElementById('changePhotoBtn');
+      const avatar= document.getElementById('profileAvatar');
+      btn?.addEventListener('click', () => input.click());
+      input?.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        avatar.innerHTML = `<img src="${url}" alt="Profile photo" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+        showToast('Profile photo updated', 'success', 'bi-camera');
+      });
+    });
+  </script>
+</body>
+</html>

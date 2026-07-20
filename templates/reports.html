@@ -174,8 +174,8 @@
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-box-seam"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Inventory Report</div><div class="small text-muted-2 mb-2">Stock levels, valuation, movement</div>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Inventory Report (PDF)" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Inventory Report (Excel)" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Inventory Report (PDF)" data-report="inventory" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Inventory Report (Excel)" data-report="inventory" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="inventory" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
@@ -184,8 +184,8 @@
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-people"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Customer Report</div><div class="small text-muted-2 mb-2">Accounts, projects, transaction value</div>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Customer Report (PDF)" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Customer Report (Excel)" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Customer Report (PDF)" data-report="customer" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Customer Report (Excel)" data-report="customer" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="customer" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
@@ -194,8 +194,8 @@
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-kanban"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Project Report</div><div class="small text-muted-2 mb-2">Status, budget, completion rate</div>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Project Report (PDF)" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Project Report (Excel)" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Project Report (PDF)" data-report="project" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Project Report (Excel)" data-report="project" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="project" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
@@ -204,8 +204,8 @@
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-receipt-cutoff"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Transaction Report</div><div class="small text-muted-2 mb-2">Sales, payments, VAT summary</div>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Transaction Report (PDF)" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Transaction Report (Excel)" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Transaction Report (PDF)" data-report="transaction" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Transaction Report (Excel)" data-report="transaction" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="transaction" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
@@ -214,8 +214,8 @@
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-cash-coin"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Commission Report</div><div class="small text-muted-2 mb-2">Employee payouts and rates</div>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Commission Report (PDF)" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Commission Report (Excel)" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Commission Report (PDF)" data-report="commission" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Commission Report (Excel)" data-report="commission" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="commission" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
@@ -224,8 +224,8 @@
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-graph-up-arrow"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Forecast Report</div><div class="small text-muted-2 mb-2">Demand prediction and accuracy</div>
                 <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Forecast Report (PDF)" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Forecast Report (Excel)" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Forecast Report (PDF)" data-report="forecast" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Forecast Report (Excel)" data-report="forecast" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="forecast" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
@@ -251,11 +251,11 @@
         <div class="table-wrap mt-2"><table class="table">
           <thead><tr><th>Report</th><th>Type</th><th>Generated By</th><th>Date</th><th>Format</th><th class="text-center">Action</th></tr></thead>
           <tbody>
-            <tr><td class="fw-id">RPT-0124</td><td>Inventory Summary</td><td>Admin User</td><td class="text-muted-2">2026-06-24</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0123</td><td>Sales &amp; Transactions</td><td>M. Santos</td><td class="text-muted-2">2026-06-22</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0122</td><td>Forecast Report</td><td>Admin User</td><td class="text-muted-2">2026-06-20</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0121</td><td>Commission Report</td><td>P. Reyes</td><td class="text-muted-2">2026-06-18</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0120</td><td>Project Status</td><td>C. Mendoza</td><td class="text-muted-2">2026-06-15</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+            <tr><td class="fw-id">RPT-0124</td><td>Inventory Summary</td><td>Admin User</td><td class="text-muted-2">2026-06-24</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="inventory" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+            <tr><td class="fw-id">RPT-0123</td><td>Sales &amp; Transactions</td><td>M. Santos</td><td class="text-muted-2">2026-06-22</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="transaction" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+            <tr><td class="fw-id">RPT-0122</td><td>Forecast Report</td><td>Admin User</td><td class="text-muted-2">2026-06-20</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="forecast" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+            <tr><td class="fw-id">RPT-0121</td><td>Commission Report</td><td>P. Reyes</td><td class="text-muted-2">2026-06-18</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="commission" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+            <tr><td class="fw-id">RPT-0120</td><td>Project Status</td><td>C. Mendoza</td><td class="text-muted-2">2026-06-15</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="project" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
           </tbody>
         </table></div>
       </div></div>
@@ -267,7 +267,8 @@
         <div class="modal-body" id="rpBody"></div>
         <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button>
           <button class="btn btn-light-2" data-print><i class="bi bi-printer me-1"></i>Print</button>
-          <button class="btn btn-primary" data-export="report file"><i class="bi bi-download me-1"></i>Export</button></div>
+          <button class="btn btn-light-2" id="rpExportExcel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+          <button class="btn btn-primary" id="rpExportPdf"><i class="bi bi-filetype-pdf me-1"></i>PDF</button></div>
       </div></div></div>
 
     </main>
@@ -288,48 +289,54 @@
   <script>document.addEventListener('DOMContentLoaded', () => initTooltips());</script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      /* Generate = render an on-screen preview from live data.
-         TODO(backend): this is where a server "generate report" endpoint will be called instead. */
+      /* Generate = fetch REAL data from the server and render an on-screen
+         preview. The exact same builder function the server uses here also
+         powers the PDF and Excel downloads, so all three always match. */
       const modal = new bootstrap.Modal('#reportPreviewModal');
       const today = new Date().toLocaleDateString('en-PH', { year:'numeric', month:'long', day:'numeric' });
-      const head = (cols) => `<thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>`;
-      const wrap = (title, sub, table) => `
-        <div class="d-flex justify-content-between align-items-start mb-2">
-          <div><div class="fw-bold" style="color:var(--primary)">PARABELLUM STEEL &amp; IRON WORKS</div>
-          <div class="small text-muted-2">${sub}</div></div>
-          <div class="small text-muted-2 text-end">Generated ${today}<br>by ${CURRENT_USER.name}</div>
-        </div><hr class="mt-2">
-        <div class="table-wrap"><table class="table table-soft">${table}</table></div>`;
+      let currentKey = null;
 
-      const builders = {
-        inventory: () => wrap('Inventory','Stock levels and valuation',
-          head(['Item','Category','Qty','Unit Price','Value','Status']) + '<tbody>' +
-          INVENTORY.map(i=>`<tr><td>${escapeHTML(i.name)}</td><td>${i.cat}</td><td>${NUM(i.qty)} ${i.unit}</td><td>${PESO(i.price)}</td><td>${PESO(i.qty*i.price)}</td><td>${i.status}</td></tr>`).join('') + '</tbody>'),
-        customer: () => wrap('Customers','Accounts and activity',
-          head(['Customer','Contact','Status','Projects','Transactions']) + '<tbody>' +
-          CUSTOMERS.map(c=>`<tr><td>${escapeHTML(c.name)}</td><td>${escapeHTML(c.contact)}</td><td>${c.status}</td><td>${c.projects}</td><td>${c.txns}</td></tr>`).join('') + '</tbody>'),
-        project: () => wrap('Projects','Status and budgets',
-          head(['Project','Customer','Status','Progress','Budget','Due']) + '<tbody>' +
-          PROJECTS.map(p=>`<tr><td>${escapeHTML(p.name)}</td><td>${escapeHTML(p.cust)}</td><td>${p.status}</td><td>${p.progress}%</td><td>${PESO(p.budget)}</td><td>${p.due}</td></tr>`).join('') + '</tbody>'),
-        transaction: () => wrap('Client Transactions','Invoices incl. 12% VAT',
-          head(['Invoice','Customer','Material','Qty','Total','Status','Date']) + '<tbody>' +
-          TRANSACTIONS.map(t=>{const tot=t.qty*t.price*1.12;return `<tr><td>${t.inv}</td><td>${escapeHTML(t.cust)}</td><td>${escapeHTML(t.material)}</td><td>${NUM(t.qty)}</td><td>${PESO(tot)}</td><td>${t.pay}</td><td>${t.date}</td></tr>`;}).join('') + '</tbody>'),
-        commission: () => wrap('Commissions','Per-employee summary',
-          head(['Employee','Role','Completed','Rate','Sales','Monthly Commission']) + '<tbody>' +
-          EMPLOYEES.map(e=>`<tr><td>${escapeHTML(e.name)}</td><td>${e.role}</td><td>${e.completed}</td><td>${e.rate}%</td><td>${PESO(e.sales)}</td><td>${PESO(e.monthly)}</td></tr>`).join('') + '</tbody>'),
-        forecast: () => wrap('Demand Forecast','Predicted demand for the coming month',
-          head(['Material','Month','Predicted','Current Stock','Trend','Confidence']) + '<tbody>' +
-          FORECAST_CURRENT.map(f=>`<tr><td>${escapeHTML(f.material)}</td><td>${f.month}</td><td>${f.predicted} ${f.unit}</td><td>${f.stock} ${f.unit}</td><td>${f.trend}</td><td>${f.conf}</td></tr>`).join('') + '</tbody>'),
+      const wrap = (subtitle, columns, rows) => {
+        const head = `<thead><tr>${columns.map(c=>`<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>`;
+        const body = rows.length
+          ? rows.map(row => `<tr>${row.map(cell=>`<td>${escapeHTML(String(cell))}</td>`).join('')}</tr>`).join('')
+          : `<tr><td colspan="${columns.length}" class="text-center text-muted-2 py-3">No records found.</td></tr>`;
+        return `
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div><div class="fw-bold" style="color:var(--primary)">PARABELLUM STEEL &amp; IRON WORKS</div>
+            <div class="small text-muted-2">${escapeHTML(subtitle)}</div></div>
+            <div class="small text-muted-2 text-end">Generated ${today}<br>by ${escapeHTML(CURRENT_USER.name || '')}</div>
+          </div><hr class="mt-2">
+          <div class="table-wrap"><table class="table table-soft">${head}<tbody>${body}</tbody></table></div>`;
       };
-      const titles = { inventory:'Inventory Report', customer:'Customer Report', project:'Project Report',
-                       transaction:'Client Transaction Report', commission:'Commission Report', forecast:'Forecast Report' };
 
-      document.querySelectorAll('[data-gen]').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-gen]').forEach(btn => btn.addEventListener('click', async () => {
         const key = btn.dataset.gen;
-        document.getElementById('rpTitle').textContent = titles[key];
-        document.getElementById('rpBody').innerHTML = builders[key]();
+        currentKey = key;
+        document.getElementById('rpTitle').textContent = 'Loading\u2026';
+        document.getElementById('rpBody').innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>';
         modal.show();
+        try {
+          const res = await fetch(`/api/reports/${key}/data`);
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          const d = json.data;
+          document.getElementById('rpTitle').textContent = d.title;
+          document.getElementById('rpBody').innerHTML = wrap(d.subtitle, d.columns, d.rows);
+        } catch (err) {
+          document.getElementById('rpTitle').textContent = 'Report Preview';
+          document.getElementById('rpBody').innerHTML =
+            `<div class="alert alert-danger mb-0">${escapeHTML(err.message)}</div>`;
+        }
       }));
+
+      // Preview modal's own Export buttons download whichever report is open.
+      document.getElementById('rpExportPdf')?.addEventListener('click', () => {
+        if (currentKey) window.location.href = `/api/reports/${currentKey}/pdf`;
+      });
+      document.getElementById('rpExportExcel')?.addEventListener('click', () => {
+        if (currentKey) window.location.href = `/api/reports/${currentKey}/excel`;
+      });
     });
   </script>
 </body>

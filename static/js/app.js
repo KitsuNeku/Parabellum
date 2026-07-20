@@ -652,11 +652,22 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => window.print());
   });
 
-  /* ---------------- Export buttons (demo) ---------------- */
+  /* ---------------- Export buttons: REAL PDF / Excel downloads ----------------
+     Buttons with data-report + data-format hit the real export endpoint,
+     which generates the file server-side from the live database and the
+     browser downloads it directly. Buttons without those attributes (the
+     bulk "Recent Reports" header buttons) keep the old placeholder toast —
+     there isn't a single report type for them to export yet. */
   document.querySelectorAll('[data-export]').forEach(btn => {
     btn.addEventListener('click', () => {
-      // TODO(backend): call the report-generation endpoint (or a client-side lib like SheetJS) here.
-      showToast(`Generating ${btn.getAttribute('data-export')} file…`, 'primary', 'bi-download');
+      const key = btn.dataset.report;
+      const fmt = btn.dataset.format;
+      if (key && fmt) {
+        window.location.href = `/api/reports/${key}/${fmt === 'pdf' ? 'pdf' : 'excel'}`;
+        showToast(`Generating ${fmt.toUpperCase()}\u2026`, 'primary', 'bi-download');
+      } else {
+        showToast(`Generating ${btn.getAttribute('data-export')} file\u2026`, 'primary', 'bi-download');
+      }
     });
   });
 

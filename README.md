@@ -27,8 +27,8 @@ commissions, and reporting, with a machine-learning module that forecasts
 | Customers: add / edit / delete, live project & transaction counts | **Working** |
 | Projects: add / edit / delete, linked to customers | **Working** |
 | Transactions: create + list, auto-deducts inventory (Obj. 1.3) | **Working** |
-| Commission computation from the database | **Not yet** |
-| Report export (PDF / Excel) | **Not yet** |
+| Reports: real PDF & Excel export, on-screen preview | **Working** |
+| Commission computation from the database | **Not yet** — Commission Report uses sample data |
 
 The **forecasting engine and authentication are complete**. The remaining
 work is the standard CRUD backend.

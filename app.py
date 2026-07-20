@@ -21,6 +21,7 @@ Setup order:
 """
 
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from datetime import datetime
 
 from config import DB_CONFIG, SECRET_KEY, DEBUG
 from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit
@@ -724,6 +725,75 @@ def api_transactions_save():
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": f"Database or model error: {e}"}), 500
+
+
+# ---------------- Reports API ----------------
+from flask import send_file
+from reports_export import REPORT_BUILDERS, generate_pdf, generate_excel
+
+REPORT_FILE_SLUGS = {
+    "inventory": "Inventory_Report", "customer": "Customer_Report",
+    "project": "Project_Report", "transaction": "Transaction_Report",
+    "commission": "Commission_Report", "forecast": "Forecast_Report",
+}
+
+
+@app.route("/api/reports/<key>/data")
+@permission_required("reports")
+def api_report_data(key):
+    """
+    Structured report data for the on-screen preview modal. Same builder
+    function that the PDF and Excel routes use — the three formats can
+    never show different numbers from each other.
+    """
+    builder = REPORT_BUILDERS.get(key)
+    if not builder:
+        return jsonify({"ok": False, "error": "Unknown report type."}), 404
+    try:
+        title, subtitle, columns, rows = builder(DB_CONFIG)
+        return jsonify({"ok": True, "data": {
+            "title": title, "subtitle": subtitle, "columns": columns, "rows": rows,
+        }})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+
+
+@app.route("/api/reports/<key>/pdf")
+@permission_required("reports")
+def api_report_pdf(key):
+    builder = REPORT_BUILDERS.get(key)
+    if not builder:
+        return jsonify({"ok": False, "error": "Unknown report type."}), 404
+    try:
+        title, subtitle, columns, rows = builder(DB_CONFIG)
+        buf = generate_pdf(title, subtitle, columns, rows,
+                           generated_by=session["user"]["name"])
+        log_audit(DB_CONFIG, "REPORT_EXPORTED", f"{title} exported as PDF.",
+                  session["user"]["username"])
+        fname = f"{REPORT_FILE_SLUGS.get(key, 'Report')}_{datetime.now().strftime('%Y%m%d')}.pdf"
+        return send_file(buf, mimetype="application/pdf",
+                         as_attachment=True, download_name=fname)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Report generation error: {e}"}), 500
+
+
+@app.route("/api/reports/<key>/excel")
+@permission_required("reports")
+def api_report_excel(key):
+    builder = REPORT_BUILDERS.get(key)
+    if not builder:
+        return jsonify({"ok": False, "error": "Unknown report type."}), 404
+    try:
+        title, subtitle, columns, rows = builder(DB_CONFIG)
+        buf = generate_excel(title, subtitle, columns, rows,
+                             generated_by=session["user"]["name"])
+        log_audit(DB_CONFIG, "REPORT_EXPORTED", f"{title} exported as Excel.",
+                  session["user"]["username"])
+        fname = f"{REPORT_FILE_SLUGS.get(key, 'Report')}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                         as_attachment=True, download_name=fname)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"Report generation error: {e}"}), 500
 
 
 @app.route("/api/materials")

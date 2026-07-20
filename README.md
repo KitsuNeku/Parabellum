@@ -142,6 +142,10 @@ The short version: run `python app.py` on your PC, find your PC's IP with
 `ipconfig`, and browse to `http://<your-ip>:5000` on your phone (both
 devices on the same Wi-Fi).
 
+**Moving the database to Supabase:** see `SUPABASE.md` for step-by-step
+instructions. This lets your whole team (and your defense panel) work
+against the same live database instead of everyone's separate local copy.
+
 ---
 
 ## 5. Security

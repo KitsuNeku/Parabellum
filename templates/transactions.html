@@ -156,13 +156,13 @@
       </div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-receipt-cutoff"></i></div>
-          <div class="stat-label">Total Transactions</div><div class="stat-value">10</div><div class="stat-desc">This month</div></div></div>
+          <div class="stat-label">Total Transactions</div><div class="stat-value" id="txnStatTotal">&mdash;</div><div class="stat-desc">This month</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
-          <div class="stat-label">Paid</div><div class="stat-value">5</div><div class="stat-desc">Fully settled</div></div></div>
+          <div class="stat-label">Paid</div><div class="stat-value" id="txnStatPaid">&mdash;</div><div class="stat-desc">Fully settled</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-hourglass-split"></i></div>
-          <div class="stat-label">Pending / Partial</div><div class="stat-value">5</div><div class="stat-desc">Awaiting payment</div></div></div>
+          <div class="stat-label">Pending / Partial</div><div class="stat-value" id="txnStatPending">&mdash;</div><div class="stat-desc">Awaiting payment</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-cash-stack"></i></div>
-          <div class="stat-label">Monthly Revenue</div><div class="stat-value" style="font-size:1.55rem">₱4.82M</div><div class="stat-desc">Incl. 12% VAT</div></div></div>
+          <div class="stat-label">Monthly Revenue</div><div class="stat-value" style="font-size:1.55rem" id="txnStatRevenue">&mdash;</div><div class="stat-desc">Incl. 12% VAT</div></div></div>
       </div>
 
       <div class="card"><div class="card-body">
@@ -177,8 +177,8 @@
           <tbody id="txnBody"></tbody>
         </table></div>
         <div class="d-flex justify-content-between align-items-center mt-3">
-          <span class="small text-muted-2">Showing 1–10 of 10 transactions</span>
-          <nav><ul class="pagination"><li class="page-item disabled"><a class="page-link" href="#"><i class="bi bi-chevron-left"></i></a></li><li class="page-item active"><a class="page-link" href="#">1</a></li><li class="page-item"><a class="page-link" href="#"><i class="bi bi-chevron-right"></i></a></li></ul></nav>
+          <span class="small text-muted-2" id="txnCount">Loading transactions&hellip;</span>
+          <nav id="txnPaginationNav"><ul class="pagination" id="txnPagination"></ul></nav>
         </div>
       </div></div>
 
@@ -224,9 +224,82 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const tb = document.getElementById('txnBody');
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      const TXN_PAGE_SIZE = 8;
+      let txnCurrentPage = 1;
+
+      const compactPeso = (n) => {
+        if (n >= 1_000_000) return `\u20b1${(n / 1_000_000).toFixed(2)}M`;
+        if (n >= 1_000) return `\u20b1${(n / 1_000).toFixed(1)}K`;
+        return PESO(n);
+      };
+
+      function renderTxnStats(){
+        // Scoped to the most recent calendar month that actually HAS
+        // transactions in it — NOT the browser's real-world clock. Those
+        // are two different things: this demo data was generated relative
+        // to whenever seed_data.py was last run, and doesn't move forward
+        // in time after that. The viewer's actual system clock keeps
+        // advancing regardless, so a strict "real today" filter would
+        // show all-zero stats for perfectly good data the moment the two
+        // drift apart — exactly what happened here with 1121 real
+        // transactions all reporting as zero. Anchoring to the latest
+        // date actually present in the data guarantees a meaningful,
+        // non-zero figure whenever there's any data at all.
+        if (!TRANSACTIONS.length) {
+          set('txnStatTotal', 0); set('txnStatPaid', 0);
+          set('txnStatPending', 0); set('txnStatRevenue', compactPeso(0));
+          return;
+        }
+        const latestDate = TRANSACTIONS.reduce((max, t) => ((t.date || '') > max ? t.date : max), TRANSACTIONS[0].date || '');
+        const monthPrefix = latestDate.slice(0, 7);
+        const thisMonth = TRANSACTIONS.filter(t => (t.date || '').startsWith(monthPrefix));
+        const paid = thisMonth.filter(t => t.pay === 'Paid').length;
+        const pending = thisMonth.filter(t => t.pay === 'Pending' || t.pay === 'Partial').length;
+        const revenue = thisMonth.reduce((sum, t) => sum + (t.qty * t.price * 1.12), 0);
+
+        set('txnStatTotal', thisMonth.length);
+        set('txnStatPaid', paid);
+        set('txnStatPending', pending);
+        set('txnStatRevenue', compactPeso(revenue));
+      }
+
+      function renderTxnPaginationControls(totalItems){
+        const totalPages = Math.max(1, Math.ceil(totalItems / TXN_PAGE_SIZE));
+        if (txnCurrentPage > totalPages) txnCurrentPage = totalPages;
+        const nav = document.getElementById('txnPaginationNav');
+        const ul = document.getElementById('txnPagination');
+        if (totalPages <= 1) { nav.style.display = 'none'; return; }
+        nav.style.display = '';
+        const pageLink = (label, page, opts = {}) => `
+          <li class="page-item ${opts.active ? 'active' : ''} ${opts.disabled ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${page}">${label}</a>
+          </li>`;
+        let html = pageLink('<i class="bi bi-chevron-left"></i>', txnCurrentPage - 1, { disabled: txnCurrentPage === 1 });
+        buildPageWindow(txnCurrentPage, totalPages).forEach(p => {
+          if (p === '\u2026') html += `<li class="page-item disabled"><span class="page-link">\u2026</span></li>`;
+          else html += pageLink(p, p, { active: p === txnCurrentPage });
+        });
+        html += pageLink('<i class="bi bi-chevron-right"></i>', txnCurrentPage + 1, { disabled: txnCurrentPage === totalPages });
+        ul.innerHTML = html;
+      }
+
+      document.getElementById('txnPagination').addEventListener('click', (e) => {
+        const link = e.target.closest('[data-page]');
+        if (!link || link.closest('.disabled')) return;
+        e.preventDefault();
+        const page = parseInt(link.dataset.page, 10);
+        if (!page || page === txnCurrentPage) return;
+        txnCurrentPage = page;
+        renderTransactions();
+      });
+
       function renderTransactions(){
+        const start = (txnCurrentPage - 1) * TXN_PAGE_SIZE;
+        const pageItems = TRANSACTIONS.slice(start, start + TXN_PAGE_SIZE);
+
         tb.innerHTML = '';
-        TRANSACTIONS.forEach(t => {
+        pageItems.forEach(t => {
         const sub = t.qty * t.price; const total = sub * 1.12;
         tb.insertAdjacentHTML('beforeend', `<tr>
           <td class="fw-id">${t.inv}</td><td class="fw-medium">${t.cust}</td>
@@ -238,6 +311,11 @@
             <button class="act-btn view-txn" data-bs-toggle="tooltip" title="View" data-inv="${t.inv}"><i class="bi bi-eye"></i></button>
           </td></tr>`);
         });
+        set('txnCount', pageItems.length === TRANSACTIONS.length
+          ? `Showing ${TRANSACTIONS.length} transaction${TRANSACTIONS.length===1?'':'s'}`
+          : `Showing ${start+1}\u2013${start+pageItems.length} of ${TRANSACTIONS.length} transactions`);
+        renderTxnPaginationControls(TRANSACTIONS.length);
+        renderTxnStats();
         initTooltips();
       }
       renderTransactions();

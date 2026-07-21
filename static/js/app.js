@@ -1,6 +1,30 @@
 /* =====================================================================
    PARABELLUM ISOS — App Interactivity (vanilla JS)
    ===================================================================== */
+
+/* Shared by every page with a paginated table (inventory, transactions,
+   etc.) — a proper GitHub/Google-style "windowed" page list instead of
+   rendering a button for every single page. With hundreds of records
+   (e.g. 1121 transactions = 141 pages), rendering all of them in one
+   unwrapped row overflows and overlaps on any screen, worst of all on
+   mobile. Always shows page 1, the last page, and a small window around
+   whichever page is currently active, collapsing the rest into "...". */
+function buildPageWindow(current, total, maxNeighbors = 1) {
+  if (total <= 1) return [1];
+  const pages = new Set([1, total, current]);
+  for (let i = 1; i <= maxNeighbors; i++) {
+    if (current - i >= 1) pages.add(current - i);
+    if (current + i <= total) pages.add(current + i);
+  }
+  const sorted = [...pages].sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push('\u2026');
+    out.push(sorted[i]);
+  }
+  return out;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 
   /* ---------------- Dashboard: replace sample KPIs with REAL DB data ----------

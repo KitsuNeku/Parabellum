@@ -157,13 +157,13 @@
       </div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-cash-coin"></i></div>
-          <div class="stat-label">Total Commission</div><div class="stat-value" style="font-size:1.55rem" id="commStatTotal">\u2014</div><div class="stat-desc">Avg. per month</div></div></div>
+          <div class="stat-label">Total Commission</div><div class="stat-value" style="font-size:1.55rem" id="commStatTotal">&mdash;</div><div class="stat-desc">Avg. per month</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-trophy"></i></div>
-          <div class="stat-label">Top Earner</div><div class="stat-value" style="font-size:1.3rem" id="commStatTopName">\u2014</div><div class="stat-desc" id="commStatTopAmt">\u2014</div></div></div>
+          <div class="stat-label">Top Earner</div><div class="stat-value" style="font-size:1.3rem" id="commStatTopName">&mdash;</div><div class="stat-desc" id="commStatTopAmt">&mdash;</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
-          <div class="stat-label">Completed Projects</div><div class="stat-value" id="commStatCompleted">\u2014</div><div class="stat-desc">Commission-eligible</div></div></div>
+          <div class="stat-label">Completed Projects</div><div class="stat-value" id="commStatCompleted">&mdash;</div><div class="stat-desc">Commission-eligible</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-percent"></i></div>
-          <div class="stat-label">Avg. Rate</div><div class="stat-value" id="commStatRate">\u2014</div><div class="stat-desc">Across all staff</div></div></div>
+          <div class="stat-label">Avg. Rate</div><div class="stat-value" id="commStatRate">&mdash;</div><div class="stat-desc">Across all staff</div></div></div>
       </div>
 
       <div class="row g-3 mb-3">
@@ -215,6 +215,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const tb = document.getElementById('commBody');
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
       try {
         const res = await fetch('/api/commissions');
         const json = await res.json();

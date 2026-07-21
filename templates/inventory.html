@@ -226,14 +226,8 @@
 
           <!-- Pagination -->
           <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
-            <span class="small text-muted-2" id="invCount">Showing 16 items</span>
-            <nav><ul class="pagination">
-              <li class="page-item disabled"><a class="page-link" href="#"><i class="bi bi-chevron-left"></i></a></li>
-              <li class="page-item active"><a class="page-link" href="#">1</a></li>
-              <li class="page-item"><a class="page-link" href="#">2</a></li>
-              <li class="page-item"><a class="page-link" href="#">3</a></li>
-              <li class="page-item"><a class="page-link" href="#"><i class="bi bi-chevron-right"></i></a></li>
-            </ul></nav>
+            <span class="small text-muted-2" id="invCount">Loading inventory&hellip;</span>
+            <nav id="invPaginationNav"><ul class="pagination" id="invPagination"></ul></nav>
           </div>
         </div>
       </div>
@@ -327,10 +321,51 @@
       let currentDetailId = null;
 
       /* ---------- Render: table + KPIs + attention lists + sidebar badge (re-runs after every mutation) ---------- */
+      const INV_PAGE_SIZE = 8;
+      let invCurrentPage = 1;
+
+      function renderPaginationControls(totalItems){
+        const totalPages = Math.max(1, Math.ceil(totalItems / INV_PAGE_SIZE));
+        if (invCurrentPage > totalPages) invCurrentPage = totalPages;
+        const nav = document.getElementById('invPaginationNav');
+        const ul = document.getElementById('invPagination');
+
+        // Nothing to page through — don't show controls that would just
+        // be redundant decoration when everything already fits on screen.
+        if (totalPages <= 1) { nav.style.display = 'none'; return; }
+        nav.style.display = '';
+
+        const pageLink = (label, page, opts = {}) => `
+          <li class="page-item ${opts.active ? 'active' : ''} ${opts.disabled ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${page}">${label}</a>
+          </li>`;
+
+        let html = pageLink('<i class="bi bi-chevron-left"></i>', invCurrentPage - 1, { disabled: invCurrentPage === 1 });
+        buildPageWindow(invCurrentPage, totalPages).forEach(p => {
+          if (p === '\u2026') html += `<li class="page-item disabled"><span class="page-link">\u2026</span></li>`;
+          else html += pageLink(p, p, { active: p === invCurrentPage });
+        });
+        html += pageLink('<i class="bi bi-chevron-right"></i>', invCurrentPage + 1, { disabled: invCurrentPage === totalPages });
+        ul.innerHTML = html;
+      }
+
+      document.getElementById('invPagination').addEventListener('click', (e) => {
+        const link = e.target.closest('[data-page]');
+        if (!link || link.closest('.disabled')) return;
+        e.preventDefault();
+        const page = parseInt(link.dataset.page, 10);
+        if (!page || page === invCurrentPage) return;
+        invCurrentPage = page;
+        renderInventory();
+      });
+
       function renderInventory(){
-        const items = inventoryStore.all();
+        const items = inventoryStore.all();   // full list — KPIs below are counted across ALL of it
+        const start = (invCurrentPage - 1) * INV_PAGE_SIZE;
+        const pageItems = items.slice(start, start + INV_PAGE_SIZE);
+
         tb.innerHTML = '';
-        items.forEach(i => {
+        pageItems.forEach(i => {
           tb.insertAdjacentHTML('beforeend', `<tr>
             <td><div class="fw-medium">${escapeHTML(i.name)}</div><div class="small text-muted-2">${i.id}</div></td>
             <td><span class="tag-chip">${i.cat}</span></td>
@@ -343,7 +378,10 @@
         set('invKpiIn',  items.filter(i=>i.status==='In Stock').length);
         set('invKpiLow', items.filter(i=>i.status==='Low Stock').length);
         set('invKpiOut', items.filter(i=>i.status==='Out of Stock').length);
-        set('invCount', `Showing ${items.length} item${items.length===1?'':'s'}`);
+        set('invCount', pageItems.length === items.length
+          ? `Showing ${items.length} item${items.length===1?'':'s'}`
+          : `Showing ${start+1}\u2013${start+pageItems.length} of ${items.length} items`);
+        renderPaginationControls(items.length);
 
         const low = items.filter(i => i.status === 'Low Stock');
         const out = items.filter(i => i.status === 'Out of Stock');

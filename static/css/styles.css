@@ -270,7 +270,10 @@ a { text-decoration: none; }
   padding: 16px 20px; font-weight: 600;
 }
 .card-body { padding: 20px; }
-.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+.card-title-row > *:first-child { flex: 1 1 auto; min-width: 0; }
+.card-title-row .seg-toggle,
+.card-title-row .btn-group { flex-shrink: 0; }
 
 /* Panel header (red title + muted subtitle), like the reference */
 .panel-title { color: var(--primary); font-weight: 700; font-size: 1.08rem; margin: 0; }
@@ -622,6 +625,12 @@ a { text-decoration: none; }
   .login-form-side { padding: 24px 20px; }
   .login-card { max-width: 100%; }
   .login-card h2 { font-size: 1.35rem; }
+  /* Daily/Weekly/Monthly-style toggles: full width of their own line on
+     phones, rather than squeezing next to the panel title. */
+  .card-title-row .seg-toggle,
+  .card-title-row .btn-group { width: 100%; }
+  .card-title-row .seg-toggle .btn,
+  .card-title-row .btn-group .btn { flex: 1 1 0; padding-left: 6px; padding-right: 6px; font-size: .8rem; }
 }
 
 /* Anywhere with touch input: bigger tap targets */

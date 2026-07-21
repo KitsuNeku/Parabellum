@@ -10,12 +10,6 @@ display strings (peso signs, percentages, etc. included). The on-screen
 preview, the PDF, and the Excel file all read from that SAME function —
 so the three formats can never disagree with each other, and a defense
 panelist comparing "does the PDF match what's on screen" always gets yes.
-
-NOTE ON COMMISSIONS: there is no commission-computation backend yet (rates,
-employees, and payouts aren't stored anywhere) — that's flagged as its own
-pending feature. This report currently reads a small illustrative table
-committed here so the export mechanism itself is exercised and ready; wire
-it to a real `employees`/`commissions` table on the day that gets built.
 """
 
 import io
@@ -114,18 +108,57 @@ def build_transaction_report(db_config):
             ["Invoice", "Customer", "Material", "Qty", "Total", "Status", "Date"], out)
 
 
+def compute_commissions(db_config):
+    """
+    Real commission computation (Objective — commission tracking tied to
+    completed projects).
+
+    Total Sales   = sum of budgets of an employee's COMPLETED projects,
+                     all-time (projects.staff links to employees.employee_code).
+    Commission    = Total Sales x commission_rate.
+    Monthly       = Commission divided by the number of distinct calendar
+                     months in which the employee completed a project — i.e.
+                     an average monthly earning rate, not literally "this
+                     calendar month." A brand-new demo database may have all
+                     its completions in the same handful of months, or none
+                     completed yet in the current month, so "this month"
+                     alone could misleadingly show ₱0 even for a productive
+                     employee. Averaging over their active months gives a
+                     stable, explainable figure instead.
+    """
+    rows = execute_query(db_config, """
+        SELECT e.employee_code, e.name, e.role, e.commission_rate,
+               COUNT(CASE WHEN p.status = 'Completed' THEN 1 END) AS completed,
+               COALESCE(SUM(CASE WHEN p.status = 'Completed' THEN p.budget END), 0) AS total_sales,
+               COUNT(DISTINCT CASE WHEN p.status = 'Completed'
+                     THEN date_trunc('month', p.end_date) END) AS active_months
+        FROM employees e
+        LEFT JOIN projects p ON p.staff = e.employee_code
+        WHERE e.status = 'Active'
+        GROUP BY e.employee_id, e.employee_code, e.name, e.role, e.commission_rate
+        ORDER BY e.name;
+    """, fetch=True)
+
+    out = []
+    for r in rows:
+        rate = float(r["commission_rate"])
+        total_sales = float(r["total_sales"])
+        commission = total_sales * rate / 100
+        active_months = int(r["active_months"]) or 1
+        out.append({
+            "code": r["employee_code"], "name": r["name"], "role": r["role"] or "\u2014",
+            "rate": rate, "completed": int(r["completed"]),
+            "total_sales": total_sales, "commission": commission,
+            "monthly": commission / active_months,
+        })
+    return out
+
+
 def build_commission_report(db_config):
-    # No commission-computation backend exists yet — see module docstring.
-    sample = [
-        ("Engr. Juan Dela Cruz", "Senior Sales Engineer", 8, 5.0, 5_840_000, 48_200),
-        ("Engr. Maria Santos", "Sales Engineer", 6, 4.5, 4_120_000, 36_800),
-        ("Engr. Carlos Mendoza", "Project Engineer", 5, 4.0, 3_460_000, 29_400),
-        ("Engr. Ana Lim", "Sales Engineer", 4, 4.5, 2_280_000, 21_600),
-        ("Engr. Pedro Reyes", "Senior Sales Engineer", 7, 5.0, 5_120_000, 42_500),
-    ]
-    out = [[n, role, str(c), f"{rate:g}%", _peso(sales), _peso(monthly)]
-           for n, role, c, rate, sales, monthly in sample]
-    return ("Commission Report", "Per-employee summary (sample data \u2014 commission computation not yet implemented)",
+    rows = compute_commissions(db_config)
+    out = [[e["name"], e["role"], str(e["completed"]), f"{e['rate']:g}%",
+            _peso(e["total_sales"]), _peso(e["monthly"])] for e in rows]
+    return ("Commission Report", "Per-employee summary \u2014 computed from completed projects",
             ["Employee", "Role", "Completed", "Rate", "Sales", "Monthly Commission"], out)
 
 

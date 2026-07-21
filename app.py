@@ -22,10 +22,12 @@ Setup order:
 
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from datetime import datetime
+import os
 
 from config import DB_CONFIG, SECRET_KEY, DEBUG
 from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit
-from auth import verify_login, login_required, permission_required, ROLE_PERMISSIONS
+from auth import verify_login, login_required, permission_required, ROLE_PERMISSIONS, hash_password
+from security import apply_security
 
 
 def _user_context():
@@ -48,17 +50,26 @@ def _user_context():
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+# Apply defense-in-depth measures — headers, rate limiting, request size
+# caps, session hygiene. See security.py for the full list and honest
+# scope caveats (what this covers and what needs infrastructure).
+limiter = apply_security(app)
+
 # Session cookie hardening:
 #   HTTPONLY — JavaScript cannot read the cookie, so a successful XSS
 #              injection still can't steal the session.
 #   SAMESITE — the cookie is not sent on cross-site requests, which
 #              blocks most CSRF attempts against session-based actions.
-#   SECURE   — only sent over HTTPS. Left off for local http://127.0.0.1
-#              development; turn on once the app is served over HTTPS.
+#   SECURE   — only sent over HTTPS. Defaults to off for local
+#              http://127.0.0.1 development. Set the SESSION_COOKIE_SECURE
+#              environment variable to "1" once the app is served over
+#              real HTTPS (e.g. behind nginx/Caddy with a certificate, or
+#              a host that terminates TLS for you) — the cookie will then
+#              refuse to be sent over a plain HTTP connection at all.
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=False,   # set True once served over HTTPS
+    SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
     PERMANENT_SESSION_LIFETIME=1800,  # auto sign-out after 30 idle minutes
 )
 
@@ -107,7 +118,13 @@ for _p in PAGES:
 
 # ---------------- Auth API ----------------
 @app.route("/api/login", methods=["POST"])
+@limiter.limit("10 per minute; 60 per hour")
 def api_login():
+    """
+    The account-lockout in auth.py stops brute force against a SINGLE
+    account. This per-IP limit stops "credential stuffing" where an
+    attacker tries thousands of username/password pairs from one machine.
+    """
     payload = request.get_json(silent=True) or {}
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
@@ -250,7 +267,8 @@ def api_dashboard():
         }})
 
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 # ---------------- Inventory API ----------------
@@ -296,7 +314,8 @@ def api_inventory():
         """, fetch=True)
         return jsonify({"ok": True, "data": [_material_row(r) for r in rows]})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/inventory/save", methods=["POST"])
@@ -341,7 +360,8 @@ def api_inventory_save():
                       session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 def _apply_movement(material_code, quantity, kind, remarks, project_id=None):
@@ -397,7 +417,8 @@ def api_stock_in():
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/inventory/stock-out", methods=["POST"])
@@ -414,7 +435,8 @@ def api_stock_out():
         # This is where the negative-stock guard reports back to the user.
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/inventory/delete", methods=["POST"])
@@ -433,7 +455,8 @@ def api_inventory_delete():
                   session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 # ---------------- Customers API ----------------
@@ -456,7 +479,8 @@ def api_customers():
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/customers/save", methods=["POST"])
@@ -492,7 +516,8 @@ def api_customers_save():
                       session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/customers/delete", methods=["POST"])
@@ -515,7 +540,8 @@ def api_customers_delete():
                   session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 # ---------------- Projects API ----------------
@@ -545,7 +571,8 @@ def api_projects():
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/projects/save", methods=["POST"])
@@ -568,6 +595,10 @@ def api_projects_save():
         status = "Ongoing" if d.get("status") in (None, "In Progress") else d.get("status")
         progress = int(d.get("progress") or 0)
         budget = float(d.get("budget") or 0)
+        if budget < 0:
+            return jsonify({"ok": False, "error": "Budget cannot be negative."}), 400
+        if not (0 <= progress <= 100):
+            return jsonify({"ok": False, "error": "Progress must be between 0 and 100."}), 400
         edit_id = d.get("edit_id")
 
         if edit_id:
@@ -599,7 +630,8 @@ def api_projects_save():
                       session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/projects/delete", methods=["POST"])
@@ -617,7 +649,8 @@ def api_projects_delete():
                   session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 # ---------------- Transactions API ----------------
@@ -649,7 +682,8 @@ def api_transactions():
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/transactions/save", methods=["POST"])
@@ -673,6 +707,8 @@ def api_transactions_save():
         price = float(d.get("price") or 0)
         if qty <= 0:
             return jsonify({"ok": False, "error": "Quantity must be greater than zero."}), 400
+        if price < 0:
+            return jsonify({"ok": False, "error": "Unit price cannot be negative."}), 400
 
         # Resolve customer and project codes to ids.
         cust_id = None
@@ -724,12 +760,221 @@ def api_transactions_save():
                   session["user"]["username"])
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database or model error: {e}"}), 500
+        app.logger.exception("Database or model error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- User Management API (Settings > Users) ----------------
+@app.route("/api/users")
+@permission_required("settings")
+def api_users():
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT user_id, username, full_name, role, email, department, is_active
+            FROM users ORDER BY full_name;
+        """, fetch=True)
+        data = [{
+            "id": f"USR-{r['user_id']:02d}", "username": r["username"],
+            "name": r["full_name"] or "", "role": r["role"],
+            "email": r["email"] or "", "dept": r["department"] or "",
+            "status": "Active" if r["is_active"] else "Suspended",
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/users/save", methods=["POST"])
+@permission_required("settings")
+def api_users_save():
+    d = request.get_json(silent=True) or {}
+    name = (d.get("name") or "").strip()
+    username = (d.get("username") or "").strip()
+    role = d.get("role") or ""
+    email = (d.get("email") or "").strip()
+    if not name or not username:
+        return jsonify({"ok": False, "error": "Name and username are required."}), 400
+    if role not in ROLE_PERMISSIONS:
+        return jsonify({"ok": False, "error": "Invalid role."}), 400
+
+    edit_id = d.get("edit_id")  # e.g. "USR-02"
+    is_active = d.get("status", "Active") != "Suspended"
+    password = d.get("password") or ""
+
+    try:
+        if edit_id:
+            user_id = int(edit_id.split("-")[1])
+            if password:
+                execute_query(DB_CONFIG, """
+                    UPDATE users SET full_name=%s, username=%s, role=%s, email=%s,
+                           department=%s, is_active=%s, password_hash=%s
+                    WHERE user_id=%s;
+                """, (name, username, role, email, d.get("dept"), is_active,
+                      hash_password(password), user_id))
+            else:
+                execute_query(DB_CONFIG, """
+                    UPDATE users SET full_name=%s, username=%s, role=%s, email=%s,
+                           department=%s, is_active=%s
+                    WHERE user_id=%s;
+                """, (name, username, role, email, d.get("dept"), is_active, user_id))
+            log_audit(DB_CONFIG, "USER_UPDATED", f"Edited {username} ({role}).",
+                      session["user"]["username"])
+        else:
+            if not password:
+                return jsonify({"ok": False, "error": "A password is required for new accounts."}), 400
+            execute_query(DB_CONFIG, """
+                INSERT INTO users (username, password_hash, full_name, role, email, department, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """, (username, hash_password(password), name, role, email, d.get("dept"), is_active))
+            log_audit(DB_CONFIG, "USER_CREATED", f"Created {username} ({role}).",
+                      session["user"]["username"])
+        return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.exception("Database error")
+        # A duplicate username is the one case worth a specific message —
+        # everything else stays generic per the no-internal-detail rule.
+        msg = ("That username is already taken." if "UNIQUE" in str(e).upper()
+               or "unique" in str(e).lower() else
+               "A server error occurred. Please try again or contact your administrator.")
+        return jsonify({"ok": False, "error": msg}), 500
+
+
+@app.route("/api/users/deactivate", methods=["POST"])
+@permission_required("settings")
+def api_users_deactivate():
+    """
+    Soft-delete only — never hard-deletes an account, since that would
+    orphan its audit_logs history (who did what, historically, would lose
+    its "who"). Also blocks deactivating your own currently-logged-in
+    account, a classic footgun that would otherwise lock you out with no
+    other admin able to fix it except by editing the database directly.
+    """
+    d = request.get_json(silent=True) or {}
+    edit_id = d.get("id") or ""
+    try:
+        user_id = int(edit_id.split("-")[1])
+    except (ValueError, IndexError):
+        return jsonify({"ok": False, "error": "Invalid user id."}), 400
+
+    if user_id == session["user"]["user_id"]:
+        return jsonify({"ok": False, "error": "You cannot deactivate your own account."}), 400
+
+    try:
+        execute_query(DB_CONFIG, "UPDATE users SET is_active=FALSE WHERE user_id=%s;", (user_id,))
+        log_audit(DB_CONFIG, "USER_DEACTIVATED", f"Deactivated user_id {user_id}.",
+                  session["user"]["username"])
+        return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- System Logs / Audit Trail API (Settings > Logs) ----------------
+@app.route("/api/audit-logs")
+@permission_required("settings")
+def api_audit_logs():
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT username, action, details, logged_at
+            FROM audit_logs ORDER BY log_id DESC LIMIT 100;
+        """, fetch=True)
+        data = [{
+            "time": str(r["logged_at"])[:16] if r["logged_at"] else "",
+            "user": r["username"] or "System", "action": r["details"] or r["action"],
+            "module": r["action"],
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Profile avatar upload ----------------
+import os as _os
+from werkzeug.utils import secure_filename
+
+ALLOWED_AVATAR_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
+AVATAR_DIR = _os.path.join(app.root_path, "static", "uploads", "avatars")
+
+
+@app.route("/api/profile/avatar", methods=["POST"])
+@login_required
+def api_profile_avatar():
+    file = request.files.get("photo")
+    if not file or not file.filename:
+        return jsonify({"ok": False, "error": "No file received."}), 400
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_AVATAR_EXTS:
+        return jsonify({"ok": False, "error": "Only PNG, JPG, GIF, or WEBP images are allowed."}), 400
+
+    # Flask already caps the whole request body at MAX_CONTENT_LENGTH (see
+    # security.py) — this just gives a clearer, specific error message for
+    # this endpoint instead of the generic 413 page.
+    file.seek(0, _os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > 3 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "Image must be under 3 MB."}), 400
+
+    try:
+        _os.makedirs(AVATAR_DIR, exist_ok=True)
+        user_id = session["user"]["user_id"]
+        fname = secure_filename(f"user_{user_id}.{ext}")
+        # Remove any previous avatar in a different format for this user.
+        for old_ext in ALLOWED_AVATAR_EXTS:
+            old_path = _os.path.join(AVATAR_DIR, f"user_{user_id}.{old_ext}")
+            if _os.path.exists(old_path) and old_ext != ext:
+                _os.remove(old_path)
+        file.save(_os.path.join(AVATAR_DIR, fname))
+
+        url = url_for("static", filename=f"uploads/avatars/{fname}")
+        execute_query(DB_CONFIG, "UPDATE users SET avatar_path=%s WHERE user_id=%s;",
+                     (url, user_id))
+        session["user"]["avatar_path"] = url   # so it shows immediately, no re-login needed
+        log_audit(DB_CONFIG, "AVATAR_UPDATED", "Profile photo updated.",
+                  session["user"]["username"])
+        return jsonify({"ok": True, "url": url})
+    except Exception as e:
+        app.logger.exception("File upload error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Commissions API ----------------
+@app.route("/api/commissions")
+@permission_required("commissions")
+def api_commissions():
+    """
+    Real per-employee commission data (see reports_export.compute_commissions
+    for the formula) plus the four summary stat cards the Commissions page
+    shows at the top.
+    """
+    try:
+        rows = compute_commissions(DB_CONFIG)
+
+        total_monthly = sum(e["monthly"] for e in rows)
+        completed_total = sum(e["completed"] for e in rows)
+        avg_rate = (sum(e["rate"] for e in rows) / len(rows)) if rows else 0
+        top = max(rows, key=lambda e: e["commission"], default=None)
+
+        return jsonify({"ok": True, "data": {
+            "employees": rows,
+            "stats": {
+                "total_monthly": total_monthly,
+                "completed_total": completed_total,
+                "avg_rate": avg_rate,
+                "top_earner": {"name": top["name"], "commission": top["commission"]} if top else None,
+            },
+        }})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 # ---------------- Reports API ----------------
 from flask import send_file
-from reports_export import REPORT_BUILDERS, generate_pdf, generate_excel
+from reports_export import REPORT_BUILDERS, generate_pdf, generate_excel, compute_commissions
 
 REPORT_FILE_SLUGS = {
     "inventory": "Inventory_Report", "customer": "Customer_Report",
@@ -740,6 +985,7 @@ REPORT_FILE_SLUGS = {
 
 @app.route("/api/reports/<key>/data")
 @permission_required("reports")
+@limiter.limit("30 per minute")
 def api_report_data(key):
     """
     Structured report data for the on-screen preview modal. Same builder
@@ -755,11 +1001,13 @@ def api_report_data(key):
             "title": title, "subtitle": subtitle, "columns": columns, "rows": rows,
         }})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/reports/<key>/pdf")
 @permission_required("reports")
+@limiter.limit("15 per minute")
 def api_report_pdf(key):
     builder = REPORT_BUILDERS.get(key)
     if not builder:
@@ -774,11 +1022,13 @@ def api_report_pdf(key):
         return send_file(buf, mimetype="application/pdf",
                          as_attachment=True, download_name=fname)
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Report generation error: {e}"}), 500
+        app.logger.exception("Report generation error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/reports/<key>/excel")
 @permission_required("reports")
+@limiter.limit("15 per minute")
 def api_report_excel(key):
     builder = REPORT_BUILDERS.get(key)
     if not builder:
@@ -793,7 +1043,8 @@ def api_report_excel(key):
         return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                          as_attachment=True, download_name=fname)
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Report generation error: {e}"}), 500
+        app.logger.exception("Report generation error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/materials")
@@ -808,7 +1059,8 @@ def api_materials():
                     m[k] = float(v)
         return jsonify({"ok": True, "data": mats})
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/aggregate", methods=["POST"])
@@ -821,11 +1073,13 @@ def api_aggregate():
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database error: {e}"}), 500
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 @app.route("/api/forecast", methods=["POST"])
 @permission_required("forecasting")
+@limiter.limit("6 per minute")
 def api_forecast():
     """
     DFD 4.1-4.4. Rebuilds monthly_demand, trains MLR, evaluates
@@ -843,7 +1097,8 @@ def api_forecast():
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": f"Database or model error: {e}"}), 500
+        app.logger.exception("Database or model error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
 if __name__ == "__main__":

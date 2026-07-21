@@ -71,7 +71,7 @@ def main():
     cur.execute("""
         TRUNCATE monthly_demand, forecast_results, model_metrics,
                  stock_movements, transactions, projects, customers,
-                 materials, audit_logs
+                 employees, materials, audit_logs
         RESTART IDENTITY CASCADE;
     """)
 
@@ -87,6 +87,24 @@ def main():
         )
         ids[code] = cur.fetchone()[0]
     print(f"  {len(ids)} materials")
+
+    # ---- Employees (commission computation reads this) ----
+    # Codes must match the EMP-01..EMP-06 range projects.staff uses below.
+    EMPLOYEES = [
+        ("EMP-01", "Engr. Juan Dela Cruz", "Senior Sales Engineer", 5.0),
+        ("EMP-02", "Engr. Maria Santos",   "Sales Engineer",        4.5),
+        ("EMP-03", "Engr. Carlos Mendoza", "Project Engineer",      4.0),
+        ("EMP-04", "Engr. Ana Lim",        "Sales Engineer",        4.5),
+        ("EMP-05", "Engr. Pedro Reyes",    "Senior Sales Engineer", 5.0),
+        ("EMP-06", "Engr. Grace Villanueva", "Project Engineer",    4.0),
+    ]
+    for code, name, role, rate in EMPLOYEES:
+        cur.execute(
+            """INSERT INTO employees (employee_code, name, role, commission_rate, status)
+               VALUES (%s, %s, %s, %s, 'Active');""",
+            (code, name, role, rate),
+        )
+    print(f"  {len(EMPLOYEES)} employees")
 
     # ---- Customers ----
     contacts = ["Ramon Aquino", "Liza Tan", "Jose Marquez", "Grace Lim",

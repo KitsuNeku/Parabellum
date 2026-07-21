@@ -28,7 +28,11 @@ commissions, and reporting, with a machine-learning module that forecasts
 | Projects: add / edit / delete, linked to customers | **Working** |
 | Transactions: create + list, auto-deducts inventory (Obj. 1.3) | **Working** |
 | Reports: real PDF & Excel export, on-screen preview | **Working** |
-| Commission computation from the database | **Not yet** — Commission Report uses sample data |
+| Commission computation from the database | **Working** |
+| User Management: add / edit / deactivate accounts | **Working** |
+| System Logs & Audit Trail (Settings) | **Working** — reads the real `audit_logs` table |
+| Profile photo upload | **Working** |
+| Two-Factor Auth, Backup & Restore, Notifications (Settings) | **Not built** — decorative UI only, would need new subsystems, not just wiring existing data |
 
 The **forecasting engine and authentication are complete**. The remaining
 work is the standard CRUD backend.
@@ -168,19 +172,73 @@ control") and the ISO 25010 Security row in the documentation.
 - **Login errors are generic** ("Invalid username or password") whether
   the username doesn't exist or the password is wrong, so a bad actor can't
   use error messages to find out which usernames are valid.
+- **API errors never reveal internal details to the browser** — every
+  endpoint catches exceptions, writes the real error (with full traceback,
+  for your own debugging) to the server's log, and returns a generic
+  message to the client. Raw database errors can otherwise leak table
+  names, column names, and query structure — details useful for planning
+  a more targeted attack.
+- **Rate limiting on every endpoint** (`security.py`), tuned per cost:
+  10 attempts/minute on login (brute-force protection), 6/minute on
+  running a forecast (which trains a model — expensive), 15/minute on
+  PDF/Excel report generation (also expensive — each one re-queries the
+  database and rebuilds the file from scratch), and 200/minute as the
+  default ceiling everywhere else.
+- **Server-side input validation** rejects nonsensical values before they
+  reach the database — negative prices, negative budgets, quantities of
+  zero or less, progress values outside 0–100 — even if a request bypasses
+  the browser UI entirely and hits the API directly.
+- **Security headers on every response**: Content-Security-Policy (blocks
+  most XSS injection even if a bug lets a script slip through),
+  X-Frame-Options (blocks clickjacking), X-Content-Type-Options (blocks
+  MIME-sniffing attacks), and HSTS (forces HTTPS once you have it set up).
 - **Flask's debug mode is off unless you explicitly enable it** — debug
   mode exposes an interactive Python console on error pages, which is a
   serious risk on anything reachable by more than just your own machine.
 
 **What's intentionally out of scope for a class capstone**, so nobody is
-surprised later: this app is not served over HTTPS (fine for local/LAN
-demoing; add a reverse proxy with TLS before any real deployment), and the
-login lockout counter resets if you restart the Flask process, since it's
-tracked per account in the database rather than needing extra infrastructure.
+surprised later: this app is not served over HTTPS by default (fine for
+local/LAN demoing; the code is ready for it — see `SESSION_COOKIE_SECURE`
+in `app.py` — but you need a reverse proxy with a TLS certificate in front,
+e.g. Caddy or nginx with Let's Encrypt, or a hosting platform that
+terminates TLS for you). The rate limits above defend against brute-force
+login attempts and casual API abuse, but **cannot stop a real DDoS
+attack** — that needs infrastructure in front of the app (Cloudflare's
+free tier is the standard answer), not application code, since a large
+enough flood of traffic exhausts your server's network connection before
+Flask ever gets a chance to apply a rate limit. The login lockout counter
+also resets if you restart the Flask process, since it's tracked per
+account in the database rather than needing extra infrastructure.
 
 ---
 
-## 6. How the forecasting works
+## 6. How commission is calculated
+
+Each employee (`employees` table, seeded with 6 sales/project engineers)
+has a fixed commission rate. Projects are linked to the employee who
+handled them via `projects.staff` (e.g. `EMP-01`).
+
+- **Total Sales** = sum of the `budget` of every project that employee has
+  **completed**, all-time. Ongoing projects don't count yet — only
+  finished work is commission-eligible.
+- **Commission** = Total Sales × their commission rate.
+- **Monthly** = Commission ÷ the number of distinct calendar months in
+  which they completed a project. This is an *average* monthly rate, not
+  strictly "this calendar month's total" — with a demo database, a literal
+  "this month only" figure could show ₱0 for every employee just because
+  no project happened to finish in the current month, which would look
+  broken even though the underlying data and math are correct. Averaging
+  over their active months gives a stable, explainable number instead.
+
+**Still sample data, by design, not yet wired:** the "Commission Overview"
+chart and "Commission History" panel on the Commissions page. Those would
+need a separate payouts ledger (recording *when* a commission was actually
+paid out, not just what's owed) — a different feature from computing what
+someone has earned, which is what's implemented here.
+
+---
+
+## 7. How the forecasting works
 
 The model predicts **next month's demand for every material** and follows the
 process in the Data Flow Diagram:

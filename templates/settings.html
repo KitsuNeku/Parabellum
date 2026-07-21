@@ -267,6 +267,8 @@
         <div class="modal-body"><div class="row g-3">
           <div class="col-md-6"><label class="form-label">Full Name</label><input class="form-control" name="name" required><div class="invalid-feedback">Required.</div></div>
           <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" name="email" required><div class="invalid-feedback">Valid email required.</div></div>
+          <div class="col-md-6"><label class="form-label">Username</label><input class="form-control" name="username" required><div class="invalid-feedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label" id="userPasswordLabel">Password</label><input type="password" class="form-control" name="password" id="userPasswordInput" placeholder="Leave blank to keep current password"></div>
           <div class="col-md-6"><label class="form-label">Role</label><select class="form-select" name="role" required>
             <option value="">Select…</option>
             <option>System Administrator</option><option>Inventory Personnel</option>
@@ -302,46 +304,105 @@
       };
       const userForm  = document.getElementById('userForm');
       const userModal = new bootstrap.Modal('#userModal');
+      const pwLabel   = document.getElementById('userPasswordLabel');
+      const pwInput   = document.getElementById('userPasswordInput');
+      let usersCache  = [];
 
-      /* ---------- User Management (data-driven, per capstone roles) ---------- */
-      function renderUsers(){
+      /* ---------- User Management: real accounts from the database ---------- */
+      async function loadUsers(){
         const tb = document.getElementById('usersBody');
-        tb.innerHTML = '';
-        userStore.all().forEach(u => {
-          tb.insertAdjacentHTML('beforeend', `<tr>
-            <td><div class="fw-medium">${escapeHTML(u.name)}</div><div class="small text-muted-2">${escapeHTML(u.email)}</div></td>
-            <td>${roleBadge(u.role)}</td><td>${escapeHTML(u.dept)}</td>
-            <td><span class="badge ${u.status==='Active'?'b-success':'b-warning'}">${u.status}</span></td>
-            <td class="text-center"><button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${u.id}"><i class="bi bi-pencil"></i></button></td></tr>`);
-        });
-        initTooltips(tb);
+        try {
+          const res = await fetch('/api/users');
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          usersCache = json.data;
+          tb.innerHTML = '';
+          usersCache.forEach(u => {
+            tb.insertAdjacentHTML('beforeend', `<tr>
+              <td><div class="fw-medium">${escapeHTML(u.name)}</div><div class="small text-muted-2">${escapeHTML(u.email)}</div></td>
+              <td>${roleBadge(u.role)}</td><td>${escapeHTML(u.dept)}</td>
+              <td><span class="badge ${u.status==='Active'?'b-success':'b-warning'}">${u.status}</span></td>
+              <td class="text-center">
+                <button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${u.id}"><i class="bi bi-pencil"></i></button>
+                <button class="act-btn danger" data-bs-toggle="tooltip" title="Deactivate" data-act="deactivate" data-id="${u.id}"><i class="bi bi-person-x"></i></button>
+              </td></tr>`);
+          });
+          initTooltips(tb);
+        } catch (err) {
+          tb.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${escapeHTML(err.message)}</td></tr>`;
+        }
       }
-      document.getElementById('usersBody').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-act="edit"]'); if (!btn) return;
-        const u = userStore.find(btn.dataset.id); if (!u) return;
-        userForm.setAttribute('data-edit-id', u.id);
-        document.getElementById('userModalTitle').textContent = 'Edit User';
-        document.getElementById('userModalSubmit').textContent = 'Save Changes';
-        const f = userForm.elements;
-        f.name.value = u.name; f.email.value = u.email; f.role.value = u.role;
-        f.dept.value = u.dept; f.status.value = u.status;
-        userModal.show();
+
+      document.getElementById('usersBody').addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('[data-act="edit"]');
+        if (editBtn) {
+          const u = usersCache.find(x => x.id === editBtn.dataset.id); if (!u) return;
+          userForm.setAttribute('data-edit-id', u.id);
+          document.getElementById('userModalTitle').textContent = 'Edit User';
+          document.getElementById('userModalSubmit').textContent = 'Save Changes';
+          pwLabel.textContent = 'Password';
+          pwInput.required = false;
+          const f = userForm.elements;
+          f.name.value = u.name; f.email.value = u.email; f.role.value = u.role;
+          f.username.value = u.username; f.dept.value = u.dept; f.status.value = u.status;
+          f.password.value = '';
+          userModal.show();
+          return;
+        }
+        const deactivateBtn = e.target.closest('[data-act="deactivate"]');
+        if (deactivateBtn) {
+          const u = usersCache.find(x => x.id === deactivateBtn.dataset.id); if (!u) return;
+          if (!confirm(`Deactivate ${u.name}? They will no longer be able to sign in.`)) return;
+          try {
+            const res = await fetch('/api/users/deactivate', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: u.id }),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.error);
+            showToast('User deactivated', 'success');
+            loadUsers();
+          } catch (err) {
+            showToast(err.message, 'error', 'bi-exclamation-triangle');
+          }
+        }
       });
+
       document.getElementById('userModal').addEventListener('hidden.bs.modal', () => {
         userForm.removeAttribute('data-edit-id');
+        userForm.reset(); userForm.classList.remove('was-validated');
         document.getElementById('userModalTitle').textContent = 'Add User';
         document.getElementById('userModalSubmit').textContent = 'Save User';
+        pwLabel.textContent = 'Password';
+        pwInput.required = false;
       });
-      /* TODO(backend): replace store calls with POST/PATCH /api/users. */
-      document.addEventListener('entity:submit', (e) => {
-        const { entity, data, editId } = e.detail;
-        if (entity !== 'users') return;
-        const rec = { name:data.name.trim(), email:data.email.trim(), role:data.role,
-                      dept:(data.dept||'').trim() || '—', status:data.status };
-        if (editId) userStore.update(editId, rec);
-        else userStore.add({ id:nextId('USR-', USERS), ...rec });
-        renderUsers();
-      });
+
+      userForm.addEventListener('submit', async (e) => {
+        if (!userForm.checkValidity()) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const data = Object.fromEntries(new FormData(userForm));
+        data.edit_id = userForm.getAttribute('data-edit-id') || null;
+        if (!data.edit_id && !data.password) {
+          pwInput.setCustomValidity('Required for new accounts.');
+          userForm.classList.add('was-validated');
+          return;
+        }
+        pwInput.setCustomValidity('');
+        try {
+          const res = await fetch('/api/users/save', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          userModal.hide();
+          showToast(data.edit_id ? 'User updated' : 'User created', 'success');
+          loadUsers();
+        } catch (err) {
+          showToast(err.message, 'error', 'bi-exclamation-triangle');
+        }
+      }, true);
 
       /* ---------- Roles & Permissions matrix — generated from ROLE_PERMISSIONS ----------
          Single source of truth: the same map that hides sidebar links renders this table. */
@@ -359,15 +420,29 @@
             ? '<i class="bi bi-check-circle-fill" style="color:var(--success)"></i>'
             : '<i class="bi bi-dash-circle text-muted-2"></i>'}</td>`).join('')}</tr>`).join('');
 
-      /* ---------- System Logs (data-driven like every other table) ---------- */
-      const lb = document.getElementById('logsBody');
-      ACTIVITY_LOG.forEach(l => {
-        lb.insertAdjacentHTML('beforeend', `<tr>
-          <td class="text-muted-2">${l.time}</td><td>${escapeHTML(l.user)}</td>
-          <td>${escapeHTML(l.action)}</td><td><span class="tag-chip">${l.module}</span></td></tr>`);
-      });
+      /* ---------- System Logs: real audit_logs table (D7) ---------- */
+      async function loadLogs(){
+        const lb = document.getElementById('logsBody');
+        try {
+          const res = await fetch('/api/audit-logs');
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          lb.innerHTML = '';
+          json.data.forEach(l => {
+            lb.insertAdjacentHTML('beforeend', `<tr>
+              <td class="text-muted-2">${escapeHTML(l.time)}</td><td>${escapeHTML(l.user)}</td>
+              <td>${escapeHTML(l.action)}</td><td><span class="tag-chip">${escapeHTML(l.module)}</span></td></tr>`);
+          });
+          if (!json.data.length) {
+            lb.innerHTML = '<tr><td colspan="4" class="text-center text-muted-2 py-3">No activity recorded yet.</td></tr>';
+          }
+        } catch (err) {
+          lb.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHTML(err.message)}</td></tr>`;
+        }
+      }
 
-      renderUsers();
+      loadUsers();
+      loadLogs();
     });
   </script>
 

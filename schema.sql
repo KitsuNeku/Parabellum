@@ -7,7 +7,7 @@
 
 DROP TABLE IF EXISTS audit_logs, model_metrics, forecast_results,
                      monthly_demand, stock_movements, transactions,
-                     projects, customers, materials, users CASCADE;
+                     projects, customers, employees, materials, users CASCADE;
 
 -- ---- D1: User Records -------------------------------------------
 CREATE TABLE users (
@@ -15,6 +15,9 @@ CREATE TABLE users (
     username        VARCHAR(60)  UNIQUE NOT NULL,
     password_hash   VARCHAR(255) NOT NULL,
     full_name       VARCHAR(120),
+    email           VARCHAR(150),
+    department      VARCHAR(80),
+    avatar_path     VARCHAR(255),
     -- These four values MUST exactly match the keys in ROLE_PERMISSIONS
     -- in both static/js/data.js (frontend) and auth.py (backend). A
     -- mismatch here silently locks everyone out of everything, the same
@@ -141,6 +144,16 @@ CREATE TABLE model_metrics (
     test_rows     INT,
     features_used TEXT,
     evaluated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ---- Employees (for commission computation) ---------------------
+CREATE TABLE employees (
+    employee_id      SERIAL PRIMARY KEY,
+    employee_code    VARCHAR(20)  UNIQUE NOT NULL,  -- matches projects.staff (e.g. "EMP-01")
+    name             VARCHAR(120) NOT NULL,
+    role             VARCHAR(80),
+    commission_rate  NUMERIC(5,2) DEFAULT 0,          -- percent, e.g. 4.50
+    status           VARCHAR(20)  DEFAULT 'Active'
 );
 
 -- ---- D7: Reports and Audit Logs ---------------------------------

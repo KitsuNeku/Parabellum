@@ -204,7 +204,9 @@
               Recommended restock quantity: <strong style="color:var(--primary);"><span id="fcAlertQty">250 pieces</span></strong>.
             </p>
           </div>
+          {% if 'forecasting' in allowed_pages %}
           <a href="/forecasting" class="btn btn-gold btn-sm"><i class="bi bi-graph-up-arrow me-1"></i>View Forecast</a>
+          {% endif %}
         </div>
       </div>
 
@@ -255,7 +257,7 @@
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      /* KPI values derive from live data — no hardcoded counts. */
+      /* KPI values derive from live data - no hardcoded counts. */
       const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
       set('dashKpiProjects', PROJECTS.filter(p=>p.status==='In Progress').length);
       set('dashKpiTxns', TRANSACTIONS.length);

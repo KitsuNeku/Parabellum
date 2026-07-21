@@ -1,5 +1,5 @@
 """
-Parabellum ISOS — Demand Forecasting Service
+Parabellum ISOS - Demand Forecasting Service
 =================================================================
 Multiple Linear Regression for SHORT-TERM MONTHLY MATERIAL DEMAND.
 
@@ -25,7 +25,7 @@ Two things worth being able to defend out loud:
    the answer, because that month's demand is what depleted it.)
 
 2. HONEST EVALUATION. The model is scored on months it never trained on,
-   split chronologically — never shuffled, because this is time-series
+   split chronologically - never shuffled, because this is time-series
    data and shuffling would let the model peek at the future.
 """
 
@@ -55,7 +55,7 @@ MIN_TRAINING_ROWS = 24
 
 
 # =================================================================
-#  Database helpers
+# Database helpers
 # =================================================================
 def connect_db(db_config):
     return psycopg2.connect(**db_config)
@@ -74,7 +74,7 @@ def execute_query(db_config, query, params=None, fetch=False):
 
 
 def log_audit(db_config, action, details, username="system"):
-    """D7 — Appendix B says forecast processing must be logged."""
+    """D7 - Appendix B says forecast processing must be logged."""
     try:
         execute_query(
             db_config,
@@ -87,7 +87,7 @@ def log_audit(db_config, action, details, username="system"):
 
 
 def get_materials(db_config):
-    """Material master (D2) — used to populate the UI dropdown."""
+    """Material master (D2) - used to populate the UI dropdown."""
     rows = execute_query(
         db_config,
         """SELECT material_id, material_code, material_name, unit,
@@ -99,7 +99,7 @@ def get_materials(db_config):
 
 
 # =================================================================
-#  DFD 3.2 — Aggregate Monthly Demand  ->  D4
+# DFD 3.2 - Aggregate Monthly Demand -> D4
 # =================================================================
 def aggregate_monthly_demand(db_config):
     """
@@ -158,7 +158,7 @@ def aggregate_monthly_demand(db_config):
             pivot[col] = 0.0
 
     # Every material needs a row for every month, even a month with zero
-    # movement — otherwise the lag features would silently skip a month.
+    # movement - otherwise the lag features would silently skip a month.
     all_months = pd.date_range(
         movements["period_month"].min(),
         movements["period_month"].max(),
@@ -248,7 +248,7 @@ def aggregate_monthly_demand(db_config):
 
 
 # =================================================================
-#  DFD 4.1 — Preprocess Forecast Data
+# DFD 4.1 - Preprocess Forecast Data
 # =================================================================
 def load_monthly_dataset(db_config):
     rows = execute_query(
@@ -320,7 +320,7 @@ def _mape(y_true, y_pred):
 
 def _chronological_split(df, test_ratio=0.2):
     """
-    Hold out the most recent months. Never shuffle time-series data —
+    Hold out the most recent months. Never shuffle time-series data -
     a random split would train on the future and score on the past.
     """
     months = sorted(df["period_month"].unique())
@@ -333,7 +333,7 @@ def _chronological_split(df, test_ratio=0.2):
 
 
 # =================================================================
-#  DFD 4.2 / 4.3 / 4.4 — Train, Evaluate, Forecast, Save
+# DFD 4.2 / 4.3 / 4.4 - Train, Evaluate, Forecast, Save
 # =================================================================
 def run_forecast(db_config, overrides=None, test_ratio=0.2, username="system"):
     """
@@ -341,7 +341,7 @@ def run_forecast(db_config, overrides=None, test_ratio=0.2, username="system"):
     then forecast NEXT MONTH's demand for every material.
 
     `overrides` supports what-if planning, e.g. {"active_projects": 8}
-    — "if we take on 8 projects next month, how much steel do we need?"
+    - "if we take on 8 projects next month, how much steel do we need?"
     That is exactly the material-requirements-planning support the
     documentation asks for.
     """
@@ -481,7 +481,7 @@ def run_forecast(db_config, overrides=None, test_ratio=0.2, username="system"):
             "active_projects":  int(row["active_projects"]),
         })
 
-    # MLR is interpretable — showing the coefficients is the whole reason
+    # MLR is interpretable - showing the coefficients is the reason
     # the documentation chose it over a black-box model.
     coefficients = {
         f: round(float(c), 4) for f, c in zip(columns, model.coef_) if f in FEATURES

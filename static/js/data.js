@@ -1,15 +1,15 @@
 /* =====================================================================
-   PARABELLUM ISOS — Sample Data Store
-   Static, realistic sample data used across the prototype.
-   (Frontend-only — no backend / no database.)
-   ===================================================================== */
+ PARABELLUM ISOS - Sample Data Store
+ Static, realistic sample data used across the prototype.
+ (Frontend-only - no backend / no database.)
+ ===================================================================== */
 const PESO = (n) => '\u20b1' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NUM  = (n) => Number(n).toLocaleString('en-PH');
 
 /* ---------------------------------- Current session ----------------------------------
-   Overwritten at page load by app.js with the real session user from GET /api/me.
-   This placeholder only shows briefly before that call returns, or if a page is
-   somehow reached without a session (which the server also blocks separately). */
+ Overwritten at page load by app.js with the real session user from GET /api/me.
+ This placeholder only shows briefly before that call returns, or if a page is
+ somehow reached without a session (which the server also blocks separately). */
 let CURRENT_USER = { id:'', name:'', role:'' };
 
 /* ---------------------------------- Role-based nav/action visibility (per capstone Table 3.2) ---------------------------------- */
@@ -28,8 +28,7 @@ function escapeHTML(str){
 }
 
 /* ---------------------------------- Minimal in-memory store (backend swap seam) ----------------------------------
-   TODO(backend): each store method maps 1:1 to a REST call —
-   .all() → GET /api/<entity>   .add() → POST   .update() → PATCH   .remove() → DELETE */
+ .all() → GET /api/<entity> .add() → POST .update() → PATCH .remove() → DELETE */
 function makeStore(arr, idKey='id'){
   return {
     all:    () => arr,
@@ -133,8 +132,7 @@ const USERS = [
   { id:'USR-04', name:'Teresa Villanueva',   email:'teresa.v@parabellumsteel.ph',role:'Management/Owner',     dept:'Executive',        status:'Active' },
 ];
 
-/* ---------------------------------- Activity log (Settings > System Logs) ----------------------------------
-   TODO(backend): replace with GET /api/logs response. */
+/* ---------------------------------- Activity log (Settings > System Logs) ---------------------------------- */
 const ACTIVITY_LOG = [
   { time:'2026-06-26 09:41', user:'Admin User',        action:'Generated Inventory Status Report',           module:'Reports'   },
   { time:'2026-06-26 08:15', user:'Rosa Manalo',       action:'Stock In: +50 pcs Deformed Steel Bar 16mm',   module:'Inventory' },
@@ -183,7 +181,7 @@ const NOTIFICATIONS = [
 
 /* ---------------------------------- Badge / render helpers ---------------------------------- */
 function stockBadge(status){
-  // §3.3.1 — status shown without color-coding (neutral badge, no colored dot)
+  // §3.3.1 - status shown without color-coding (neutral badge, no colored dot)
   return `<span class="badge b-neutral">${status}</span>`;
 }
 function payBadge(p){
@@ -209,7 +207,7 @@ function progressBar(p){
       <span class="small fw-medium" style="width:34px">${p}%</span></div>`;
 }
 function actionBtns(id){
-  /* Real action hooks — each page wires a delegated handler on data-act + data-id. */
+  /* Real action hooks - each page wires a delegated handler on data-act + data-id. */
   return `<div class="d-inline-flex">
       <button class="act-btn" data-bs-toggle="tooltip" title="View" data-act="view" data-id="${id}"><i class="bi bi-eye"></i></button>
       <button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${id}"><i class="bi bi-pencil"></i></button>

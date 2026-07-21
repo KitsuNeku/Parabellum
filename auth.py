@@ -1,5 +1,5 @@
 """
-Parabellum ISOS — Authentication & Access Control
+Parabellum ISOS - Authentication & Access Control
 =================================================================
 Implements what the capstone documentation requires under
 Objective 2.1 ("user authentication and role-based access control")
@@ -8,7 +8,7 @@ password control, audit logs... are evaluated").
 
 What this gives you:
   - Passwords are hashed (never stored or compared in plain text).
-  - Sessions are server-side, signed, HttpOnly cookies — the frontend
+  - Sessions are server-side, signed, HttpOnly cookies - the frontend
     never holds a password after login.
   - Role checks happen on the SERVER, not just by hiding sidebar
     links in JavaScript. Hiding a link is a UI convenience; it is not
@@ -33,7 +33,7 @@ LOCKOUT_MINUTES = 15
 
 # Mirrors ROLE_PERMISSIONS in static/js/data.js. The frontend list only
 # controls what a user SEES; this dict controls what the backend actually
-# ALLOWS. They must be kept in sync — the frontend list without this
+# ALLOWS. They must be kept in sync - the frontend list without this
 # backend check would just be a locked door with the key taped to it.
 ROLE_PERMISSIONS = {
     "System Administrator": {"dashboard", "inventory", "customers", "projects",
@@ -64,7 +64,7 @@ def _now():
 def verify_login(db_config, username, plain_password):
     """
     Checks credentials against the users table.
-    Returns (user_dict, error_message) — exactly one of the two is set.
+    Returns (user_dict, error_message) - exactly one of the two is set.
     """
     rows = execute_query(
         db_config,
@@ -77,7 +77,7 @@ def verify_login(db_config, username, plain_password):
     user = rows[0] if rows else None
 
     # Same generic message whether the username doesn't exist or the
-    # password is wrong — confirming which one it was would tell an
+    # password is wrong - confirming which one it was would tell an
     # attacker which usernames are valid.
     generic_error = "Invalid username or password."
 
@@ -121,7 +121,7 @@ def verify_login(db_config, username, plain_password):
         log_audit(db_config, "LOGIN_FAILED", f"Wrong password for '{username}' (attempt {attempts}).", username)
         return None, generic_error
 
-    # Success — clear the failure counter and lock.
+    # Success - clear the failure counter and lock.
     execute_query(
         db_config,
         "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE user_id = %s;",
@@ -152,7 +152,7 @@ def login_required(view):
 def permission_required(key):
     """
     Enforces ROLE_PERMISSIONS on the SERVER for a given permission key
-    (e.g. "forecasting"). This is what actually protects the data — the
+    (e.g. "forecasting"). This is what actually protects the data - the
     sidebar hiding a link in the browser is only ever a convenience.
     """
     def decorator(view):

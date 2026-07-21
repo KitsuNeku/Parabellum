@@ -1,5 +1,5 @@
 """
-Parabellum ISOS — Report Generation
+Parabellum ISOS - Report Generation
 =================================================================
 Objective 2.3 / DFD 5.0: stock status, material movement, transaction,
 commission, and forecast reports.
@@ -7,7 +7,7 @@ commission, and forecast reports.
 Design: every report type has ONE function that queries the database and
 returns (title, subtitle, columns, rows) with values already formatted as
 display strings (peso signs, percentages, etc. included). The on-screen
-preview, the PDF, and the Excel file all read from that SAME function —
+preview, the PDF, and the Excel file all read from that SAME function -
 so the three formats can never disagree with each other, and a defense
 panelist comparing "does the PDF match what's on screen" always gets yes.
 """
@@ -41,8 +41,8 @@ def _num(n):
 
 
 # =================================================================
-#  Report builders — one per report type. Each returns:
-#    title, subtitle, columns (list[str]), rows (list[list[str]])
+# Report builders - one per report type. Each returns:
+# title, subtitle, columns (list[str]), rows (list[list[str]])
 # =================================================================
 def build_inventory_report(db_config):
     rows = execute_query(db_config, """
@@ -110,14 +110,14 @@ def build_transaction_report(db_config):
 
 def compute_commissions(db_config):
     """
-    Real commission computation (Objective — commission tracking tied to
+    Real commission computation (Objective - commission tracking tied to
     completed projects).
 
     Total Sales   = sum of budgets of an employee's COMPLETED projects,
                      all-time (projects.staff links to employees.employee_code).
     Commission    = Total Sales x commission_rate.
     Monthly       = Commission divided by the number of distinct calendar
-                     months in which the employee completed a project — i.e.
+                     months in which the employee completed a project - i.e.
                      an average monthly earning rate, not literally "this
                      calendar month." A brand-new demo database may have all
                      its completions in the same handful of months, or none
@@ -204,7 +204,7 @@ REPORT_BUILDERS = {
 
 
 # =================================================================
-#  File generators — PDF (reportlab) and Excel (openpyxl)
+# File generators - PDF (reportlab) and Excel (openpyxl)
 # =================================================================
 def generate_pdf(title, subtitle, columns, rows, generated_by="System"):
     buf = io.BytesIO()

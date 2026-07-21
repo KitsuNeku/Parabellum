@@ -236,13 +236,13 @@
 
       function renderTxnStats(){
         // Scoped to the most recent calendar month that actually HAS
-        // transactions in it — NOT the browser's real-world clock. Those
+        // transactions in it - NOT the browser's real-world clock. Those
         // are two different things: this demo data was generated relative
         // to whenever seed_data.py was last run, and doesn't move forward
         // in time after that. The viewer's actual system clock keeps
         // advancing regardless, so a strict "real today" filter would
         // show all-zero stats for perfectly good data the moment the two
-        // drift apart — exactly what happened here with 1121 real
+        // drift apart - what happened here with 1121 real
         // transactions all reporting as zero. Anchoring to the latest
         // date actually present in the data guarantees a meaningful,
         // non-zero figure whenever there's any data at all.

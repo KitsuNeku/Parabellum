@@ -290,8 +290,8 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       /* Generate = fetch REAL data from the server and render an on-screen
-         preview. The exact same builder function the server uses here also
-         powers the PDF and Excel downloads, so all three always match. */
+ preview. The exact same builder function the server uses here also
+ powers the PDF and Excel downloads, so all three always match. */
       const modal = new bootstrap.Modal('#reportPreviewModal');
       const today = new Date().toLocaleDateString('en-PH', { year:'numeric', month:'long', day:'numeric' });
       let currentKey = null;

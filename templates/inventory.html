@@ -330,7 +330,7 @@
         const nav = document.getElementById('invPaginationNav');
         const ul = document.getElementById('invPagination');
 
-        // Nothing to page through — don't show controls that would just
+        // Nothing to page through - don't show controls that would just
         // be redundant decoration when everything already fits on screen.
         if (totalPages <= 1) { nav.style.display = 'none'; return; }
         nav.style.display = '';
@@ -360,7 +360,7 @@
       });
 
       function renderInventory(){
-        const items = inventoryStore.all();   // full list — KPIs below are counted across ALL of it
+        const items = inventoryStore.all();   // full list - KPIs below are counted across ALL of it
         const start = (invCurrentPage - 1) * INV_PAGE_SIZE;
         const pageItems = items.slice(start, start + INV_PAGE_SIZE);
 
@@ -464,8 +464,7 @@
         detailModal.hide(); openEdit(i);
       });
 
-      /* ---------- Entity submits: Add/Edit item, Stock In, Stock Out ----------
-         TODO(backend): replace store calls with POST/PATCH API calls. */
+      /* ---------- Entity submits: Add/Edit item, Stock In, Stock Out ---------- */
       document.addEventListener('entity:submit', (e) => {
         const { entity, data, editId } = e.detail;
         if (entity === 'inventory') {

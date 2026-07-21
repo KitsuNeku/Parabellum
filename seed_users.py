@@ -7,7 +7,7 @@ Run ONCE, after schema.sql:
 
 Creates one account per role so you can demonstrate role-based access
 control at your defense. Passwords are hashed with werkzeug's
-generate_password_hash before they ever touch the database — the
+generate_password_hash before they ever touch the database - the
 database never stores or sees the plain-text password.
 
 IMPORTANT: these are DEMO credentials for development and your

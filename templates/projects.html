@@ -155,13 +155,13 @@
       </div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-kanban"></i></div>
-          <div class="stat-label">Total Projects</div><div class="stat-value">8</div><div class="stat-desc">All time</div></div></div>
+          <div class="stat-label">Total Projects</div><div class="stat-value" id="projStatTotal">&mdash;</div><div class="stat-desc">All time</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-arrow-repeat"></i></div>
-          <div class="stat-label">In Progress</div><div class="stat-value">5</div><div class="stat-desc">Currently active</div></div></div>
+          <div class="stat-label">In Progress</div><div class="stat-value" id="projStatActive">&mdash;</div><div class="stat-desc">Currently active</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-pause-circle"></i></div>
-          <div class="stat-label">On Hold</div><div class="stat-value">1</div><div class="stat-desc">Paused</div></div></div>
+          <div class="stat-label">On Hold</div><div class="stat-value" id="projStatHold">&mdash;</div><div class="stat-desc">Paused</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-cash-coin"></i></div>
-          <div class="stat-label">Total Budget</div><div class="stat-value" style="font-size:1.55rem">₱15.9M</div><div class="stat-desc">Combined value</div></div></div>
+          <div class="stat-label">Total Budget</div><div class="stat-value" style="font-size:1.55rem" id="projStatBudget">&mdash;</div><div class="stat-desc">Combined value</div></div></div>
       </div>
 
       <!-- Project Timeline (moved up & highlighted as a featured panel) -->
@@ -256,6 +256,14 @@
       /* Renders BOTH views from the same array so they always stay in sync. */
       function renderProjects(){
         const list = projectStore.all();
+        const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        const totalBudget = list.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
+        const compactPeso = (n) => n >= 1e6 ? `\u20b1${(n/1e6).toFixed(1)}M`
+                                 : n >= 1e3 ? `\u20b1${(n/1e3).toFixed(1)}K` : PESO(n);
+        setStat('projStatTotal', list.length);
+        setStat('projStatActive', list.filter(p => p.status === 'In Progress').length);
+        setStat('projStatHold', list.filter(p => p.status !== 'In Progress' && p.status !== 'Completed').length);
+        setStat('projStatBudget', compactPeso(totalBudget));
         tb.innerHTML = ''; gal.innerHTML = '';
         list.forEach(p => {
           tb.insertAdjacentHTML('beforeend', `<tr>
@@ -316,7 +324,6 @@
       tb.addEventListener('click', handleAct);
       gal.addEventListener('click', handleAct);
 
-      /* TODO(backend): replace store calls with POST/PATCH /api/projects. */
       document.addEventListener('entity:submit', (e) => {
         const { entity, data, editId } = e.detail;
         if (entity !== 'projects') return;

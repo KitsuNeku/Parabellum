@@ -1,5 +1,5 @@
 """
-Parabellum ISOS — Flask backend
+Parabellum ISOS - Flask backend
 =================================================================
     app.py         <- you are here
     config.py      <- database credentials + session secret key
@@ -31,13 +31,7 @@ from security import apply_security
 
 
 def _user_context():
-    """
-    Injected into every protected page render so the FIRST HTML the server
-    sends already shows the correct signed-in identity and role-filtered
-    nav — instead of generic placeholder text that JavaScript corrects a
-    moment later. That gap is exactly what caused the "flash of the wrong
-    account" you'd see switching between logins.
-    """
+    """Signed-in user + role-filtered nav, rendered server-side to avoid an identity flash."""
     u = session.get("user") or {}
     name = u.get("name", "")
     initials = "".join(w[0] for w in name.split()).upper()[:2] if name else "?"
@@ -50,22 +44,22 @@ def _user_context():
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
-# Apply defense-in-depth measures — headers, rate limiting, request size
+# Apply defense-in-depth measures - headers, rate limiting, request size
 # caps, session hygiene. See security.py for the full list and honest
 # scope caveats (what this covers and what needs infrastructure).
 limiter = apply_security(app)
 
 # Session cookie hardening:
-#   HTTPONLY — JavaScript cannot read the cookie, so a successful XSS
-#              injection still can't steal the session.
-#   SAMESITE — the cookie is not sent on cross-site requests, which
-#              blocks most CSRF attempts against session-based actions.
-#   SECURE   — only sent over HTTPS. Defaults to off for local
-#              http://127.0.0.1 development. Set the SESSION_COOKIE_SECURE
-#              environment variable to "1" once the app is served over
-#              real HTTPS (e.g. behind nginx/Caddy with a certificate, or
-#              a host that terminates TLS for you) — the cookie will then
-#              refuse to be sent over a plain HTTP connection at all.
+# HTTPONLY - JavaScript cannot read the cookie, so a successful XSS
+# injection still can't steal the session.
+# SAMESITE - the cookie is not sent on cross-site requests, which
+# blocks most CSRF attempts against session-based actions.
+# SECURE - only sent over HTTPS. Defaults to off for local
+# http://127.0.0.1 development. Set the SESSION_COOKIE_SECURE
+# environment variable to "1" once the app is served over
+# real HTTPS (e.g. behind nginx/Caddy with a certificate, or
+# a host that terminates TLS for you) - the cookie will then
+# refuse to be sent over a plain HTTP connection at all.
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -93,7 +87,7 @@ def login():
 # ---------------- Protected page routes ----------------
 # Every module page requires a signed-in session. Forecasting is further
 # restricted to the roles that ROLE_PERMISSIONS actually grants it to,
-# matching the sidebar visibility rules — but enforced server-side, so
+# matching the sidebar visibility rules - but enforced server-side, so
 # the restriction is real and not just a hidden link.
 def _make_page(name, permission=None):
     if permission:
@@ -110,7 +104,7 @@ def _make_page(name, permission=None):
 
 for _p in PAGES:
     # Every page name is a valid ROLE_PERMISSIONS key (dashboard/profile are
-    # granted to all roles, so this is a no-op for them — but customers,
+    # granted to all roles, so this is a no-op for them - but customers,
     # projects, transactions, etc. are now actually blocked server-side for
     # roles that don't have them, not just hidden from the sidebar.
     app.add_url_rule(f"/{_p}", _p, _make_page(_p, permission=_p))
@@ -166,7 +160,7 @@ def api_dashboard():
     Replaces the hardcoded counts the page shows on first paint.
 
     Returns the KPI counts, the 5 most recent transactions, the current
-    forecast alert, and 6 months of material-usage totals for the chart —
+    forecast alert, and 6 months of material-usage totals for the chart -
     all from the actual tables, so "compare displayed totals with stored
     records" (admin test Table 1) passes.
     """
@@ -370,7 +364,7 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None):
 
     kind = 'RECEIPT' (stock in, increases) or 'ISSUANCE' (stock out, decreases).
     For issuances this ENFORCES the non-negative-stock rule required by
-    Objective 1.1 and test Table 2 — an over-issuance is rejected outright,
+    Objective 1.1 and test Table 2 - an over-issuance is rejected outright,
     not silently clamped to zero.
     """
     rows = execute_query(DB_CONFIG,
@@ -526,7 +520,7 @@ def api_customers_delete():
     d = request.get_json(silent=True) or {}
     code = d.get("id")
     try:
-        # Don't orphan projects/transactions — just unlink them.
+        # Don't orphan projects/transactions - just unlink them.
         execute_query(DB_CONFIG, """
             UPDATE projects SET customer_id = NULL
             WHERE customer_id = (SELECT customer_id FROM customers WHERE customer_code=%s);
@@ -692,7 +686,7 @@ def api_transactions_save():
     """
     Create a transaction AND deduct the sold material from inventory.
 
-    This is Objective 1.3 — "monitor project-related material usage and
+    This is Objective 1.3 - "monitor project-related material usage and
     connect usage records to inventory deductions." When a material with a
     known code/name is sold, we record an ISSUANCE stock movement and reduce
     the balance, enforcing the same non-negative-stock rule as Stock Out.
@@ -832,7 +826,7 @@ def api_users_save():
         return jsonify({"ok": True})
     except Exception as e:
         app.logger.exception("Database error")
-        # A duplicate username is the one case worth a specific message —
+        # A duplicate username is the one case worth a specific message -
         # everything else stays generic per the no-internal-detail rule.
         msg = ("That username is already taken." if "UNIQUE" in str(e).upper()
                or "unique" in str(e).lower() else
@@ -844,7 +838,7 @@ def api_users_save():
 @permission_required("settings")
 def api_users_deactivate():
     """
-    Soft-delete only — never hard-deletes an account, since that would
+    Soft-delete only - never hard-deletes an account, since that would
     orphan its audit_logs history (who did what, historically, would lose
     its "who"). Also blocks deactivating your own currently-logged-in
     account, a classic footgun that would otherwise lock you out with no
@@ -910,7 +904,7 @@ def api_profile_avatar():
         return jsonify({"ok": False, "error": "Only PNG, JPG, GIF, or WEBP images are allowed."}), 400
 
     # Flask already caps the whole request body at MAX_CONTENT_LENGTH (see
-    # security.py) — this just gives a clearer, specific error message for
+    # security.py) - this just gives a clearer, specific error message for
     # this endpoint instead of the generic 413 page.
     file.seek(0, _os.SEEK_END)
     size = file.tell()
@@ -989,7 +983,7 @@ REPORT_FILE_SLUGS = {
 def api_report_data(key):
     """
     Structured report data for the on-screen preview modal. Same builder
-    function that the PDF and Excel routes use — the three formats can
+    function that the PDF and Excel routes use - the three formats can
     never show different numbers from each other.
     """
     builder = REPORT_BUILDERS.get(key)
@@ -1050,7 +1044,7 @@ def api_report_excel(key):
 @app.route("/api/materials")
 @permission_required("forecasting")
 def api_materials():
-    """Material master (D2) — fills the forecasting dropdown from the DB."""
+    """Material master (D2) - fills the forecasting dropdown from the DB."""
     try:
         mats = get_materials(DB_CONFIG)
         for m in mats:
@@ -1066,7 +1060,7 @@ def api_materials():
 @app.route("/api/aggregate", methods=["POST"])
 @permission_required("forecasting")
 def api_aggregate():
-    """DFD 3.2 — rebuild monthly_demand (D4) from raw operational records."""
+    """DFD 3.2 - rebuild monthly_demand (D4) from raw operational records."""
     try:
         n = aggregate_monthly_demand(DB_CONFIG)
         return jsonify({"ok": True, "rows": n})
@@ -1103,5 +1097,5 @@ def api_forecast():
 
 if __name__ == "__main__":
     # debug=True must never be used once the app is reachable by anyone
-    # other than you — it exposes an interactive code console on errors.
+    # other than you - it exposes an interactive code console on errors.
     app.run(host="0.0.0.0", port=5000, debug=DEBUG)

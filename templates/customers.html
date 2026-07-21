@@ -155,13 +155,13 @@
       </div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-people"></i></div>
-          <div class="stat-label">Total Customers</div><div class="stat-value">8</div><div class="stat-desc">Registered accounts</div></div></div>
+          <div class="stat-label">Total Customers</div><div class="stat-value" id="custStatTotal">&mdash;</div><div class="stat-desc">Registered accounts</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-person-check"></i></div>
-          <div class="stat-label">Active</div><div class="stat-value">6</div><div class="stat-desc">Currently transacting</div></div></div>
+          <div class="stat-label">Active</div><div class="stat-value" id="custStatActive">&mdash;</div><div class="stat-desc">Currently transacting</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-pause-circle"></i></div>
-          <div class="stat-label">On Hold</div><div class="stat-value">1</div><div class="stat-desc">Temporarily paused</div></div></div>
+          <div class="stat-label">On Hold</div><div class="stat-value" id="custStatHold">&mdash;</div><div class="stat-desc">Temporarily paused</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-briefcase"></i></div>
-          <div class="stat-label">Total Projects</div><div class="stat-value">26</div><div class="stat-desc">Across all customers</div></div></div>
+          <div class="stat-label">Total Projects</div><div class="stat-value" id="custStatProjects">&mdash;</div><div class="stat-desc">Across all customers</div></div></div>
       </div>
 
       <div class="card"><div class="card-body">
@@ -229,6 +229,11 @@
 
       function renderCustomers(){
         const list = customerStore.all();
+        const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        setStat('custStatTotal', list.length);
+        setStat('custStatActive', list.filter(c => c.status === 'Active').length);
+        setStat('custStatHold', list.filter(c => c.status !== 'Active').length);
+        setStat('custStatProjects', list.reduce((sum, c) => sum + (Number(c.projects) || 0), 0));
         tb.innerHTML = '';
         list.forEach(c => {
           tb.insertAdjacentHTML('beforeend', `<tr>
@@ -294,7 +299,6 @@
         detailModal.hide(); openEdit(c);
       });
 
-      /* TODO(backend): replace store calls with POST/PATCH /api/customers. */
       document.addEventListener('entity:submit', (e) => {
         const { entity, data, editId } = e.detail;
         if (entity !== 'customers') return;

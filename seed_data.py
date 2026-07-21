@@ -12,7 +12,7 @@ Run ONCE, after schema.sql:
 Demand here is generated from a genuine underlying relationship
 (previous demand + project activity + business volume + seasonality
 + noise), which is how demand behaves in a real fabrication shop.
-The model has to discover that relationship from the records — it is
+The model has to discover that relationship from the records - it is
 not handed the answer.
 
 NOTE: this is SAMPLE data for development and defense rehearsal.
@@ -29,7 +29,7 @@ from config import DB_CONFIG
 random.seed(42)
 
 MATERIALS = [
-    # code,     name,                        unit,     unit_cost, reorder, category, supplier, location
+    # code, name, unit, unit_cost, reorder, category, supplier, location
     ("STL-016", "Deformed Steel Bar 16mm",   "pcs",      285.00,  400, "Bars",   "SteelAsia",      "Warehouse A"),
     ("GIS-005", "GI Sheet Corrugated 0.5mm", "sheets",   640.00,   60, "Sheets", "Puyat Steel",    "Warehouse B"),
     ("MSP-006", "MS Plate 4x8 (6mm)",        "sheets",  2450.00,   40, "Plates", "Capitol Steel",  "Yard 1"),
@@ -140,7 +140,7 @@ def main():
 
             # Jobs started near the end of the window are still running, so
             # they carry into the forecast month. A real shop always has work
-            # in progress — and the forecast needs to know about it.
+            # in progress - and the forecast needs to know about it.
             still_running = (i + dur) >= N_MONTHS
             end = None if still_running else month_start(i + dur) + timedelta(days=20)
             cust_name = random.choice(CUSTOMERS)
@@ -220,8 +220,8 @@ def main():
             base, proj_beta = PROFILE[code]
 
             # The relationship the model must recover from the data:
-            #   demand = momentum + project pull + business volume
-            #            + seasonality - drag from sitting stock + noise
+            # demand = momentum + project pull + business volume
+            # + seasonality - drag from sitting stock + noise
             seasonal = 1.0 + 0.16 * np.sin(2 * np.pi * (ms.month - 3) / 12)
             demand = (
                 0.34 * prev_demand[code]
@@ -234,7 +234,7 @@ def main():
             demand = max(1, round(demand))
 
             # Restock to roughly one month of cover. A fabrication shop buys
-            # per job — it does not sit on several months of steel — so stock
+            # per job - it does not sit on several months of steel - so stock
             # is drawn down close to the bone and genuinely needs reordering.
             desired_opening = demand * random.uniform(1.05, 1.7)
             receipt = max(0, round(desired_opening - stock[code]))

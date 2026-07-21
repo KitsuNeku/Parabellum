@@ -1,7 +1,7 @@
 /* =====================================================================
-   PARABELLUM ISOS — Charts (Chart.js, brand-themed)
-   Each chart only initializes if its <canvas> exists on the page.
-   ===================================================================== */
+ PARABELLUM ISOS - Charts (Chart.js, brand-themed)
+ Each chart only initializes if its <canvas> exists on the page.
+ ===================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof Chart === 'undefined') return;
 
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* ---------- Inventory Usage (bar) — dashboard, gold current period + daily/weekly/monthly toggle ---------- */
+  /* ---------- Inventory Usage (bar) - dashboard, gold current period + daily/weekly/monthly toggle ---------- */
   if (el('chartMaterialUsage')) {
     const goldLast = (labels) => labels.map((_, i) => i === labels.length - 1 ? C.gold : C.primary);
     const fallback = { labels:['Jan','Feb','Mar','Apr','May','Jun'], data:[182,205,231,198,256,243], note:'' };
@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
         plugins:{ legend:{ display:false } },
         scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
     });
-    // Daily / Weekly / Monthly toggle wired from app.js — swaps the dataset client-side.
+    // Daily / Weekly / Monthly toggle wired from app.js - swaps the dataset client-side.
     window.updateUsageChart = (range) => {
       const map = {
         daily:   (typeof USAGE_DAILY  !== 'undefined') ? USAGE_DAILY  : src,

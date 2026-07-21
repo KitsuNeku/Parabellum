@@ -1,11 +1,11 @@
 """
-Parabellum ISOS — Security Hardening
+Parabellum ISOS - Security Hardening
 =================================================================
 Defense-in-depth measures at the Flask application layer.
 
 WHAT THIS COVERS
     - HTTP security headers (HSTS, CSP, X-Content-Type-Options, etc.)
-    - Rate limiting on login, forecasting, and report exports — both to
+    - Rate limiting on login, forecasting, and report exports - both to
       slow brute-force attempts and to stop the more expensive operations
       (PDF/Excel generation, model training) from being hammered
     - Request-size cap (prevents "gigabyte body" memory DoS)
@@ -13,17 +13,17 @@ WHAT THIS COVERS
     - Server-header suppression (removes fingerprinting)
     - Input-length limits on API JSON bodies
     - Server-side numeric validation (no negative prices/budgets, no
-      out-of-range progress values) — closes off ways bad input could
+      out-of-range progress values) - closes off ways bad input could
       corrupt stored data even if it doesn't crash anything
-    - Generic error messages to the client on every API failure — the
+    - Generic error messages to the client on every API failure - the
       real exception (with full traceback) is only ever written to the
       server's own log, never sent to the browser. This matters because
       raw database error text can reveal table/column names, query
-      structure, or file paths — details an attacker could use to plan
+      structure, or file paths - details an attacker could use to plan
       a more targeted attack. See app.py's `app.logger.exception(...)`
       calls.
 
-WHAT THIS DOES NOT COVER — call these out to your panel so nobody's
+WHAT THIS DOES NOT COVER - call these out to your panel so nobody's
 under the impression a Flask app protects itself against all of these:
     - HTTPS/TLS: needs a certificate (Let's Encrypt) and a reverse proxy
       (nginx/Caddy) or a hosting platform that terminates TLS for you.
@@ -42,19 +42,19 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 
-# Reasonable ceilings. Adjust in one place if you ever need to.
+# Reasonable ceilings. Adjust in one place if needed need to.
 # MAX_JSON_BYTES also caps the WHOLE request body (Flask only supports one
-# global limit), so it has to be big enough for a profile photo upload —
+# global limit), so it has to be big enough for a profile photo upload -
 # not just a JSON form post. 4 MB comfortably fits a phone-camera photo
 # while still being far too small to matter as a DoS vector; the avatar
 # endpoint itself enforces a tighter 3 MB cap with a clearer error message.
-MAX_JSON_BYTES          = 4 * 1024 * 1024   # 4 MB — covers JSON bodies AND avatar uploads
+MAX_JSON_BYTES          = 4 * 1024 * 1024   # 4 MB - covers JSON bodies AND avatar uploads
 MAX_USERNAME_LEN       = 60
 MAX_PASSWORD_LEN       = 256           # bcrypt-style hashers already cap effective bytes
 MAX_STRING_FIELD_LEN   = 500           # generic string fields (names, addresses, remarks)
 MAX_TEXT_FIELD_LEN     = 4000          # longer notes / descriptions
 
-# Content Security Policy — locks the browser down to loading assets only
+# Content Security Policy - locks the browser down to loading assets only
 # from us and the two CDNs the frontend needs (Bootstrap + icons). Blocks
 # most XSS injection vectors even if a bug lets something through.
 CSP = (
@@ -70,7 +70,7 @@ CSP = (
 )
 # NOTE: 'unsafe-inline' for scripts/styles is needed because your pages
 # use inline <script> blocks and style attributes. Removing it is safer
-# but requires moving every inline script into an external .js file — a
+# but requires moving every inline script into an external.js file - a
 # refactor beyond the scope of a security pass. This is still much
 # stronger than no CSP at all.
 
@@ -91,16 +91,16 @@ def apply_security(app):
             "Strict-Transport-Security",
             "max-age=31536000; includeSubDomains",
         )
-        # Blocks MIME sniffing — attacker can't upload an "image" that
+        # Blocks MIME sniffing - attacker can't upload an "image" that
         # the browser decides to execute as script.
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        # Blocks the page from being rendered inside a frame — clickjacking
+        # Blocks the page from being rendered inside a frame - clickjacking
         # defence (also covered by frame-ancestors in CSP, kept for older
         # browsers).
         resp.headers["X-Frame-Options"] = "DENY"
         # Don't leak the URL of the referring page across origins.
         resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        # Disable browser features we don't need — no camera, no mic, no
+        # Disable browser features we don't need - no camera, no mic, no
         # location, etc.
         resp.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
@@ -120,7 +120,7 @@ def apply_security(app):
         return jsonify({"ok": False, "error": "Request too large."}), 413
 
     # -------- 3) Rate limiting --------
-    # Per-IP by default. Uses in-memory storage — fine for a single
+    # Per-IP by default. Uses in-memory storage - fine for a single
     # process on your capstone. For a production multi-worker setup you
     # would point Flask-Limiter at Redis via `storage_uri`.
     limiter = Limiter(

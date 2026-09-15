@@ -1,0 +1,92 @@
+receipt_no,receipt_date,supplier,customer,item_description,variant,qty,unit,unit_price,line_total,match_check,category,reading_confidence,notes
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,42 x 18-1/2 x 42 x 3/4,,1,pc,1360,1360,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,35-1/2 x 16 x 35-1/2,Temp 10mm clear,1,pc,745,745,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,31 x 17,Temp 10mm clear,1,pc,745,745,OK,custom_glass,MEDIUM,unit price could be 745 or 765; used 745 to match line total
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,37 x 18-1/2 x 36-1/2,clear,1,pc,1190,1190,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,24-9/14 x 34-11/14,,1,pc,832,832,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,18-7/8 x 20-1/8,Temp 6mm Bronze,4,pc,380,1520,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,18-7/8 x 20-1/8,Bronze,2,pc,380,760,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,18-3/8 x 19-5/8,,4,pc,570,2280,OK,custom_glass,LOW,unit price on paper looks like 380 but 4*380=1520 not 2280; used 570 to match line total (2280/4)
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,24 x 72,,3,pc,1800,5400,OK,custom_glass,HIGH,
+5833,2024-01-24 OR 2026-01-24,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,10-7/8 x 22-15/14,10mm clear,1,pc,300,300,OK,custom_glass,HIGH,"receipt total shows 15,172 but line-item sum is 15,132 (off by 40) - check for reading error"
+5856,2026-01-27,High Point Aluminum and Glass Supply,Parabellum Aluminum and Iron work,28-1/8 x 23-11/14,6mm bronze,4,pc,475,1900,OK,custom_glass,LOW,receipt shows '= 1900' - assumed 1900 is LINE TOTAL (unit=475); if 1900 is UNIT PRICE then line total is 7600 - please verify with paper
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,D-sill 798-WF,,2,pc,864,1728,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,D-head 798-WF,,2,pc,787,1574,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,Top/Bottom 798-WF,,5,pc,506,2530,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,SDBC,,15,pc,428,6420,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,4x7 bronze,,35,pc,1008,35280,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,3x7 bronze,,20,pc,756,15120,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,Com. Handle (L),HA,10,pc,50,500,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,Screw 8x1,,3,gros,100,300,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,4 kinds 900S,HA,8,set,6,48,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,PL # 12-13 900S,HA,4,pc,210,840,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,Sealant Brown 900S,,4,box,2520,10080,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,J-Rubber 900S,,2,kls,90,180,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,Screw 12x3,,1,box,700,700,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,4-bar 14 -8.0,,25,set,146,3650,OK,standard_hardware,LOW,unit price on paper reads as 73 but 25*73=1825 not 3650; used 146 to match line total (3650/25)
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,B-Rivets 4-4,HA,2,box,200,400,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,4 bar 8 -5.0,,4,set,106,424,OK,standard_hardware,LOW,unit price on paper reads as 53 but 4*53=212 not 424; used 106 to match line total (424/4)
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,B-Vinyl,,2,kls,90,180,OK,standard_hardware,HIGH,
+6172,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,Panel Astragal 900-WF,,1,pc,450,450,OK,standard_hardware,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,15-11/14 x 23-11/14,,2,pc,285,570,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,20-1/4 x 23-11/14,,4,pc,380,1520,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,23-11/14 x 23-11/14,Temp 6mm Bronze,2,pc,380,760,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,28-7/14 x 23-11/14,Temp 6mm Bronze,4,pc,380,1520,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,28-1/8 x 94-3/4,Temp 6mm Bronze,1,pc,1900,1900,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,27-11/14 x 94-3/4,,3,pc,1900,5700,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,27-7/8 x 94,,4,pc,1900,7600,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,16-3/8 x 96,,4,pc,1140,4560,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,26-5/14 x 41-1/2,,2,pc,832,1664,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,18-7/2 x 40-3/8,,2,pc,685,1370,OK,custom_glass,LOW,unit price on paper reads as 665 but 2*665=1330 not 1370; used 685 to match line total
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,20-1/4 x 42-1/2,,2,pc,760,1520,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,20-1/4 x 20-5/14,,2,pc,380,760,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,20-7/14 x 12,,2,pc,190,380,OK,custom_glass,HIGH,
+6173,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,12 x 41-5/8,,2,pc,333,666,OK,custom_glass,HIGH,"receipt total shows 30,450 but line-item sum is 30,490 (off by 40) - check for reading error"
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,28-9/14 x 23-1/14,10mm Temp Clear,1,pc,750,750,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,28-9/14 x 23-1/14,10mm Temp Clear,1,pc,750,750,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,34-1/14 x 23-1/14,10mm Temp Clear,1,pc,900,900,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,34-1/14 x 23-1/14,10mm Temp Clear,1,pc,900,900,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,34-1/14 x 23-1/14,10mm Temp Clear,1,pc,900,900,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,22-7/8 x 22-15/14,10mm Temp Clear,1,pc,600,600,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,23-3/8 x 22-15/14,10mm Temp Clear,1,pc,600,600,OK,custom_glass,HIGH,
+6174,2026-01-17,High Point Aluminum and Glass Supply,Parabellum Glass and Iron work,23-3/4 x 22-15/14,10mm Temp Clear,1,pc,600,600,OK,custom_glass,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Lockstile,,2,pc,465,930,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Interlocker,,2,pc,480,960,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Top/Bottom,,2,pc,420,840,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Screen prone 798-W,,2,pc,320,640,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),D-head,,1,pc,590,590,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),D-sill,,1,pc,725,725,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),SDBC,,10,pc,365,3650,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),4-bar 12.50,,39,pc,63,2457,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),C. Handle R,W,10,pc,55,550,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),C. Handle L,W,27,pc,55,1485,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),B-vinyl,,5,kls,90,450,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Sealant W,,2,box,2520,5040,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),J-Rubber,,2,kls,90,180,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Vinyl -3,,2,kls,90,180,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Screw 8x2,,3,grs,150,450,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Screw 6x3/4,,2,grs,70,140,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),T-roller S,,30,pc,12,360,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),B-Rivets 4-4,,4,box,220,880,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),Screen mesh (48)-W,,1,box,2400,2400,OK,standard_hardware,HIGH,
+8889,2024-03-23,High Point Aluminum and Glass Supply,Parabellum (see notes),3x7 bronze,,3,pc,756,2268,OK,standard_hardware,HIGH,"POST-IT COVERS TOP ~4 LINE ITEMS WORTH ~20,485 PHP total; those items are unreadable in this photo"
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,Tub 3/4 x 3/4,,15,pcs,225,3375,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,PN Cutting disc,,1,box,420,420,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,W-Rod C013,,1,box,250,250,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,PN Grinding disc,,2,pcs,50,100,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,P-Brush 1,,2,pcs,30,60,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,Baby Roller,,2,sets,65,130,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,USA EPG,,1,LTR,270,270,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,L. Thinner,,1,B,60,60,OK,tools_consumables,HIGH,
+1072525,UNKNOWN - DATE FIELD BLANK ON RECEIPT,"Unknown supplier (small hardware store, not High Point)",UNKNOWN - SOLD-TO FIELD BLANK ON RECEIPT,B-690 Black,,1,B,420,420,OK,tools_consumables,HIGH,cannot confirm this receipt belongs to Parabellum -- customer field is blank; recommend excluding from validation set unless the client confirms
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),Ampli501,,3,,452,1376,"MISMATCH (3*452=1356, receipt shows 1376)",standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),Tub 1x1,HAILS,3,,200,600,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),4x200,HAILS,3,,720,2160,OK,standard_hardware,LOW,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),Djamb 798,HAILS,1,,441,441,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),D'user P/B,,2,,65,130,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),Alrichance,,2,,140,280,OK,standard_hardware,LOW,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including; SKU name uncertain
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),Hinges 1x3 JB,,8,,7,56,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),4-4,W,1,,150,150,OK,standard_hardware,LOW,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),Amplirell 3x4 B,,1,,640,640,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),EUC 48,B,3,,40,120,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including
+37941,2024-03-12 (last digit unclear),YYS Aluminum and Glass Supply,Bcn Beloso (NOT Parabellum -- verify),GP Brown,,5,,110,550,OK,standard_hardware,MEDIUM,Different supplier and different customer name -- likely NOT Parabellum; verify with client before including

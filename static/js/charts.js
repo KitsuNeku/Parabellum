@@ -135,50 +135,68 @@ document.addEventListener('DOMContentLoaded', () => {
   if (el('chartMonthlyForecast')) {
     forecastChart = new Chart(el('chartMonthlyForecast'), {
       type:'line',
-      data:{ labels:['Feb','Mar','Apr','May','Jun','Jul*','Aug*'],
+      data:{ labels:[],
         datasets:[
-          { label:'Historical demand', data:[132,140,128,135,121,null,null],
+          { label:'Historical demand', data:[],
             borderColor:C.primary, backgroundColor:C.primary, tension:.35, borderWidth:2.5, pointRadius:3 },
-          { label:'Forecast', data:[null,null,null,null,121,150,162],
+          { label:'Forecast', data:[],
             borderColor:C.gold, backgroundColor:C.goldSoft, borderDash:[6,5], tension:.35, borderWidth:2.5, pointRadius:4, fill:true }
         ]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ position:'top', align:'end' } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:false }) } }
+        scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
     });
-    // allow app.js to push a new predicted value
-    window.updateForecastChart = (val) => {
-      forecastChart.data.datasets[1].data = [null,null,null,null,121,val,Math.round(val*1.08)];
+    window.updateForecastChart = (historyPoints, forecastLabel, predicted) => {
+      const labels = historyPoints.map(p => p.month).concat([forecastLabel]);
+      const histSeries = historyPoints.map(p => p.demand).concat([null]);
+      const fcSeries   = historyPoints.map(_ => null);
+      if (histSeries.length >= 2) fcSeries[fcSeries.length - 1] = histSeries[histSeries.length - 2];
+      fcSeries.push(predicted);
+      forecastChart.data.labels = labels;
+      forecastChart.data.datasets[0].data = histSeries;
+      forecastChart.data.datasets[1].data = fcSeries;
       forecastChart.update();
     };
   }
 
   /* ---------- Forecasting page: Historical Demand (bar) ---------- */
+  let historicalChart;
   if (el('chartHistoricalDemand')) {
-    new Chart(el('chartHistoricalDemand'), {
+    historicalChart = new Chart(el('chartHistoricalDemand'), {
       type:'bar',
-      data:{ labels:['Jan','Feb','Mar','Apr','May','Jun'],
-        datasets:[{ label:'Units', data:[118,132,140,128,135,121],
+      data:{ labels:[],
+        datasets:[{ label:'Units', data:[],
           backgroundColor:C.primary, borderRadius:6, barThickness:24 }]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:false } },
         scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
     });
+    window.updateHistoricalChart = (historyPoints) => {
+      historicalChart.data.labels          = historyPoints.map(p => p.month);
+      historicalChart.data.datasets[0].data = historyPoints.map(p => p.demand);
+      historicalChart.update();
+    };
   }
 
   /* ---------- Forecasting page: Inventory Trend (line) ---------- */
+  let inventoryChart;
   if (el('chartInventoryTrend')) {
     const ctx = el('chartInventoryTrend').getContext('2d');
-    new Chart(ctx, {
+    inventoryChart = new Chart(ctx, {
       type:'line',
-      data:{ labels:['Jan','Feb','Mar','Apr','May','Jun'],
-        datasets:[{ label:'Stock level', data:[210,185,160,140,110,80],
+      data:{ labels:[],
+        datasets:[{ label:'Stock level', data:[],
           borderColor:C.info, backgroundColor:'rgba(43,108,176,.12)', fill:true,
           tension:.38, borderWidth:2.5, pointRadius:3, pointBackgroundColor:C.info }]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:false } },
         scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
     });
+    window.updateInventoryChart = (historyPoints) => {
+      inventoryChart.data.labels          = historyPoints.map(p => p.month);
+      inventoryChart.data.datasets[0].data = historyPoints.map(p => p.inventory);
+      inventoryChart.update();
+    };
   }
 
   /* ---------- Reports: revenue (bar) ---------- */

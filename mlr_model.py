@@ -1,57 +1,85 @@
 """
 Parabellum ISOS - Demand Forecasting Service
 =================================================================
-Multiple Linear Regression for SHORT-TERM MONTHLY MATERIAL DEMAND.
+Multiple Linear Regression for MONTHLY MATERIAL DEMAND.
 
-This file implements what the capstone documentation actually specifies:
+TRANSFER NOTE
+-------------
+This file replaces the previous ISOS mlr_model.py. It ports the
+**MLR methodology from the demo video / parabellum-app version** into
+the ISOS project:
 
-  Objective 3.2  short-term MONTHLY material demand   (not hourly orders)
-  Predictors     past demand, transaction volume, inventory balance,
-                 inventory value, project activity
-  Objective 3.3  evaluated with MAE, RMSE, MAPE, and R2
-  DFD 3.2        Aggregate Monthly Demand        -> D4 monthly_demand
-  DFD 4.1        Preprocess Forecast Data
-  DFD 4.2        Run Forecasting Model
-  DFD 4.3        Evaluate Model                  -> D6 model_metrics
-  DFD 4.4        Save Forecast Results           -> D5 forecast_results
-  Appendix B     Audit Log Module                -> D7 audit_logs
+    Feature set     calendar features + weather + one-hot MATERIAL
+                    (year, month, day_of_week + weather favorability
+                    index + one column per material)
 
-Two things worth being able to defend out loud:
+    Evaluation      in-sample MAE / RMSE / R^2 (train == test), as in
+                    the video.
 
-1. NO DATA LEAKAGE. Every predictor is something you already know BEFORE
-   the forecast month starts. Demand is predicted from the PREVIOUS
-   month's demand and transactions, and from the stock you are holding
-   going INTO the month. (Using the same month's closing stock would leak
-   the answer, because that month's demand is what depleted it.)
+    Model           a single pooled sklearn.LinearRegression across
+                    ALL materials, PLUS per-material MLRs (one per
+                    material with enough history) as the primary output.
 
-2. HONEST EVALUATION. The model is scored on months it never trained on,
-   split chronologically - never shuffled, because this is time-series
-   data and shuffling would let the model peek at the future.
+Kept from the previous ISOS module (so app.py needs no changes):
+    * function names execute_query, log_audit, get_materials,
+      aggregate_monthly_demand, run_forecast
+    * schema targets: monthly_demand (D4), forecast_results (D5),
+      model_metrics (D6), audit_logs (D7), monthly_weather (D8)
+    * audit logging, structured errors, `overrides` for what-if
+      planning, MIN_TRAINING_ROWS guard.
 """
 
 import numpy as np
 import pandas as pd
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 MODEL_NAME = "Multiple Linear Regression"
 
-# The predictors named in the documentation.
-FEATURES = [
-    "prev_demand",       # past material demand      (month t-1)
-    "prev_demand_2",     # past material demand      (month t-2) -> trend
-    "prev_txn_volume",   # transaction volume        (month t-1)
-    "opening_stock",     # inventory balance entering the month
-    "opening_value",     # inventory value entering the month
-    "active_projects",   # project activity scheduled for the month
-]
+# Calendar features -- transferred from the video's MLR.
+CALENDAR_FEATURES = ["year", "month", "day_of_week"]
 
-# Below this, an MLR fit is not meaningful and we say so instead of
-# returning a confident-looking number.
-MIN_TRAINING_ROWS = 24
+# Weather features -- from monthly_weather (D8), synced via weather_api.py
+# from Open-Meteo for Lipa City, Batangas.
+WEATHER_FEATURES = ["avg_temp_c", "total_rainfall_mm", "rainy_days"]
+
+# ---------------------------------------------------------------------
+# Weather Favorability Index -- one 0-100 score, deterministic feature
+# engineering from the three raw weather columns. This defines what
+# counts as "pleasant vs. harsh" weather; the regression learns whether
+# that relates to more or less demand (data-driven, not assumed).
+MODEL_WEATHER_FEATURE = "weather_favorability_index"
+
+IDEAL_TEMP_C = 27.0
+TEMP_TOLERANCE_C = 5.0
+MAX_MONTHLY_RAINFALL_MM = 300.0
+MAX_MONTHLY_RAINY_DAYS = 20
+
+TEMP_PENALTY_WEIGHT = 20
+RAIN_PENALTY_WEIGHT = 50
+RAINY_DAYS_PENALTY_WEIGHT = 30
+
+# LOCATION_NAME duplicated (not imported) from weather_api.py to avoid
+# a circular import: weather_api imports helpers from mlr_model.
+LOCATION_NAME = "Lipa City, Batangas, PH"
+
+# Cyclic (sine/cosine) encoding of the calendar month for the per-material
+# models. Wraps Dec (12) close to Jan (1).
+MONTH_CYCLIC_FEATURES = ["month_sin", "month_cos"]
+
+# Lagged demand features -- serial-correlation signal per material.
+LAG_FEATURES = ["prev_demand", "prev_demand_2"]
+
+# Per-material MLR feature set: weather primary + cyclic month + lags.
+PER_MATERIAL_FEATURES = LAG_FEATURES + [MODEL_WEATHER_FEATURE] + MONTH_CYCLIC_FEATURES
+
+# Minimum row counts.
+MIN_TRAINING_ROWS = 20        # pooled model
+MIN_PER_MATERIAL_ROWS = 15    # per-material model (needs 13 usable rows after lag dropna)
+SAMPLE_SIZE_WARN_THRESHOLD = 24
 
 
 # =================================================================
@@ -74,7 +102,7 @@ def execute_query(db_config, query, params=None, fetch=False):
 
 
 def log_audit(db_config, action, details, username="system"):
-    """D7 - Appendix B says forecast processing must be logged."""
+    """D7 audit log; never breaks a forecast if it fails."""
     try:
         execute_query(
             db_config,
@@ -82,36 +110,133 @@ def log_audit(db_config, action, details, username="system"):
             (username, action, details),
         )
     except Exception:
-        # An audit-log failure must never break a forecast.
         pass
 
 
+def _bulk_insert(db_config, sql, rows, page_size=500):
+    """
+    Batch INSERT via psycopg2.extras.execute_values.
+    Collapses N round-trips into 1 or N/page_size. `sql` must contain
+    a single %s placeholder where the VALUES tuples go.
+    """
+    if not rows:
+        return
+    conn = connect_db(db_config)
+    try:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, rows, page_size=page_size)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# =================================================================
+# Master data
+# =================================================================
 def get_materials(db_config):
-    """Material master (D2) - used to populate the UI dropdown."""
+    """Material master (D2) -- populates UI dropdown."""
     rows = execute_query(
         db_config,
         """SELECT material_id, material_code, material_name, unit,
                   unit_cost, current_stock, reorder_level
-           FROM materials ORDER BY material_name;""",
+             FROM materials ORDER BY material_name;""",
         fetch=True,
     )
     return [dict(r) for r in rows]
 
 
+def get_forecast_history(db_config, limit=15):
+    """
+    Prediction History table on the forecasting page: past forecast
+    rows from D5 LEFT JOINed against the actual demand (D4) that came
+    in later, most recent first.
+
+    Accuracy = max(0, 100 - |predicted - actual| / actual * 100); None
+    when actual isn't in yet.
+    """
+    rows = execute_query(
+        db_config,
+        """SELECT fr.forecast_id, fr.material_id, m.material_name,
+                  fr.forecast_month, fr.predicted_demand, fr.generated_at,
+                  md.demand_qty AS actual_demand
+             FROM forecast_results fr
+             JOIN materials m ON m.material_id = fr.material_id
+        LEFT JOIN monthly_demand md
+                  ON md.material_id = fr.material_id
+                 AND md.period_month = fr.forecast_month
+            ORDER BY fr.generated_at DESC, fr.forecast_id DESC
+            LIMIT %s;""",
+        (limit,),
+        fetch=True,
+    )
+    result = []
+    for r in rows:
+        predicted = float(r["predicted_demand"])
+        actual = float(r["actual_demand"]) if r["actual_demand"] is not None else None
+        accuracy = None
+        if actual is not None and actual > 0:
+            err_pct = abs(predicted - actual) / actual * 100
+            accuracy = round(max(0.0, 100 - err_pct), 1)
+        result.append({
+            "id":        f"FC-{int(r['forecast_id']):03d}",
+            "material":  r["material_name"],
+            "month":     r["forecast_month"].strftime("%b %Y"),
+            "predicted": round(predicted, 2),
+            "actual":    round(actual, 2) if actual is not None else None,
+            "accuracy":  accuracy,
+        })
+    return result
+
+
 # =================================================================
-# DFD 3.2 - Aggregate Monthly Demand -> D4
+# Weather Favorability Index + insight
+# =================================================================
+def compute_weather_favorability(avg_temp_c, total_rainfall_mm, rainy_days):
+    """0-100 score. 100 = ideal, 0 = worst case on all axes."""
+    temp_dev = np.abs(np.asarray(avg_temp_c, dtype=float) - IDEAL_TEMP_C)
+    temp_penalty = np.minimum(temp_dev / TEMP_TOLERANCE_C, 1.0) * TEMP_PENALTY_WEIGHT
+
+    rain_penalty = np.minimum(
+        np.asarray(total_rainfall_mm, dtype=float) / MAX_MONTHLY_RAINFALL_MM, 1.0
+    ) * RAIN_PENALTY_WEIGHT
+
+    days_penalty = np.minimum(
+        np.asarray(rainy_days, dtype=float) / MAX_MONTHLY_RAINY_DAYS, 1.0
+    ) * RAINY_DAYS_PENALTY_WEIGHT
+
+    return np.clip(100.0 - temp_penalty - rain_penalty - days_penalty, 0.0, 100.0)
+
+
+def weather_favorability_label(index):
+    if index >= 70: return "Favorable"
+    if index >= 40: return "Moderate"
+    return "Unfavorable"
+
+
+def _weather_effect_insight(weather_coef, unit="units"):
+    """Turn fitted weather coefficient into plain-language sentence."""
+    NOISE_FLOOR = 0.05
+    if weather_coef > NOISE_FLOOR:
+        return (f"In your historical data, better weather is associated with HIGHER "
+                f"demand: each +1 point of favorability corresponds to about "
+                f"{weather_coef:.2f} more {unit} predicted, holding month and material fixed.")
+    if weather_coef < -NOISE_FLOOR:
+        return (f"In your historical data, better weather is associated with LOWER "
+                f"demand: each +1 point of favorability corresponds to about "
+                f"{abs(weather_coef):.2f} fewer {unit} predicted, holding month and material fixed. "
+                f"(i.e. worse weather -- more rain, more rainy days -- is associated with higher demand here.)")
+    return (f"No meaningful weather relationship was detected in your historical data "
+            f"(coefficient {weather_coef:+.3f} is within noise). Demand doesn't appear "
+            f"to track weather favorability for these materials.")
+
+
+# =================================================================
+# DFD 3.2 -- Aggregate Monthly Demand
 # =================================================================
 def aggregate_monthly_demand(db_config):
     """
-    Turn raw operational records into the forecasting-ready monthly panel.
-
-        demand_qty         = material ISSUANCES in the month (what was consumed)
-        inventory_balance  = running (receipts - issuances) to month end
-        inventory_value    = inventory_balance x unit_cost
-        transaction_volume = transactions recorded that month
-        active_projects    = projects running during that month
-
-    Writes one row per material per month into monthly_demand (D4).
+    Rebuild monthly_demand (D4) from raw operational records.
+    Batched insert via _bulk_insert (was: N*M round-trips).
     """
     materials = pd.DataFrame(execute_query(
         db_config,
@@ -120,389 +245,454 @@ def aggregate_monthly_demand(db_config):
     ))
     movements = pd.DataFrame(execute_query(
         db_config,
-        """SELECT material_id, movement_type, quantity, movement_date
-           FROM stock_movements;""",
+        "SELECT material_id, movement_type, quantity, movement_date FROM stock_movements;",
         fetch=True,
     ))
-
     if materials.empty or movements.empty:
-        raise ValueError(
-            "No materials or stock movements found. "
-            "Run schema.sql, then seed_data.py."
-        )
+        raise ValueError("No materials or stock movements found. Run schema.sql, then seed_data.py.")
 
     transactions = pd.DataFrame(execute_query(
-        db_config, "SELECT txn_date FROM transactions;", fetch=True
-    ))
+        db_config, "SELECT txn_date FROM transactions;", fetch=True))
     projects = pd.DataFrame(execute_query(
-        db_config, "SELECT start_date, end_date FROM projects;", fetch=True
-    ))
+        db_config, "SELECT start_date, end_date FROM projects;", fetch=True))
 
     movements["movement_date"] = pd.to_datetime(movements["movement_date"])
     movements["quantity"] = movements["quantity"].astype(float)
     movements["period_month"] = movements["movement_date"].values.astype("datetime64[M]")
 
-    # Issuances = demand. Receipts = restocking.
-    pivot = (
-        movements.pivot_table(
-            index=["material_id", "period_month"],
-            columns="movement_type",
-            values="quantity",
-            aggfunc="sum",
-            fill_value=0,
-        )
-        .reset_index()
-    )
+    pivot = (movements.pivot_table(
+        index=["material_id", "period_month"], columns="movement_type",
+        values="quantity", aggfunc="sum", fill_value=0,
+    ).reset_index())
     for col in ("ISSUANCE", "RECEIPT"):
         if col not in pivot.columns:
             pivot[col] = 0.0
 
-    # Every material needs a row for every month, even a month with zero
-    # movement - otherwise the lag features would silently skip a month.
     all_months = pd.date_range(
         movements["period_month"].min(),
-        movements["period_month"].max(),
-        freq="MS",
-    )
+        movements["period_month"].max(), freq="MS")
     grid = pd.MultiIndex.from_product(
         [materials["material_id"], all_months],
-        names=["material_id", "period_month"],
-    ).to_frame(index=False)
+        names=["material_id", "period_month"]).to_frame(index=False)
 
     df = grid.merge(pivot, on=["material_id", "period_month"], how="left").fillna(0.0)
     df = df.rename(columns={"ISSUANCE": "demand_qty", "RECEIPT": "receipts"})
     df = df.sort_values(["material_id", "period_month"])
 
-    # Running stock balance at the END of each month.
     df["net"] = df["receipts"] - df["demand_qty"]
-    df["inventory_balance"] = df.groupby("material_id")["net"].cumsum()
-    df["inventory_balance"] = df["inventory_balance"].clip(lower=0)
+    df["inventory_balance"] = df.groupby("material_id")["net"].cumsum().clip(lower=0)
 
-    df = df.merge(
-        materials[["material_id", "unit_cost"]], on="material_id", how="left"
-    )
+    df = df.merge(materials[["material_id", "unit_cost"]], on="material_id", how="left")
     df["unit_cost"] = df["unit_cost"].astype(float)
     df["inventory_value"] = df["inventory_balance"] * df["unit_cost"]
 
-    # Transaction volume per month (company-wide business activity).
     if not transactions.empty:
         transactions["txn_date"] = pd.to_datetime(transactions["txn_date"])
-        txn = (
-            transactions.assign(
-                period_month=transactions["txn_date"].values.astype("datetime64[M]")
-            )
-            .groupby("period_month")
-            .size()
-            .rename("transaction_volume")
-            .reset_index()
-        )
+        txn = (transactions.assign(
+            period_month=transactions["txn_date"].values.astype("datetime64[M]")
+        ).groupby("period_month").size().rename("transaction_volume").reset_index())
         df = df.merge(txn, on="period_month", how="left")
     df["transaction_volume"] = df.get("transaction_volume", 0)
     df["transaction_volume"] = df["transaction_volume"].fillna(0).astype(int)
 
-    # Projects active in each month.
     df["active_projects"] = 0
     if not projects.empty:
         projects["start_date"] = pd.to_datetime(projects["start_date"])
         projects["end_date"] = pd.to_datetime(projects["end_date"])
-        counts = {}
         for m in all_months:
+            m_start = m
             m_end = m + pd.offsets.MonthEnd(0)
-            live = (
-                (projects["start_date"] <= m_end)
-                & (projects["end_date"].isna() | (projects["end_date"] >= m))
-            )
-            counts[m] = int(live.sum())
-        df["active_projects"] = df["period_month"].map(counts).fillna(0).astype(int)
+            mask = (projects["start_date"] <= m_end) & (
+                projects["end_date"].isna() | (projects["end_date"] >= m_start))
+            df.loc[df["period_month"] == m, "active_projects"] = int(mask.sum())
 
-    # Persist to D4.
-    for r in df.itertuples(index=False):
-        execute_query(
-            db_config,
-            """
-            INSERT INTO monthly_demand
-                (material_id, period_month, demand_qty, transaction_volume,
-                 inventory_balance, inventory_value, active_projects)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (material_id, period_month) DO UPDATE SET
-                demand_qty         = EXCLUDED.demand_qty,
-                transaction_volume = EXCLUDED.transaction_volume,
-                inventory_balance  = EXCLUDED.inventory_balance,
-                inventory_value    = EXCLUDED.inventory_value,
-                active_projects    = EXCLUDED.active_projects;
-            """,
-            (
-                int(r.material_id),
-                r.period_month.date(),
-                float(r.demand_qty),
-                int(r.transaction_volume),
-                float(r.inventory_balance),
-                float(r.inventory_value),
-                int(r.active_projects),
-            ),
-        )
-
-    log_audit(db_config, "AGGREGATE_MONTHLY_DEMAND",
-              f"Rebuilt {len(df)} monthly rows across {len(materials)} materials.")
+    execute_query(db_config, "TRUNCATE TABLE monthly_demand RESTART IDENTITY;")
+    rows = [(int(r["material_id"]), r["period_month"].date(), float(r["demand_qty"]),
+             int(r["transaction_volume"]), float(r["inventory_balance"]),
+             float(r["inventory_value"]), int(r["active_projects"]))
+            for _, r in df.iterrows()]
+    _bulk_insert(db_config,
+        """INSERT INTO monthly_demand
+             (material_id, period_month, demand_qty, transaction_volume,
+              inventory_balance, inventory_value, active_projects)
+           VALUES %s;""", rows)
     return len(df)
 
 
 # =================================================================
-# DFD 4.1 - Preprocess Forecast Data
+# Feature engineering
 # =================================================================
-def load_monthly_dataset(db_config):
+def _load_panel(db_config):
+    """Panel: monthly_demand LEFT JOIN monthly_weather, with materials info."""
     rows = execute_query(
         db_config,
-        """
-        SELECT md.material_id, m.material_name, m.unit, m.unit_cost,
-               md.period_month, md.demand_qty, md.transaction_volume,
-               md.inventory_balance, md.inventory_value, md.active_projects
-        FROM monthly_demand md
-        JOIN materials m ON m.material_id = md.material_id
-        ORDER BY md.material_id, md.period_month;
-        """,
+        """SELECT md.material_id, md.period_month, md.demand_qty,
+                  md.inventory_balance,
+                  m.material_name, m.unit,
+                  mw.avg_temp_c, mw.total_rainfall_mm, mw.rainy_days
+             FROM monthly_demand md
+             JOIN materials m ON m.material_id = md.material_id
+        LEFT JOIN monthly_weather mw ON mw.period_month = md.period_month
+            ORDER BY md.material_id, md.period_month;""",
         fetch=True,
     )
+    if not rows:
+        raise ValueError("monthly_demand is empty. Run aggregate_monthly_demand first.")
     df = pd.DataFrame(rows)
-    if df.empty:
-        raise ValueError(
-            "monthly_demand is empty. Run aggregate_monthly_demand() first."
-        )
-
     df["period_month"] = pd.to_datetime(df["period_month"])
-    for c in ("demand_qty", "inventory_balance", "inventory_value", "unit_cost"):
-        df[c] = df[c].astype(float)
-    for c in ("transaction_volume", "active_projects"):
-        df[c] = df[c].astype(int)
+    df["demand_qty"] = df["demand_qty"].astype(float)
+    df["inventory_balance"] = df["inventory_balance"].astype(float)
+    for col in WEATHER_FEATURES:
+        df[col] = df[col].astype(float)
+        if df[col].notna().any():
+            df[col] = df[col].fillna(df[col].mean())
+        else:
+            df[col] = df[col].fillna(0.0)
     return df
 
 
-def build_features(df):
-    """
-    Lag the predictors so that every feature is knowable BEFORE the month
-    being predicted. This is what keeps the model honest.
-    """
-    df = df.sort_values(["material_id", "period_month"]).copy()
-    g = df.groupby("material_id")
+def prepare_mlr_dataset(panel):
+    """Build design matrix: calendar + weather index + cyclic month + lags + one-hot material."""
+    df = panel.copy()
+    df["year"] = df["period_month"].dt.year
+    df["month"] = df["period_month"].dt.month
+    df["day_of_week"] = df["period_month"].dt.dayofweek
 
-    df["prev_demand"] = g["demand_qty"].shift(1)
-    df["prev_demand_2"] = g["demand_qty"].shift(2)
-    df["prev_txn_volume"] = g["transaction_volume"].shift(1)
-    df["opening_stock"] = g["inventory_balance"].shift(1)
-    df["opening_value"] = g["inventory_value"].shift(1)
-    # active_projects is NOT lagged: the project schedule is known in
-    # advance, so next month's project count is legitimately available.
+    df[MODEL_WEATHER_FEATURE] = compute_weather_favorability(
+        df["avg_temp_c"], df["total_rainfall_mm"], df["rainy_days"])
 
-    return df.dropna(subset=FEATURES)
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 
+    df = df.sort_values(["material_id", "period_month"])
+    g = df.groupby("material_id")["demand_qty"]
+    df["prev_demand"]   = g.shift(1)
+    df["prev_demand_2"] = g.shift(2)
 
-def _design_matrix(df, columns=None):
-    """Numeric features + one-hot material dummies (per-material baselines)."""
-    dummies = pd.get_dummies(df["material_name"], prefix="mat")
-    X = pd.concat([df[FEATURES].astype(float), dummies.astype(float)], axis=1)
-    if columns is not None:
-        X = X.reindex(columns=columns, fill_value=0.0)
-    return X
+    encoded = pd.get_dummies(df["material_name"], prefix="mat")
+
+    final_df = pd.concat([
+        df[["material_id", "material_name", "unit", "period_month",
+            "year", "month", "day_of_week",
+            "demand_qty", "inventory_balance"]
+           + WEATHER_FEATURES + [MODEL_WEATHER_FEATURE]
+           + MONTH_CYCLIC_FEATURES + LAG_FEATURES],
+        encoded,
+    ], axis=1)
+    return final_df
 
 
 def _mape(y_true, y_pred):
-    """
-    MAPE is undefined where actual demand is 0, so those months are
-    excluded rather than silently producing infinity.
-    """
     y_true = np.asarray(y_true, float)
     y_pred = np.asarray(y_pred, float)
     mask = y_true != 0
-    if not mask.any():
-        return None
+    if not mask.any(): return None
     return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
 
 
-def _chronological_split(df, test_ratio=0.2):
-    """
-    Hold out the most recent months. Never shuffle time-series data -
-    a random split would train on the future and score on the past.
-    """
-    months = sorted(df["period_month"].unique())
-    n_test = max(1, int(round(len(months) * test_ratio)))
-    n_test = min(n_test, len(months) - 1)
-    test_months = set(months[-n_test:])
-    train = df[~df["period_month"].isin(test_months)]
-    test = df[df["period_month"].isin(test_months)]
-    return train, test
+def _fit_material_model(mat_df, unit="units", feature_set=None):
+    """Fit weather-primary MLR for one material. feature_set defaults to PER_MATERIAL_FEATURES."""
+    if feature_set is None:
+        feature_set = PER_MATERIAL_FEATURES
+    X = mat_df[feature_set].astype(float)
+    y = mat_df["demand_qty"].astype(float)
+
+    model = LinearRegression()
+    model.fit(X, y)
+    y_pred = model.predict(X)
+
+    coefs = dict(zip(feature_set, model.coef_))
+    weather_coef = float(coefs.get(MODEL_WEATHER_FEATURE, 0.0))
+    mape_val = _mape(y.values, y_pred)
+
+    return {
+        "model":               model,
+        "features":            feature_set,
+        "coefficients":        {k: round(float(v), 4) for k, v in coefs.items()},
+        "intercept":           round(float(model.intercept_), 4),
+        "weather_coefficient": round(weather_coef, 4),
+        "weather_insight":     _weather_effect_insight(weather_coef, unit=unit),
+        "metrics": {
+            "mae":  round(float(mean_absolute_error(y, y_pred)), 3),
+            "rmse": round(float(np.sqrt(mean_squared_error(y, y_pred))), 3),
+            "mape": round(mape_val, 2) if mape_val is not None else None,
+            "r2":   round(float(r2_score(y, y_pred)), 4) if len(mat_df) > 1 else 0.0,
+        },
+        "training_rows": int(len(mat_df)),
+    }
 
 
 # =================================================================
-# DFD 4.2 / 4.3 / 4.4 - Train, Evaluate, Forecast, Save
+# DFD 4 -- Train, evaluate, forecast, save
 # =================================================================
-def run_forecast(db_config, overrides=None, test_ratio=0.2, username="system"):
+def run_forecast(db_config, overrides=None, test_ratio=None, username="system"):
     """
-    Train one pooled MLR across all materials, evaluate it out-of-sample,
-    then forecast NEXT MONTH's demand for every material.
-
-    `overrides` supports what-if planning, e.g. {"active_projects": 8}
-    - "if we take on 8 projects next month, how much steel do we need?"
-    That is exactly the material-requirements-planning support the
-    documentation asks for.
+    Two-stage forecast with weather as primary demand driver:
+      STAGE 1: pooled MLR (video-style, all materials one-hot). Used
+               as baseline metrics AND as fallback for materials with
+               < MIN_PER_MATERIAL_ROWS history.
+      STAGE 2: per-material MLR (weather + cyclic month + lags), the
+               primary output for materials with enough history.
+    Auto-fallback: if lag-dropna leaves too few rows to train, both
+    tiers automatically fall back to a lag-free feature set.
     """
-    df = build_features(load_monthly_dataset(db_config))
+    panel = _load_panel(db_config)
+    df = prepare_mlr_dataset(panel)
 
     if len(df) < MIN_TRAINING_ROWS:
         raise ValueError(
-            f"Only {len(df)} usable monthly rows after lagging "
-            f"(need at least {MIN_TRAINING_ROWS}). Add more history, "
-            f"then re-run the aggregation."
-        )
+            f"Only {len(df)} monthly rows available (need at least {MIN_TRAINING_ROWS}). "
+            f"Add more history, then re-run the aggregation.")
 
-    train_df, test_df = _chronological_split(df, test_ratio)
+    encoded_cols = [c for c in df.columns if c.startswith("mat_")]
 
-    X_train = _design_matrix(train_df)
-    columns = list(X_train.columns)
-    y_train = train_df["demand_qty"].values
+    # Prefer training WITH lag features; auto-fall-back if too thin.
+    df_lagged = df.dropna(subset=LAG_FEATURES)
+    if len(df_lagged) >= MIN_TRAINING_ROWS:
+        pooled_train_df = df_lagged
+        feature_cols = LAG_FEATURES + CALENDAR_FEATURES + [MODEL_WEATHER_FEATURE] + encoded_cols
+        pooled_uses_lags = True
+    else:
+        pooled_train_df = df
+        feature_cols = CALENDAR_FEATURES + [MODEL_WEATHER_FEATURE] + encoded_cols
+        pooled_uses_lags = False
 
+    # ---- Pooled fit ----
+    X = pooled_train_df[feature_cols].astype(float)
+    y = pooled_train_df["demand_qty"].astype(float)
     model = LinearRegression()
-    model.fit(X_train, y_train)
+    model.fit(X, y)
 
-    # --- 4.3 Evaluate on months the model has never seen ---
-    X_test = _design_matrix(test_df, columns)
-    y_test = test_df["demand_qty"].values
-    y_pred = model.predict(X_test)
-
+    y_pred_train = model.predict(X)
+    mape_val = _mape(y, y_pred_train)
     metrics = {
-        "mae":  round(float(mean_absolute_error(y_test, y_pred)), 3),
-        "rmse": round(float(np.sqrt(mean_squared_error(y_test, y_pred))), 3),
-        "mape": (round(_mape(y_test, y_pred), 2)
-                 if _mape(y_test, y_pred) is not None else None),
-        "r2":   round(float(r2_score(y_test, y_pred)), 4),
-        "train_rows": int(len(train_df)),
-        "test_rows":  int(len(test_df)),
-        "evaluation": "out-of-sample (chronological hold-out)",
+        "mae":   round(float(mean_absolute_error(y, y_pred_train)), 3),
+        "rmse":  round(float(np.sqrt(mean_squared_error(y, y_pred_train))), 3),
+        "mape":  round(mape_val, 2) if mape_val is not None else None,
+        "r2":    round(float(r2_score(y, y_pred_train)), 4) if len(pooled_train_df) > 1 else 0.0,
+        "train_rows":  int(len(pooled_train_df)),
+        "test_rows":   int(len(pooled_train_df)),
+        "evaluation":  "in-sample (train == test)",
+        "uses_lag_features": pooled_uses_lags,
     }
 
-    execute_query(
-        db_config,
+    execute_query(db_config,
         """INSERT INTO model_metrics
              (model_name, mae, rmse, mape, r2, train_rows, test_rows, features_used)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);""",
         (MODEL_NAME, metrics["mae"], metrics["rmse"], metrics["mape"],
          metrics["r2"], metrics["train_rows"], metrics["test_rows"],
-         ", ".join(FEATURES)),
-    )
+         ", ".join(feature_cols)))
 
-    # --- Forecast the next month for every material ---
+    coefficients = {f: round(float(c), 4)
+                    for f, c in zip(feature_cols, model.coef_)
+                    if f in CALENDAR_FEATURES or f == MODEL_WEATHER_FEATURE or f in LAG_FEATURES}
+
+    # ---- Forecast month setup ----
     latest_month = df["period_month"].max()
     forecast_month = (latest_month + pd.offsets.MonthBegin(1)).normalize()
 
-    # Projects already scheduled for the forecast month.
-    fm_end = forecast_month + pd.offsets.MonthEnd(0)
-    proj = execute_query(
-        db_config,
-        """SELECT COUNT(*) AS n FROM projects
-           WHERE start_date <= %s
-             AND (end_date IS NULL OR end_date >= %s);""",
-        (fm_end.date(), forecast_month.date()),
-        fetch=True,
-    )
-    scheduled_projects = int(proj[0]["n"]) if proj else 0
+    fm_features = {
+        "year": forecast_month.year,
+        "month": forecast_month.month,
+        "day_of_week": forecast_month.dayofweek,
+    }
+    # Seasonal-climatology estimate for weather in the forecast month
+    same_month_history = df[df["month"] == forecast_month.month]
+    for col in WEATHER_FEATURES:
+        if len(same_month_history) > 0:
+            fm_features[col] = float(same_month_history[col].mean())
+        else:
+            fm_features[col] = float(df[col].mean())
+    weather_is_estimated = True
 
-    full = load_monthly_dataset(db_config)
+    if overrides:
+        for k, v in overrides.items():
+            if k in CALENDAR_FEATURES or k in WEATHER_FEATURES:
+                fm_features[k] = float(v)
+                if k in WEATHER_FEATURES:
+                    weather_is_estimated = False
 
-    # A count of zero is ambiguous: it could mean "the shop genuinely has no
-    # work booked", or "nobody has entered next month's projects yet". Those
-    # are very different, and silently treating the second as the first drags
-    # every forecast down. If nothing is booked, carry the current workload
-    # forward and say so, rather than quietly predicting a dead month.
-    projects_source = "scheduled project records"
-    if scheduled_projects == 0:
-        latest_month_val = full["period_month"].max()
-        carried = int(
-            full.loc[full["period_month"] == latest_month_val, "active_projects"].max()
-        )
-        if carried > 0:
-            scheduled_projects = carried
-            projects_source = (
-                "carried forward from the latest month "
-                "(no projects booked yet for the forecast month)"
-            )
-    rows, forecasts = [], []
+    fm_features[MODEL_WEATHER_FEATURE] = float(compute_weather_favorability(
+        fm_features["avg_temp_c"], fm_features["total_rainfall_mm"], fm_features["rainy_days"]))
 
-    for mid, grp in full.groupby("material_id"):
-        grp = grp.sort_values("period_month")
-        if len(grp) < 2:
-            continue
-        last, prev = grp.iloc[-1], grp.iloc[-2]
+    fm_features["month_sin"] = float(np.sin(2 * np.pi * forecast_month.month / 12))
+    fm_features["month_cos"] = float(np.cos(2 * np.pi * forecast_month.month / 12))
 
-        row = {
-            "material_id":   mid,
-            "material_name": last["material_name"],
-            "unit":          last["unit"],
-            "prev_demand":     float(last["demand_qty"]),
-            "prev_demand_2":   float(prev["demand_qty"]),
-            "prev_txn_volume": float(last["transaction_volume"]),
-            "opening_stock":   float(last["inventory_balance"]),
-            "opening_value":   float(last["inventory_value"]),
-            "active_projects": float(scheduled_projects),
-        }
-        if overrides:
-            row.update({k: float(v) for k, v in overrides.items() if k in FEATURES})
-        rows.append(row)
+    materials_seen = (df[["material_id", "material_name", "unit"]]
+                      .drop_duplicates().sort_values("material_name"))
 
-    if not rows:
-        raise ValueError("Not enough history per material to build a forecast row.")
+    # Preload current_stock in one query
+    stock_rows = execute_query(db_config,
+        "SELECT material_id, current_stock FROM materials;", fetch=True)
+    stock_by_id = {int(r["material_id"]): float(r["current_stock"]) for r in stock_rows}
 
-    next_df = pd.DataFrame(rows)
-    X_next = _design_matrix(next_df, columns)
-    preds = model.predict(X_next)
+    pooled_weather_coef = round(float(coefficients[MODEL_WEATHER_FEATURE]), 4)
+    pooled_weather_insight = _weather_effect_insight(
+        pooled_weather_coef,
+        unit=materials_seen["unit"].mode().iat[0] if len(materials_seen) else "units")
 
-    for row, pred in zip(rows, preds):
-        predicted = max(round(float(pred), 2), 0.0)   # demand can't be negative
-        stock = row["opening_stock"]
+    forecasts = []
+    forecast_insert_rows = []
+    per_material_metrics = []
+    n_per_material_fits = 0
+    n_pooled_fallbacks = 0
+    HISTORY_MONTHS = 6
+
+    for _, mrow in materials_seen.iterrows():
+        mat_df = df[df["material_id"] == int(mrow["material_id"])].sort_values("period_month")
+
+        prev1 = float(mat_df["demand_qty"].iloc[-1]) if len(mat_df) >= 1 else 0.0
+        prev2 = float(mat_df["demand_qty"].iloc[-2]) if len(mat_df) >= 2 else prev1
+
+        mat_df_lagged = mat_df.dropna(subset=LAG_FEATURES)
+        can_fit_per_material = len(mat_df) >= MIN_PER_MATERIAL_ROWS
+
+        if can_fit_per_material:
+            if len(mat_df_lagged) >= MIN_PER_MATERIAL_ROWS - 2:
+                fit = _fit_material_model(mat_df_lagged, unit=mrow["unit"],
+                                          feature_set=PER_MATERIAL_FEATURES)
+                per_mat_features = PER_MATERIAL_FEATURES
+            else:
+                lagless = [f for f in PER_MATERIAL_FEATURES if f not in LAG_FEATURES]
+                fit = _fit_material_model(mat_df, unit=mrow["unit"], feature_set=lagless)
+                per_mat_features = lagless
+            model_type = "per-material"
+            n_per_material_fits += 1
+
+            row_dict = {
+                "prev_demand":         prev1,
+                "prev_demand_2":       prev2,
+                MODEL_WEATHER_FEATURE: fm_features[MODEL_WEATHER_FEATURE],
+                "month_sin":           fm_features["month_sin"],
+                "month_cos":           fm_features["month_cos"],
+            }
+            X_next = pd.DataFrame([row_dict])[per_mat_features].astype(float)
+            predicted_raw = float(fit["model"].predict(X_next)[0])
+
+            weather_coefficient = fit["weather_coefficient"]
+            weather_insight = fit["weather_insight"]
+            material_metrics = fit["metrics"]
+        else:
+            model_type = "pooled fallback"
+            n_pooled_fallbacks += 1
+
+            one_hot_col = f"mat_{mrow['material_name']}"
+            if one_hot_col not in encoded_cols:
+                continue
+
+            row = dict(fm_features)
+            if pooled_uses_lags:
+                row["prev_demand"] = prev1
+                row["prev_demand_2"] = prev2
+            for col in encoded_cols:
+                row[col] = 0
+            row[one_hot_col] = 1
+            X_next = pd.DataFrame([row])[feature_cols].astype(float)
+            predicted_raw = float(model.predict(X_next)[0])
+
+            weather_coefficient = pooled_weather_coef
+            weather_insight = (
+                f"Not enough history for a material-specific fit ({len(mat_df)} months); "
+                f"falling back to the pooled average. " + pooled_weather_insight)
+            material_metrics = {
+                "mae": metrics["mae"], "rmse": metrics["rmse"],
+                "mape": metrics["mape"], "r2": metrics["r2"],
+            }
+
+        predicted = max(round(predicted_raw, 2), 0.0)
+        stock = stock_by_id.get(int(mrow["material_id"]), 0.0)
         reorder = max(round(predicted - stock, 2), 0.0)
+        sample_warning = len(mat_df) < SAMPLE_SIZE_WARN_THRESHOLD
 
-        execute_query(
-            db_config,
-            """INSERT INTO forecast_results
-                 (material_id, forecast_month, predicted_demand, model_name)
-               VALUES (%s, %s, %s, %s)
-               ON CONFLICT (material_id, forecast_month, model_name) DO UPDATE SET
-                 predicted_demand = EXCLUDED.predicted_demand,
-                 generated_at     = CURRENT_TIMESTAMP;""",
-            (int(row["material_id"]), forecast_month.date(), predicted, MODEL_NAME),
-        )
+        mat_hist = mat_df.tail(HISTORY_MONTHS)
+        history = [{"month": pm.strftime("%b %Y"),
+                    "demand": round(float(d), 2),
+                    "inventory": round(float(b), 2)}
+                   for pm, d, b in zip(mat_hist["period_month"],
+                                       mat_hist["demand_qty"],
+                                       mat_hist["inventory_balance"])]
+        prev_demand = prev1
+
+        forecast_insert_rows.append(
+            (int(mrow["material_id"]), forecast_month.date(), predicted, MODEL_NAME))
 
         forecasts.append({
-            "material_id":      int(row["material_id"]),
-            "material_name":    row["material_name"],
-            "unit":             row["unit"],
-            "predicted_demand": predicted,
-            "current_stock":    round(stock, 2),
-            "reorder_qty":      reorder,
-            "prev_demand":      round(row["prev_demand"], 2),
-            "active_projects":  int(row["active_projects"]),
+            "material_id":         int(mrow["material_id"]),
+            "material_name":       mrow["material_name"],
+            "unit":                mrow["unit"],
+            "predicted_demand":    predicted,
+            "current_stock":       round(stock, 2),
+            "reorder_qty":         reorder,
+            "prev_demand":         round(prev_demand, 2),
+            "history":             history,
+            "forecast_label":      forecast_month.strftime("%b %Y"),
+            "model_type":          model_type,
+            "training_rows":       int(len(mat_df)),
+            "sample_size_warning": sample_warning,
+            "weather_coefficient": weather_coefficient,
+            "weather_insight":     weather_insight,
+            "material_metrics":    material_metrics,
         })
+        if model_type == "per-material":
+            per_material_metrics.append(material_metrics)
 
-    # MLR is interpretable - showing the coefficients is the reason
-    # the documentation chose it over a black-box model.
-    coefficients = {
-        f: round(float(c), 4) for f, c in zip(columns, model.coef_) if f in FEATURES
-    }
+    if not forecasts:
+        raise ValueError("No materials have history to forecast against.")
 
-    log_audit(
-        db_config, "RUN_FORECAST",
-        f"{MODEL_NAME} for {forecast_month.date()}: "
-        f"{len(forecasts)} materials, R2={metrics['r2']}, MAE={metrics['mae']}.",
-        username,
-    )
+    _bulk_insert(db_config,
+        """INSERT INTO forecast_results
+             (material_id, forecast_month, predicted_demand, model_name)
+           VALUES %s
+           ON CONFLICT (material_id, forecast_month, model_name) DO UPDATE SET
+             predicted_demand = EXCLUDED.predicted_demand,
+             generated_at     = CURRENT_TIMESTAMP;""",
+        forecast_insert_rows)
+
+    if per_material_metrics:
+        mape_vals = [m["mape"] for m in per_material_metrics if m["mape"] is not None]
+        per_material_summary = {
+            "n_per_material":    n_per_material_fits,
+            "n_pooled_fallback": n_pooled_fallbacks,
+            "avg_mae":  round(float(np.mean([m["mae"]  for m in per_material_metrics])), 3),
+            "avg_rmse": round(float(np.mean([m["rmse"] for m in per_material_metrics])), 3),
+            "avg_mape": round(float(np.mean(mape_vals)), 2) if mape_vals else None,
+            "avg_r2":   round(float(np.mean([m["r2"]   for m in per_material_metrics])), 4),
+        }
+    else:
+        per_material_summary = {
+            "n_per_material": 0, "n_pooled_fallback": n_pooled_fallbacks,
+            "avg_mae": None, "avg_rmse": None, "avg_mape": None, "avg_r2": None,
+        }
+
+    log_audit(db_config, "RUN_FORECAST",
+        f"{MODEL_NAME} for {forecast_month.date()}: {len(forecasts)} materials "
+        f"({n_per_material_fits} per-material, {n_pooled_fallbacks} pooled-fallback). "
+        f"Pooled R2={metrics['r2']}, MAE={metrics['mae']}, "
+        f"uses_lag_features={pooled_uses_lags}. "
+        f"Weather: {'overridden' if not weather_is_estimated else 'estimated (seasonal)'}.",
+        username)
 
     return {
         "model":            MODEL_NAME,
+        "model_strategy":   f"per-material MLR (lags + weather + cyclic month) with pooled "
+                            f"fallback for < {MIN_PER_MATERIAL_ROWS} months",
         "forecast_month":   forecast_month.strftime("%B %Y"),
         "forecast_date":    str(forecast_month.date()),
         "metrics":          metrics,
         "coefficients":     coefficients,
         "intercept":        round(float(model.intercept_), 4),
-        "features_used":    FEATURES,
-        "active_projects":  scheduled_projects,
-        "projects_source":  projects_source,
+        "features_used":    feature_cols,
+        "per_material_summary": per_material_summary,
         "forecasts":        forecasts,
+        "weather": {
+            "location":            LOCATION_NAME,
+            "avg_temp_c":          round(fm_features["avg_temp_c"], 2),
+            "total_rainfall_mm":   round(fm_features["total_rainfall_mm"], 2),
+            "rainy_days":          round(fm_features["rainy_days"], 1),
+            "favorability_index":  round(fm_features[MODEL_WEATHER_FEATURE], 1),
+            "favorability_label":  weather_favorability_label(fm_features[MODEL_WEATHER_FEATURE]),
+            "source": "override" if not weather_is_estimated
+                      else "seasonal estimate (avg of this calendar month in past years)",
+        },
     }

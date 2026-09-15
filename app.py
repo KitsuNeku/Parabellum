@@ -25,7 +25,9 @@ from datetime import datetime
 import os
 
 from config import DB_CONFIG, SECRET_KEY, DEBUG
-from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit
+from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history
+import weather_api
+import requests
 from auth import verify_login, login_required, permission_required, ROLE_PERMISSIONS, hash_password
 from security import apply_security
 
@@ -1092,6 +1094,46 @@ def api_forecast():
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         app.logger.exception("Database or model error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/forecast_history")
+@permission_required("forecasting")
+def api_forecast_history():
+    """Past forecasts (D5) LEFT JOINed with actual demand (D4)."""
+    try:
+        rows = get_forecast_history(DB_CONFIG, limit=15)
+        return jsonify({"ok": True, "data": rows})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/weather/sync", methods=["POST"])
+@permission_required("forecasting")
+@limiter.limit("6 per hour")
+def api_weather_sync():
+    """
+    Sync historical weather for Lipa City from Open-Meteo into
+    monthly_weather (D8). Deliberately separate from /api/forecast
+    (external HTTPS, not on the hot path). Run once at setup, then
+    periodically (daily/weekly cron).
+
+    Optional body: {"start_date": "2023-01-01", "end_date": "2026-08-31"}
+    """
+    payload = request.get_json(silent=True) or {}
+    start_date = payload.get("start_date") or weather_api.DEFAULT_START_DATE
+    end_date = payload.get("end_date")
+    try:
+        n = weather_api.sync_weather_to_db(DB_CONFIG, start_date=start_date, end_date=end_date)
+        return jsonify({"ok": True, "months_synced": n, "location": weather_api.LOCATION_NAME})
+    except requests.exceptions.RequestException as e:
+        app.logger.exception("Weather API request failed")
+        return jsonify({"ok": False, "error": "Could not reach the weather service. Check your internet connection and try again."}), 502
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception("Database error during weather sync")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 

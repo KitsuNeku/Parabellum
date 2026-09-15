@@ -207,6 +207,32 @@
 
           <hr class="my-3">
           <div class="card-title-row mb-2">
+            <h2 class="panel-title mb-0"><i class="bi bi-cloud-rain me-1"></i>Weather Outlook</h2>
+            <span class="badge" id="fcWxBadge">—</span>
+          </div>
+          <p class="panel-sub mb-3">
+            Forecast-month conditions for <strong>Lipa City, Batangas</strong>
+            (<span id="fcWxSource">—</span>), and what <strong>this specific
+            material's own history</strong> says about how its demand relates
+            to weather — fit from its own data by a dedicated per-material
+            MLR, not averaged across all materials.
+          </p>
+          <div class="row g-3 mb-3">
+            <div class="col-4"><div class="result-line"><div class="rl-label">Avg. Temp</div><div class="rl-value" id="fcWxTemp">—</div></div></div>
+            <div class="col-4"><div class="result-line"><div class="rl-label">Rainfall</div><div class="rl-value" id="fcWxRain">—</div></div></div>
+            <div class="col-4"><div class="result-line"><div class="rl-label">Rainy Days</div><div class="rl-value" id="fcWxDays">—</div></div></div>
+          </div>
+          <div class="result-line mb-2">
+            <div class="rl-label">Favorability Index</div>
+            <div class="progress" style="height:10px;" role="progressbar" aria-label="Weather favorability" aria-valuemin="0" aria-valuemax="100">
+              <div class="progress-bar" id="fcWxBar" style="width:0%"></div>
+            </div>
+            <div class="rl-value mt-1" id="fcWxIndex">—</div>
+          </div>
+          <div class="alert alert-soft-warning mb-0"><div id="fcWxInsight">—</div></div>
+
+          <hr class="my-3">
+          <div class="card-title-row mb-2">
             <h2 class="panel-title mb-0"><i class="bi bi-clipboard-data me-1"></i>Model Evaluation</h2>
             <span class="badge b-neutral">Multiple Linear Regression</span>
           </div>
@@ -225,7 +251,8 @@
           <p class="panel-sub mb-3">Plain-language summary.</p>
           <div class="alert alert-soft-info mb-2"><strong>Predicted Demand</strong> is the estimated amount of this material the company will likely use next month.</div>
           <div class="alert alert-soft-warning mb-2"><strong>Recommended Restock</strong> is how much to order now if current stock is below the predicted demand.</div>
-          <div class="alert alert-soft-success mb-0"><strong>Confidence</strong> reflects how reliable the estimate is, based on how steady past usage has been.</div>
+          <div class="alert alert-soft-success mb-2"><strong>Confidence</strong> reflects how reliable the estimate is, based on how steady past usage has been.</div>
+          <div class="alert alert-soft-warning mb-0"><strong>Weather Outlook</strong> shows Lipa City's forecast-month conditions and how your material's demand has actually tracked weather historically — the relationship is discovered from your data, not assumed.</div>
         </div></div></div>
       </div>
 
@@ -274,18 +301,45 @@
   <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script>
+    window.reloadForecastHistory = async () => {
+      const tb = document.getElementById('fcHistBody');
+      if (!tb) return;
+      try {
+        const res  = await fetch('/api/forecast_history');
+        const json = await res.json();
+        tb.innerHTML = '';
+        if (!json.ok || !json.data || json.data.length === 0) {
+          tb.insertAdjacentHTML('beforeend',
+            `<tr><td colspan="6" class="text-center text-muted-2 py-3">
+               No past forecasts yet. Generate one above and it will appear here.
+             </td></tr>`);
+          return;
+        }
+        json.data.forEach(f => {
+          const actual   = f.actual === null || f.actual === undefined ? '&mdash;' : f.actual;
+          const accuracy = f.accuracy === null || f.accuracy === undefined
+                             ? '<span class="text-muted-2">pending</span>'
+                             : `<span class="badge b-success">${f.accuracy}%</span>`;
+          tb.insertAdjacentHTML('beforeend', `<tr>
+            <td class="fw-id">${f.id}</td>
+            <td class="fw-medium">${f.material}</td>
+            <td>${f.month}</td>
+            <td class="text-end">${f.predicted}</td>
+            <td class="text-end">${actual}</td>
+            <td class="text-center">${accuracy}</td></tr>`);
+        });
+      } catch (e) {
+        tb.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">
+                          Could not load prediction history.
+                        </td></tr>`;
+      }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
       if (typeof FORECAST_UPDATED !== 'undefined') {
         const u = document.getElementById('fcUpdated'); if (u) u.textContent = FORECAST_UPDATED;
       }
-      const tb = document.getElementById('fcHistBody');
-      FORECAST_HISTORY.forEach(f => {
-        tb.insertAdjacentHTML('beforeend', `<tr>
-          <td class="fw-id">${f.id}</td><td class="fw-medium">${f.material}</td>
-          <td>${f.month}</td><td class="text-end">${f.predicted}</td>
-          <td class="text-end">${f.actual}</td>
-          <td class="text-center"><span class="badge b-success">${f.conf}</span></td></tr>`);
-      });
+      window.reloadForecastHistory();
     });
   </script>
 </body>

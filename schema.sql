@@ -6,7 +6,7 @@
 -- =================================================================
 
 DROP TABLE IF EXISTS audit_logs, model_metrics, forecast_results,
-                     monthly_demand, stock_movements, transactions,
+                     monthly_weather, monthly_demand, stock_movements, transactions,
                      projects, customers, employees, materials, users CASCADE;
 
 -- ---- D1: User Records -------------------------------------------
@@ -119,6 +119,19 @@ CREATE TABLE monthly_demand (
     inventory_value    NUMERIC(14,2) NOT NULL DEFAULT 0,
     active_projects    INT           NOT NULL DEFAULT 0,
     CONSTRAINT uq_monthly_demand UNIQUE (material_id, period_month)
+);
+
+-- ---- D8: Monthly Weather Records ---------------------------------
+CREATE TABLE monthly_weather (
+    id                 SERIAL PRIMARY KEY,
+    period_month       DATE NOT NULL,
+    location           VARCHAR(100) NOT NULL DEFAULT 'Lipa City, Batangas, PH',
+    avg_temp_c         NUMERIC(5,2),
+    total_rainfall_mm  NUMERIC(8,2),
+    rainy_days         INT,
+    max_wind_kmh       NUMERIC(6,2),
+    fetched_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_monthly_weather UNIQUE (period_month, location)
 );
 
 -- ---- D5: Forecast Records ---------------------------------------

@@ -565,8 +565,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const showError = (msg) => {
       ['fcResPredicted','fcResMonth','fcResStock','fcResTrend','fcResConf',
-       'fcMAE','fcRMSE','fcMAPE','fcR2'].forEach(id => set(id, '—'));
+       'fcMAE','fcRMSE','fcMAPE','fcR2',
+       'fcWxTemp','fcWxRain','fcWxDays','fcWxIndex','fcWxSource'].forEach(id => set(id, '—'));
       setHTML('fcResReorder', `<span class="text-danger fw-semibold">${msg}</span>`);
+      setHTML('fcWxInsight', '—');
+      const bar = document.getElementById('fcWxBar');
+      if (bar) bar.style.width = '0%';
+      const badge = document.getElementById('fcWxBadge');
+      if (badge) { badge.textContent = '—'; badge.className = 'badge'; }
     };
 
     const render = (name) => {
@@ -599,8 +605,56 @@ document.addEventListener('DOMContentLoaded', () => {
         ? `Restock about <strong>${f.reorder_qty} ${f.unit}</strong> before ${RESULT.forecast_month} to meet the predicted demand.`
         : `Current stock is sufficient for the predicted demand in ${RESULT.forecast_month}. No restock needed yet.`);
 
+      // Weather Outlook panel -- forecast-month conditions plus THIS material's
+      // own weather->demand relationship (from its per-material MLR fit).
+      const wx = RESULT.weather;
+      if (wx) {
+        set('fcWxTemp',   wx.avg_temp_c + '°C');
+        set('fcWxRain',   wx.total_rainfall_mm + ' mm');
+        set('fcWxDays',   wx.rainy_days + ' days');
+        set('fcWxIndex',  wx.favorability_index + ' / 100 — ' + wx.favorability_label);
+        set('fcWxSource', wx.source);
+
+        let insightHTML = f.weather_insight || '—';
+        if (f.sample_size_warning) {
+          insightHTML += ` <span class="text-warning-emphasis">` +
+                         `(Based on only ${f.training_rows} months of history — ` +
+                         `treat this coefficient as tentative until more data accumulates.)</span>`;
+        }
+        if (f.model_type === 'pooled fallback') {
+          insightHTML = `<div class="mb-1"><span class="badge b-warning">Pooled fallback</span> ` +
+                        `Not enough history for a material-specific model yet.</div>` + insightHTML;
+        }
+        setHTML('fcWxInsight', insightHTML);
+
+        const bar = document.getElementById('fcWxBar');
+        if (bar) {
+          bar.style.width = wx.favorability_index + '%';
+          bar.className = 'progress-bar ' + (
+            wx.favorability_label === 'Favorable'   ? 'bg-success' :
+            wx.favorability_label === 'Moderate'    ? 'bg-warning' : 'bg-danger'
+          );
+        }
+        const badge = document.getElementById('fcWxBadge');
+        if (badge) {
+          badge.textContent = wx.favorability_label;
+          badge.className = 'badge ' + (
+            wx.favorability_label === 'Favorable'   ? 'b-success' :
+            wx.favorability_label === 'Moderate'    ? 'b-warning' : 'b-danger'
+          );
+        }
+      }
+
+      // Repaint the three forecasting charts with the selected material's real
+      // history from the DB (last 6 months), plus the MLR-predicted dot.
+      const history = f.history || [];
+      const fcLabel = f.forecast_label || RESULT.forecast_month;
       if (typeof window.updateForecastChart === 'function')
-        window.updateForecastChart(f.predicted_demand);
+        window.updateForecastChart(history, fcLabel, f.predicted_demand);
+      if (typeof window.updateHistoricalChart === 'function')
+        window.updateHistoricalChart(history);
+      if (typeof window.updateInventoryChart === 'function')
+        window.updateInventoryChart(history);
     };
 
     const runForecast = async () => {
@@ -627,6 +681,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (RESULT.forecasts.some(f => f.material_name === chosen)) fcSelect.value = chosen;
 
         render(fcSelect.value);
+
+        // Newly saved forecast rows should show up immediately in the
+        // Prediction History table below.
+        if (typeof window.reloadForecastHistory === 'function')
+          window.reloadForecastHistory();
       } catch (err) {
         showError(err.message);
       } finally {

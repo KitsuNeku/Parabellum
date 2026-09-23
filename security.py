@@ -69,9 +69,14 @@ CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 CSP = (
     "default-src 'self'; "
     "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
-    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    # fonts.googleapis.com serves the actual @font-face CSS (style-src);
+    # fonts.gstatic.com serves the woff2 font files it points to
+    # (font-src). Every page in this app loads Poppins from Google
+    # Fonts, so both need to be allowlisted or the stylesheet itself
+    # gets blocked outright (not just the fonts it references).
+    "style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; "
     "img-src 'self' data:; "
-    "font-src 'self' https://cdn.jsdelivr.net data:; "
+    "font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com data:; "
     "connect-src 'self'; "
     "frame-ancestors 'none'; "
     "form-action 'self'; "

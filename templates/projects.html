@@ -138,7 +138,6 @@
           <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
             <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
             <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
-            <li><a class="dropdown-item py-2" href="#"><i class="bi bi-shield-lock me-2"></i>Security</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
           </ul>
@@ -183,9 +182,9 @@
       <div class="card"><div class="card-body">
         <div class="toolbar">
           <div class="search-box"><i class="bi bi-search"></i>
-            <input type="text" class="form-control" placeholder="Search project or customer…" data-table-search="#projTable"></div>
-          <select class="form-select" style="max-width:170px" data-filter-target="#projTable" data-filter-col="4"><option value="">All Status</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select>
-          <select class="form-select" style="max-width:160px" data-filter-target="#projTable" data-filter-col="5"><option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option></select>
+            <input type="text" class="form-control" id="projSearchInput" placeholder="Search project or customer…"></div>
+          <select class="form-select" style="max-width:170px" id="projStatusFilter"><option value="">All Status</option><option>In Progress</option><option>Completed</option><option>On Hold</option></select>
+          <select class="form-select" style="max-width:160px" id="projPriorityFilter"><option value="">All Priority</option><option>High</option><option>Medium</option><option>Low</option></select>
           <div class="ms-auto d-flex gap-2 align-items-center">
             <div class="btn-group btn-group-sm seg-toggle" id="projViewToggle" role="group" aria-label="View mode">
               <button type="button" class="btn active" data-view="table" data-bs-toggle="tooltip" title="Table view"><i class="bi bi-list-ul"></i></button>
@@ -206,6 +205,11 @@
         <!-- Gallery view -->
         <div id="projGalleryView" class="d-none">
           <div class="row g-3" id="projGallery"></div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <span class="small text-muted-2" id="projCount"></span>
+          <nav id="projPaginationNav"><ul class="pagination" id="projPagination"></ul></nav>
         </div>
       </div></div>
 
@@ -247,25 +251,112 @@
       const projForm  = document.getElementById('projForm');
       const projModal = new bootstrap.Modal('#addProjModal');
 
+      const PROJ_PAGE_SIZE = 10;
+      let projCurrentPage = 1;
+      let projSearchQuery = '';
+      let projStatusFilterVal = '';
+      let projPriorityFilterVal = '';
+
+      // Data-level search/filter (not the generic DOM-hiding kind) - needed
+      // because pagination only puts the CURRENT page's rows in the DOM, so
+      // a search that only hides/shows existing <tr> elements could never
+      // find a match sitting on a different page. This filters the real
+      // underlying list first, THEN paginates the result.
+      const searchInput    = document.getElementById('projSearchInput');
+      const statusFilterEl = document.getElementById('projStatusFilter');
+      const priorityFilterEl = document.getElementById('projPriorityFilter');
+      searchInput?.addEventListener('input', () => {
+        projSearchQuery = searchInput.value.toLowerCase().trim();
+        projCurrentPage = 1;
+        renderProjects();
+      });
+      statusFilterEl?.addEventListener('change', () => {
+        projStatusFilterVal = statusFilterEl.value;
+        projCurrentPage = 1;
+        renderProjects();
+      });
+      priorityFilterEl?.addEventListener('change', () => {
+        projPriorityFilterVal = priorityFilterEl.value;
+        projCurrentPage = 1;
+        renderProjects();
+      });
+
       /* Customer & personnel dropdowns come from the same relational data (FK ids as values). */
       document.getElementById('projCustSelect').innerHTML = '<option value="">Select…</option>' +
         CUSTOMERS.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
       document.getElementById('projStaffSelect').innerHTML =
         EMPLOYEES.map(e2 => `<option value="${e2.id}">${escapeHTML(e2.name)}</option>`).join('');
 
+      function renderProjPaginationControls(totalItems){
+        const totalPages = Math.max(1, Math.ceil(totalItems / PROJ_PAGE_SIZE));
+        if (projCurrentPage > totalPages) projCurrentPage = totalPages;
+        const nav = document.getElementById('projPaginationNav');
+        const ul  = document.getElementById('projPagination');
+        if (!nav || !ul) return;
+        if (totalPages <= 1) { nav.style.display = 'none'; return; }
+        nav.style.display = '';
+        const pageLink = (label, page, opts = {}) => `
+          <li class="page-item ${opts.active ? 'active' : ''} ${opts.disabled ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${page}">${label}</a>
+          </li>`;
+        let html = pageLink('<i class="bi bi-chevron-left"></i>', projCurrentPage - 1, { disabled: projCurrentPage === 1 });
+        buildPageWindow(projCurrentPage, totalPages).forEach(p => {
+          if (p === '\u2026') html += `<li class="page-item disabled"><span class="page-link">\u2026</span></li>`;
+          else html += pageLink(p, p, { active: p === projCurrentPage });
+        });
+        html += pageLink('Next <i class="bi bi-chevron-right ms-1"></i>', projCurrentPage + 1, { disabled: projCurrentPage === totalPages });
+        ul.innerHTML = html;
+      }
+
+      document.getElementById('projPagination')?.addEventListener('click', (e) => {
+        const link = e.target.closest('[data-page]');
+        if (!link || link.closest('.disabled')) return;
+        e.preventDefault();
+        const page = parseInt(link.dataset.page, 10);
+        if (!page || page === projCurrentPage) return;
+        projCurrentPage = page;
+        renderProjects();
+        // Jump back to the top of the list so paging doesn't leave the
+        // user scrolled past content that just changed underneath them.
+        document.getElementById('projTableView')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
       /* Renders BOTH views from the same array so they always stay in sync. */
       function renderProjects(){
-        const list = projectStore.all();
+        const fullList = projectStore.all();
         const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-        const totalBudget = list.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
+        const totalBudget = fullList.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
         const compactPeso = (n) => n >= 1e6 ? `\u20b1${(n/1e6).toFixed(1)}M`
                                  : n >= 1e3 ? `\u20b1${(n/1e3).toFixed(1)}K` : PESO(n);
-        setStat('projStatTotal', list.length);
-        setStat('projStatActive', list.filter(p => p.status === 'In Progress').length);
-        setStat('projStatHold', list.filter(p => p.status !== 'In Progress' && p.status !== 'Completed').length);
+        // KPI cards always summarize the FULL portfolio, not the filtered view.
+        setStat('projStatTotal', fullList.length);
+        setStat('projStatActive', fullList.filter(p => p.status === 'In Progress').length);
+        setStat('projStatHold', fullList.filter(p => p.status !== 'In Progress' && p.status !== 'Completed').length);
         setStat('projStatBudget', compactPeso(totalBudget));
+
+        // The table/gallery/pagination, on the other hand, reflect the
+        // current search + status + priority filters.
+        const list = fullList.filter(p => {
+          if (projStatusFilterVal && p.status !== projStatusFilterVal) return false;
+          if (projPriorityFilterVal && p.priority !== projPriorityFilterVal) return false;
+          if (projSearchQuery) {
+            const hay = `${p.id} ${p.name} ${p.cust}`.toLowerCase();
+            if (!hay.includes(projSearchQuery)) return false;
+          }
+          return true;
+        });
+
+        const start = (projCurrentPage - 1) * PROJ_PAGE_SIZE;
+        const pageItems = list.slice(start, start + PROJ_PAGE_SIZE);
+
         tb.innerHTML = ''; gal.innerHTML = '';
-        list.forEach(p => {
+        if (pageItems.length === 0) {
+          tb.insertAdjacentHTML('beforeend', `<tr><td colspan="9" class="text-center text-muted-2 py-4">
+            No projects match your search or filters.</td></tr>`);
+          gal.insertAdjacentHTML('beforeend', `<div class="col-12 text-center text-muted-2 py-4">
+            No projects match your search or filters.</div>`);
+        }
+        pageItems.forEach(p => {
           tb.insertAdjacentHTML('beforeend', `<tr>
             <td class="fw-id">${p.id}</td><td class="fw-medium">${escapeHTML(p.name)}</td><td>${escapeHTML(p.cust)}</td>
             <td class="text-muted-2">${escapeHTML(p.staff)}</td><td>${projStatusBadge(p.status)}</td>
@@ -290,7 +381,20 @@
             </div>`);
         });
         initTooltips(tb); initTooltips(gal);
+        const countEl = document.getElementById('projCount');
+        if (countEl) {
+          countEl.textContent = pageItems.length === list.length
+            ? `Showing ${list.length} project${list.length===1?'':'s'}`
+            : `Showing ${start+1}\u2013${start+pageItems.length} of ${list.length} projects`;
+        }
+        renderProjPaginationControls(list.length);
       }
+      // app.js's wireEntityPage() calls window.renderProjects() after a
+      // successful server save so the table reflects the real saved row
+      // (with its server-assigned id). renderProjects is defined inside
+      // this closure, so without this line window.renderProjects would
+      // stay undefined and the post-save refresh would silently no-op.
+      window.renderProjects = renderProjects;
 
       function openEdit(p){
         projForm.setAttribute('data-edit-id', p.id);

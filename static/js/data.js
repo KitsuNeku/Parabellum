@@ -224,3 +224,16 @@ const customerStore    = makeStore(CUSTOMERS);
 const projectStore     = makeStore(PROJECTS);
 const transactionStore = makeStore(TRANSACTIONS, 'inv');
 const userStore        = makeStore(USERS);
+
+/* app.js's wireEntityPage() looks these up dynamically by name via
+ window[cfg.arrayName] / window[cfg.storeName] so one generic function
+ can wire up multiple entity pages. Top-level `const` creates a global
+ BINDING but does NOT create a `window` PROPERTY (unlike `var` or a
+ function declaration) - so without these explicit assignments,
+ wireEntityPage's `typeof window[...] === 'undefined'` guard is always
+ true and it silently never attaches, meaning Add/Edit never reaches
+ the server at all. This is the fix for that. */
+window.PROJECTS      = PROJECTS;
+window.CUSTOMERS     = CUSTOMERS;
+window.projectStore  = projectStore;
+window.customerStore = customerStore;

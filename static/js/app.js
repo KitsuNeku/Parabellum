@@ -409,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const json = await res.json();
         if (!json.ok) return;
         arr.length = 0;
-        json.data.forEach(r => arr.push(r));
+        json.data.forEach(r => arr.push(cfg.mapRow ? cfg.mapRow(r) : r));
         if (typeof window[cfg.renderName] === 'function') window[cfg.renderName]();
       } catch (_) {}
     };
@@ -467,6 +467,12 @@ document.addEventListener('DOMContentLoaded', () => {
     renderName: 'renderProjects', formSelector: '[data-entity="projects"]',
     listUrl: '/api/projects', saveUrl: '/api/projects/save',
     deleteUrl: '/api/projects/delete', successMsg: 'Project saved',
+    // /api/projects returns custId/staffId as raw codes (e.g. "CUS-201",
+    // "EMP-01"); renderProjects() displays resolved names (p.cust, p.staff).
+    // custName()/staffName() (data.js) look those up from the live
+    // CUSTOMERS/EMPLOYEES arrays. Falls back to the raw code if the
+    // customer/employee list hasn't loaded yet (self-corrects on next render).
+    mapRow: (r) => ({ ...r, cust: custName(r.custId), staff: staffName(r.staffId) }),
   });
 
   // On the projects page, fill the Customer dropdown from the REAL customer

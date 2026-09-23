@@ -2,6 +2,56 @@
  PARABELLUM ISOS - App Interactivity (vanilla JS)
  ===================================================================== */
 
+/* ------ Security helpers ---------------------------------------------
+ esc(s)         - HTML-escape user-controlled strings before dropping
+                  them into innerHTML / insertAdjacentHTML. Prevents
+                  stored XSS via names / notes an admin could set.
+ window.fetch   - Overridden below so every state-changing (POST / PUT /
+                  PATCH / DELETE) call to /api/* automatically carries
+                  the X-CSRF-Token header from the csrf_token cookie.
+                  Existing call sites don't have to change; the wrapper
+                  is transparent for GET requests and non-/api/ calls.
+ -------------------------------------------------------------------- */
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+(function wrapFetchForCSRF() {
+  const _fetch = window.fetch.bind(window);
+  const UNSAFE = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+  function readCookie(name) {
+    const parts = document.cookie ? document.cookie.split("; ") : [];
+    for (const p of parts) {
+      const eq = p.indexOf("=");
+      if (eq > 0 && p.slice(0, eq) === name) {
+        return decodeURIComponent(p.slice(eq + 1));
+      }
+    }
+    return "";
+  }
+
+  window.fetch = function (input, init) {
+    init = init || {};
+    const method = (init.method || (typeof input === "string" ? "GET" : (input.method || "GET"))).toUpperCase();
+    const url = typeof input === "string" ? input : (input.url || "");
+    if (UNSAFE.has(method) && url.startsWith("/api/")) {
+      const token = readCookie("csrf_token");
+      if (token) {
+        init.headers = new Headers(init.headers || {});
+        if (!init.headers.has("X-CSRF-Token")) init.headers.set("X-CSRF-Token", token);
+      }
+    }
+    return _fetch(input, init);
+  };
+})();
+
 /* Shared by every page with a paginated table (inventory, transactions,
  etc.) - a proper "windowed" page list instead of
  rendering a button for every single page. With hundreds of records
@@ -426,7 +476,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/api/customers').then(r => r.json()).then(json => {
       if (!json.ok) return;
       projCustSelect.innerHTML = '<option value="">Select…</option>' +
-        json.data.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        json.data.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     }).catch(() => {});
   }
 
@@ -460,9 +510,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }).catch(() => {});
     };
     fillSelect('txnCustSelect', '/api/customers',
-      c => `<option value="${c.id}">${c.name}</option>`, 'Select…');
+      c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`, 'Select…');
     fillSelect('txnProjSelect', '/api/projects',
-      p => `<option value="${p.id}">${p.id} — ${p.name}</option>`, 'None');
+      p => `<option value="${esc(p.id)}">${esc(p.id)} — ${esc(p.name)}</option>`, 'None');
     fillSelect('txnMatSelect', '/api/inventory',
       m => `<option value="${m.name}" data-price="${m.price}">${m.name}</option>`, 'Select…');
 

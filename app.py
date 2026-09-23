@@ -21,13 +21,14 @@ Setup order:
 """
 
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
-from config import DB_CONFIG, SECRET_KEY, DEBUG
+from config import DB_CONFIG, SECRET_KEY, DEBUG, AUTO_RETRAIN_ENABLED, AUTO_RETRAIN_HOUR, AUTO_AGGREGATE_BEFORE_RETRAIN
 from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history
 import weather_api
 import requests
+import scheduler as retrain_scheduler
 from auth import verify_login, login_required, permission_required, ROLE_PERMISSIONS, hash_password
 from security import apply_security
 
@@ -45,6 +46,28 @@ def _user_context():
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+
+# ProxyFix: makes Flask trust X-Forwarded-For / X-Forwarded-Proto from a
+# reverse proxy in front of this app (nginx, Caddy, Cloudflare, a hosting
+# platform's load balancer). Without this, EVERY request looks like it
+# came from the proxy's own IP -- which silently breaks two things that
+# matter for security: per-IP rate limiting (every user shares one
+# limit) and the IP address recorded in audit_logs (useless for
+# incident investigation if it's always the proxy).
+#
+# OPT-IN ON PURPOSE: trusting X-Forwarded-For when there is NO real
+# reverse proxy in front lets any client set that header themselves and
+# spoof an arbitrary IP -- trivially bypassing rate limits and forging
+# what shows up in the audit trail. Only set TRUST_PROXY=1 when you have
+# confirmed a reverse proxy (not the raw internet) is the only thing
+# that can reach this Flask process directly.
+if os.getenv("TRUST_PROXY", "0") == "1":
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    # x_for=1, x_proto=1: trust exactly ONE hop of X-Forwarded-For /
+    # X-Forwarded-Proto (i.e. exactly one reverse proxy between the
+    # client and this app). Raise these only if you deliberately chain
+    # more than one proxy.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 # Apply defense-in-depth measures - headers, rate limiting, request size
 # caps, session hygiene. See security.py for the full list and honest
@@ -134,6 +157,7 @@ def api_login():
 
     session.clear()
     session["user"] = user
+    session["login_at"] = datetime.now(timezone.utc).isoformat()
     session.permanent = True
     return jsonify({"ok": True, "data": user})
 
@@ -893,6 +917,36 @@ from werkzeug.utils import secure_filename
 ALLOWED_AVATAR_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
 AVATAR_DIR = _os.path.join(app.root_path, "static", "uploads", "avatars")
 
+# Magic-byte signatures for the allowed types. An extension check alone
+# only looks at the filename the client CLAIMS -- nothing stops someone
+# from uploading arbitrary content (an HTML/JS payload, an executable)
+# with a ".png" name. Checking the actual file header closes that gap:
+# the browser/OS still trusts the file's real content type, not its name.
+_AVATAR_MAGIC_BYTES = {
+    "png":  [b"\x89PNG\r\n\x1a\n"],
+    "jpg":  [b"\xff\xd8\xff"],
+    "jpeg": [b"\xff\xd8\xff"],
+    "gif":  [b"GIF87a", b"GIF89a"],
+    "webp": [b"RIFF"],   # WEBP also needs "WEBP" at bytes 8-12, checked below
+}
+
+
+def _content_matches_extension(file_storage, ext):
+    """Read a small header chunk and check it against the claimed extension's
+    magic bytes. Restores the file's read position afterward so .save() still
+    works. Returns True only if the content genuinely looks like that type."""
+    header = file_storage.stream.read(16)
+    file_storage.stream.seek(0)
+    if not header:
+        return False
+    signatures = _AVATAR_MAGIC_BYTES.get(ext, [])
+    if not any(header.startswith(sig) for sig in signatures):
+        return False
+    if ext == "webp":
+        # RIFF is a generic container; confirm the WEBP fourcc too.
+        return len(header) >= 12 and header[8:12] == b"WEBP"
+    return True
+
 
 @app.route("/api/profile/avatar", methods=["POST"])
 @login_required
@@ -904,6 +958,12 @@ def api_profile_avatar():
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ALLOWED_AVATAR_EXTS:
         return jsonify({"ok": False, "error": "Only PNG, JPG, GIF, or WEBP images are allowed."}), 400
+
+    if not _content_matches_extension(file, ext):
+        log_audit(DB_CONFIG, "AVATAR_REJECTED",
+                  f"Uploaded file's content did not match its .{ext} extension.",
+                  session.get("user", {}).get("username", "unknown"))
+        return jsonify({"ok": False, "error": "That file doesn't look like a valid image. Please upload a real PNG, JPG, GIF, or WEBP."}), 400
 
     # Flask already caps the whole request body at MAX_CONTENT_LENGTH (see
     # security.py) - this just gives a clearer, specific error message for
@@ -1137,7 +1197,51 @@ def api_weather_sync():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
+@app.route("/api/scheduler/status")
+@permission_required("forecasting")
+def api_scheduler_status():
+    """
+    Whether nightly auto-retraining is on, when it next fires, and how
+    the last run went. Surface this on the forecasting page so a demo
+    can point at it: "the system will retrain itself tonight without
+    anyone touching it."
+    """
+    return jsonify({"ok": True, "data": retrain_scheduler.get_status()})
+
+
+@app.route("/api/scheduler/retrain_now", methods=["POST"])
+@permission_required("forecasting")
+@limiter.limit("6 per hour")
+def api_scheduler_retrain_now():
+    """
+    Manually fire the SAME job the nightly scheduler runs, on demand -
+    useful for a live defense demo ("watch it retrain right now")
+    without waiting for 2am. Distinct from POST /api/forecast only in
+    that it goes through scheduler.run_once (so it updates the
+    scheduler's last-run status and logs as SCHEDULED_RETRAIN rather
+    than a plain manual run) and optionally re-aggregates first.
+    """
+    payload = request.get_json(silent=True) or {}
+    also_aggregate = bool(payload.get("aggregate_first", False)) and AUTO_AGGREGATE_BEFORE_RETRAIN
+    ok, message = retrain_scheduler.run_once(DB_CONFIG, auto_aggregate=also_aggregate)
+    status_code = 200 if ok else 500
+    return jsonify({"ok": ok, "message": message}), status_code
+
+
 if __name__ == "__main__":
+    # Start the nightly auto-retrain scheduler exactly once. Flask's
+    # debug-mode reloader spawns a child process and re-executes this
+    # module in it - without this guard, debug mode would start TWO
+    # competing schedulers. WERKZEUG_RUN_MAIN is only set in that child
+    # process, so this correctly starts the scheduler once whether
+    # DEBUG is on or off.
+    if AUTO_RETRAIN_ENABLED and (not DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true"):
+        retrain_scheduler.start(
+            DB_CONFIG,
+            hour=AUTO_RETRAIN_HOUR,
+            auto_aggregate=AUTO_AGGREGATE_BEFORE_RETRAIN,
+        )
+
     # debug=True must never be used once the app is reachable by anyone
     # other than you - it exposes an interactive code console on errors.
     app.run(host="0.0.0.0", port=5000, debug=DEBUG)

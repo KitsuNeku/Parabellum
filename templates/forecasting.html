@@ -164,6 +164,7 @@
             <p class="mb-0 text-muted-2">The system studies past inventory usage, client transactions, current stock, and active projects to estimate how much material will be needed next month — so you can restock before you run short.</p>
           </div>
           <span class="badge b-neutral align-self-center"><i class="bi bi-clock-history me-1"></i>Updated <span id="fcUpdated">—</span></span>
+          <span class="badge b-neutral align-self-center" id="fcSchedBadge" title="Automatic nightly retraining"><i class="bi bi-arrow-repeat me-1"></i>Next auto-retrain: <span id="fcSchedNext">—</span></span>
         </div>
       </div>
 
@@ -316,15 +317,15 @@
           return;
         }
         json.data.forEach(f => {
-          const actual   = f.actual === null || f.actual === undefined ? '&mdash;' : f.actual;
+          const actual   = f.actual === null || f.actual === undefined ? '&mdash;' : esc(f.actual);
           const accuracy = f.accuracy === null || f.accuracy === undefined
                              ? '<span class="text-muted-2">pending</span>'
-                             : `<span class="badge b-success">${f.accuracy}%</span>`;
+                             : `<span class="badge b-success">${esc(f.accuracy)}%</span>`;
           tb.insertAdjacentHTML('beforeend', `<tr>
-            <td class="fw-id">${f.id}</td>
-            <td class="fw-medium">${f.material}</td>
-            <td>${f.month}</td>
-            <td class="text-end">${f.predicted}</td>
+            <td class="fw-id">${esc(f.id)}</td>
+            <td class="fw-medium">${esc(f.material)}</td>
+            <td>${esc(f.month)}</td>
+            <td class="text-end">${esc(f.predicted)}</td>
             <td class="text-end">${actual}</td>
             <td class="text-center">${accuracy}</td></tr>`);
         });
@@ -335,11 +336,33 @@
       }
     };
 
+    window.reloadSchedulerStatus = async () => {
+      const el = document.getElementById('fcSchedNext');
+      if (!el) return;
+      try {
+        const res  = await fetch('/api/scheduler/status');
+        const json = await res.json();
+        if (!json.ok || !json.data.enabled) { el.textContent = 'disabled'; return; }
+        const next = json.data.next_run_at
+          ? new Date(json.data.next_run_at).toLocaleString([], { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+          : 'pending';
+        el.textContent = next;
+        const badge = document.getElementById('fcSchedBadge');
+        if (badge && json.data.last_status === 'failed') {
+          badge.classList.add('b-warning');
+          badge.title = 'Last automatic retrain failed: ' + (json.data.last_message || '');
+        }
+      } catch (e) {
+        el.textContent = 'unavailable';
+      }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
       if (typeof FORECAST_UPDATED !== 'undefined') {
         const u = document.getElementById('fcUpdated'); if (u) u.textContent = FORECAST_UPDATED;
       }
       window.reloadForecastHistory();
+      window.reloadSchedulerStatus();
     });
   </script>
 </body>

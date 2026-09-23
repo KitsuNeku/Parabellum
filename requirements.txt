@@ -20,3 +20,6 @@ reportlab==4.4.10
 openpyxl==3.1.5
 # Used by weather_api.py to call Open-Meteo's Historical Weather API.
 requests>=2.31.0
+# Used by scheduler.py to run the nightly automatic retrain job inside
+# the Flask process (no external cron needed for a single-process deploy).
+APScheduler>=3.10.4

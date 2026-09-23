@@ -22,6 +22,7 @@ What this gives you:
 
 from functools import wraps
 from datetime import datetime, timedelta, timezone
+import secrets
 
 from flask import session, jsonify, redirect, url_for, request
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,6 +31,65 @@ from mlr_model import execute_query, log_audit
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
+
+# Absolute session lifetime -- separate from the 30-minute IDLE timeout
+# (PERMANENT_SESSION_LIFETIME in app.py, refreshed on every request).
+# Without this, a session that's used continuously never expires. This
+# forces re-authentication at least once every 12 hours no matter how
+# active the user is -- a real cap on how long a stolen/left-open
+# session cookie stays useful to an attacker.
+ABSOLUTE_SESSION_HOURS = 12
+
+
+def _session_expired():
+    """True if the current session has outlived ABSOLUTE_SESSION_HOURS
+    since login, regardless of recent activity."""
+    login_at = session.get("login_at")
+    if not login_at:
+        # No timestamp recorded (e.g. a session from before this feature
+        # existed) -- treat as expired so it re-authenticates and picks
+        # up a fresh timestamp, rather than trusting it indefinitely.
+        return True
+    try:
+        login_dt = datetime.fromisoformat(login_at)
+    except (TypeError, ValueError):
+        return True
+    if login_dt.tzinfo is None:
+        login_dt = login_dt.replace(tzinfo=timezone.utc)
+    return (_now() - login_dt) > timedelta(hours=ABSOLUTE_SESSION_HOURS)
+
+# Minimum password length. 12 is the NIST recommended floor for
+# human-set passwords when combined with lockout + hashing. Longer is
+# better but shorter is a real vulnerability (8-char passwords fall to
+# offline attack in hours if the hash ever leaks).
+MIN_PASSWORD_LENGTH = 12
+
+
+def validate_password_strength(plain_password):
+    """
+    Raise ValueError with a user-facing message if the password is too
+    weak to accept. Called by both the login/password-change flow AND
+    by hash_password itself as a safety net.
+    """
+    if not isinstance(plain_password, str):
+        raise ValueError("Password must be a string.")
+    if len(plain_password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+        )
+    # Reject the most common structural weaknesses: whitespace-only or a
+    # single repeated character. Full password-blacklist checks belong in
+    # a dedicated service (e.g. HaveIBeenPwned's k-anonymity API) if you
+    # want to add that later.
+    if plain_password.strip() == "":
+        raise ValueError("Password cannot be whitespace only.")
+    if len(set(plain_password)) < 3:
+        raise ValueError("Password is too repetitive (uses fewer than 3 unique characters).")
+
+
+def hash_password(plain_password):
+    validate_password_strength(plain_password)
+    return generate_password_hash(plain_password)
 
 # Mirrors ROLE_PERMISSIONS in static/js/data.js. The frontend list only
 # controls what a user SEES; this dict controls what the backend actually
@@ -53,12 +113,17 @@ API_PERMISSION = {
 }
 
 
-def hash_password(plain_password):
-    return generate_password_hash(plain_password)
-
-
 def _now():
     return datetime.now(timezone.utc)
+
+
+# A fixed, valid password hash with no corresponding real password. Used
+# to burn the same amount of CPU time on an unknown-username login as a
+# real password check would take, so response TIMING doesn't leak
+# whether a username exists (on top of the error message already being
+# identical). Generated once and hardcoded -- it verifies against
+# nothing, which is exactly the point.
+_DUMMY_HASH = generate_password_hash(secrets.token_urlsafe(32))
 
 
 def verify_login(db_config, username, plain_password):
@@ -82,6 +147,12 @@ def verify_login(db_config, username, plain_password):
     generic_error = "Invalid username or password."
 
     if not user:
+        # Run a real (but pointless) hash comparison anyway, so this
+        # branch takes about the same time as the "wrong password"
+        # branch below. Without this, an unknown username returns
+        # measurably faster than a known one, which is itself an
+        # enumeration channel even though the error text is identical.
+        check_password_hash(_DUMMY_HASH, plain_password)
         log_audit(db_config, "LOGIN_FAILED", f"Unknown username '{username}'.")
         return None, generic_error
 
@@ -138,10 +209,12 @@ def verify_login(db_config, username, plain_password):
 
 
 def login_required(view):
-    """Blocks the route entirely unless a session exists. Applies to pages and APIs."""
+    """Blocks the route entirely unless a session exists AND hasn't
+    exceeded the absolute lifetime. Applies to pages and APIs."""
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if "user" not in session:
+        if "user" not in session or _session_expired():
+            session.clear()
             if request.path.startswith("/api/"):
                 return jsonify({"ok": False, "error": "Not signed in."}), 401
             return redirect(url_for("login"))
@@ -158,7 +231,8 @@ def permission_required(key):
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
-            if "user" not in session:
+            if "user" not in session or _session_expired():
+                session.clear()
                 if request.path.startswith("/api/"):
                     return jsonify({"ok": False, "error": "Not signed in."}), 401
                 return redirect(url_for("login"))

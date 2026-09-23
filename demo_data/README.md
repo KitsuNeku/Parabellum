@@ -68,6 +68,14 @@ SQL Editor.
   `POST /api/aggregate` after either of them — that endpoint TRUNCATEs
   `monthly_demand` and rebuilds it from `stock_movements`, erasing
   everything. Only hit `POST /api/forecast`.
+- **If you've enabled automatic nightly retraining** (see
+  `config.AUTO_RETRAIN_ENABLED`), the same rule applies to
+  `config.AUTO_AGGREGATE_BEFORE_RETRAIN`: leave it at its default
+  (`0`/off) while you're using any of these demo loaders, or the
+  nightly job will silently wipe this data the same way a manual
+  `/api/aggregate` call would. It's safe to leave the nightly retrain
+  itself ON — it only re-runs `run_forecast`, which reads
+  `monthly_demand` without modifying it.
 - Loader #3 writes to `stock_movements`. You DO need
   `POST /api/aggregate` after it, to build the monthly panel.
 - For loader #1 (blended 3-year), also run

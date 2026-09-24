@@ -61,6 +61,33 @@ SQL Editor.
   it `real` or `synthetic`. This is your audit answer for anyone who asks
   "where did that number come from?"
 
+## Utility scripts (unrelated to MLR training data)
+
+### `fix_project_budgets.sql`
+
+`seed_data.py` originally generated project budgets between PHP
+400,000 and 3,500,000 — reasonable for a large contractor, not for a
+small aluminum/glass fabrication shop. This script re-randomizes every
+existing project's `budget` to a realistic PHP 8,000–60,000 range, done
+server-side in Postgres so it works regardless of how many projects
+exist or what their current values are. Safe to re-run — it only
+touches the `budget` column. `seed_data.py` itself has also been fixed
+so any future re-seed already generates realistic values from the start.
+
+### `fix_transaction_totals.sql`
+
+Same class of problem, different table: `seed_data.py` picked each
+transaction's quantity independently of the material's real unit
+price, so a big-ticket material (e.g. an PHP 8,900 H-Beam) times a
+random 5–120 unit quantity could produce a VAT-inclusive total in the
+hundreds of thousands. This script recalculates `quantity` (and the
+matching `amount` column) ONLY for transactions whose total currently
+exceeds PHP 50,000, scaling quantity down to a realistic purchase size
+for that material's real unit price — transactions already under the
+cap are left untouched. `seed_data.py` has also been fixed so future
+transactions are generated from a realistic target-total range instead
+of an independent random quantity.
+
 ## Operational notes
 
 - **Only run ONE** of the three SQL files.

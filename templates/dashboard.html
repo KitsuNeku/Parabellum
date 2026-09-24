@@ -255,8 +255,13 @@
   <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      /* KPI values derive from live data - no hardcoded counts. */
+    /* KPI values derive from live data - no hardcoded counts. Wrapped in
+     a named, window-exposed function (not just an inline DOMContentLoaded
+     block) so app.js's real-data fetch can call this AGAIN once the real
+     PROJECTS/TRANSACTIONS/INVENTORY arrays replace the sample ones -
+     same pattern as renderInventory/renderTransactions/renderProjects on
+     their own pages. */
+    function renderDashboard(){
       const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
       set('dashKpiProjects', PROJECTS.filter(p=>p.status==='In Progress').length);
       set('dashKpiTxns', TRANSACTIONS.length);
@@ -264,14 +269,24 @@
       set('dashKpiLow', INVENTORY.filter(i=>i.status==='Low Stock').length);
 
       const tb = document.getElementById('dashTxnBody');
+      if (!tb) return;
+      tb.innerHTML = '';
+      if (TRANSACTIONS.length === 0) {
+        tb.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="text-center text-muted-2 py-3">
+          Loading recent transactions…</td></tr>`);
+        return;
+      }
       TRANSACTIONS.slice(0,5).forEach(t => {
         const sub = t.qty * t.price; const total = sub * 1.12;
         tb.insertAdjacentHTML('beforeend', `<tr>
-          <td class="fw-id">${t.inv}</td><td>${t.cust}</td>
+          <td class="fw-id">${t.inv}</td><td>${escapeHTML(t.cust)}</td>
           <td class="fw-medium">${PESO(total)}</td><td>${payBadge(t.pay)}</td>
           <td class="text-muted-2">${t.date}</td></tr>`);
       });
-    });
+    }
+    window.renderDashboard = renderDashboard;
+
+    document.addEventListener('DOMContentLoaded', renderDashboard);
   </script>
 </body>
 </html>

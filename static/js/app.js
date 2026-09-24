@@ -320,15 +320,27 @@ document.addEventListener('DOMContentLoaded', () => {
  a stock-out that exceeds the balance is rejected, not silently clamped. */
   if (document.getElementById('invBody') && typeof INVENTORY !== 'undefined') {
 
+    // Clear demo rows NOW, before the page's own inline script (runs
+    // right after this) paints them as if real. See the matching
+    // comment in wireEntityPage for why this ordering matters.
+    INVENTORY.length = 0;
+
     const refreshInventory = async () => {
       try {
         const res = await fetch('/api/inventory');
         const json = await res.json();
-        if (!json.ok) return;
+        if (!json.ok) {
+          console.error('Failed to load real inventory from the server:', json.error || res.status);
+          showToast('Could not load inventory from the database — showing may be outdated', 'error', 'bi-exclamation-triangle');
+          return;
+        }
         INVENTORY.length = 0;               // clear sample rows, keep the array reference
         json.data.forEach(r => INVENTORY.push(r));
         if (typeof window.renderInventory === 'function') window.renderInventory();
-      } catch (_) { /* keep whatever is shown on error */ }
+      } catch (err) {
+        console.error('refreshInventory failed:', err);
+        showToast('Could not connect to the server to load inventory', 'error', 'bi-exclamation-triangle');
+      }
     };
 
     // Intercept the three inventory forms in the CAPTURE phase, so this runs
@@ -403,6 +415,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const arr = window[cfg.arrayName];
     const store = window[cfg.storeName];
 
+    // Clear the demo/sample rows RIGHT NOW, synchronously - before the
+    // page's own inline script (which runs after this, since app.js
+    // loads first) gets a chance to paint them as if they were real.
+    // Without this, the page briefly shows plausible-looking but WRONG
+    // numbers (baked-in sample data) until the async fetch below
+    // resolves and replaces them - a confusing "flash of wrong data"
+    // that looks exactly like a real bug even though nothing is
+    // actually broken. Clearing first means the initial paint honestly
+    // shows an empty/loading state instead.
+    arr.length = 0;
+
     const refresh = async () => {
       try {
         const res = await fetch(cfg.listUrl);
@@ -475,6 +498,46 @@ document.addEventListener('DOMContentLoaded', () => {
     mapRow: (r) => ({ ...r, cust: custName(r.custId), staff: staffName(r.staffId) }),
   });
 
+  // --------------------------------------------------------------
+  // Dashboard page: pulls from PROJECTS, TRANSACTIONS, and INVENTORY
+  // all at once for its KPI cards + recent-transactions table. None of
+  // the wiring above engages here (it's all gated behind projBody/
+  // txnBody/invBody, which don't exist on this page), so without this
+  // block the dashboard would show data.js's sample numbers forever -
+  // not just a brief flash like the dedicated list pages, since nothing
+  // would ever fetch real data for it at all.
+  // --------------------------------------------------------------
+  if (document.getElementById('dashKpiProjects')) {
+    // Clear sample rows immediately, before this page's own inline
+    // script paints them - see the matching comment on wireEntityPage
+    // for why this ordering matters (avoids a flash of demo numbers).
+    if (typeof PROJECTS !== 'undefined') PROJECTS.length = 0;
+    if (typeof TRANSACTIONS !== 'undefined') TRANSACTIONS.length = 0;
+    if (typeof INVENTORY !== 'undefined') INVENTORY.length = 0;
+
+    const loadDashboardData = async (url, arr, label) => {
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (!json.ok) {
+          console.error(`Failed to load ${label} for dashboard:`, json.error || res.status);
+          showToast(`Could not load ${label} from the database`, 'error', 'bi-exclamation-triangle');
+          return;
+        }
+        arr.length = 0;
+        json.data.forEach(r => arr.push(r));
+        if (typeof window.renderDashboard === 'function') window.renderDashboard();
+      } catch (err) {
+        console.error(`Dashboard ${label} fetch failed:`, err);
+        showToast(`Could not connect to the server to load ${label}`, 'error', 'bi-exclamation-triangle');
+      }
+    };
+
+    loadDashboardData('/api/projects', PROJECTS, 'projects');
+    loadDashboardData('/api/transactions', TRANSACTIONS, 'transactions');
+    loadDashboardData('/api/inventory', INVENTORY, 'inventory');
+  }
+
   // On the projects page, fill the Customer dropdown from the REAL customer
   // list so a saved project links to an actual customer record (not a sample).
   const projCustSelect = document.getElementById('projCustSelect');
@@ -494,15 +557,36 @@ document.addEventListener('DOMContentLoaded', () => {
  negative-stock guard as Stock Out. */
   if (document.getElementById('txnBody') && typeof TRANSACTIONS !== 'undefined') {
 
+    // Clear demo rows NOW, before the page's own inline script (runs
+    // right after this) paints them as if real. This is the fix for
+    // "the page briefly shows old numbers then switches to real ones" -
+    // that was always a harmless loading flash, never lost/wrong data,
+    // but it looked exactly like a bug. See the matching comment in
+    // wireEntityPage for the full explanation.
+    TRANSACTIONS.length = 0;
+
     const refreshTxns = async () => {
       try {
         const res = await fetch('/api/transactions');
         const json = await res.json();
-        if (!json.ok) return;
+        if (!json.ok) {
+          console.error('Failed to load real transactions from the server:', json.error || res.status);
+          showToast('Could not load transactions from the database — showing may be outdated', 'error', 'bi-exclamation-triangle');
+          return;
+        }
         TRANSACTIONS.length = 0;
         json.data.forEach(t => TRANSACTIONS.push(t));
         if (typeof window.renderTransactions === 'function') window.renderTransactions();
-      } catch (_) {}
+      } catch (err) {
+        // A network error, a non-JSON response (e.g. an HTML error page),
+        // or anything else unexpected lands here. This used to fail
+        // completely silently, leaving the page stuck showing whatever
+        // demo/sample rows were on screen before this call ran, with no
+        // indication anything was wrong - that's the exact bug behind
+        // "the page shows old data instead of the database."
+        console.error('refreshTxns failed:', err);
+        showToast('Could not connect to the server to load transactions', 'error', 'bi-exclamation-triangle');
+      }
     };
 
     // Populate the three dropdowns from real data.

@@ -154,7 +154,11 @@ def main():
                  f"Fabrication Job {ms.year}-{ms.month:02d}-{random.randint(100,999)}",
                  cust_name, cust_ids[cust_name], start, end,
                  "Ongoing" if still_running else "Completed",
-                 round(random.uniform(400_000, 3_500_000), 2),
+                 # Realistic small-shop fabrication job pricing (Parabellum
+                 # does gates, fences, handrails, structural steel for local
+                 # customers - not multi-million-peso infrastructure work).
+                 # Capped at PHP 60,000 per job.
+                 round(random.uniform(8_000, 60_000), 2),
                  random.choice(priorities),
                  100 if not still_running else random.randint(20, 85),
                  f"EMP-{random.randint(1, 6):02d}"),
@@ -175,14 +179,37 @@ def main():
             pid = random.choice(live)[0] if live else None
             cust_name = random.choice(CUSTOMERS)
             mat = random.choice(MATERIALS)  # (code, name, unit, cost, reorder, cat, sup, loc)
-            q = random.randint(5, 120)
             price = round(mat[3] * random.uniform(1.15, 1.4), 2)  # markup over cost
+
+            # Realistic small-shop transaction sizing: pick a target PRE-VAT
+            # total in a small-business range, then derive quantity from
+            # that target divided by this material's unit price. This
+            # naturally makes expensive materials (H-Beams at ~PHP 10k+
+            # each) sell in small quantities and cheap materials (flat
+            # bars, screws) sell in larger quantities - both more
+            # realistic than picking quantity independently of price, and
+            # it keeps the VAT-inclusive total (what the UI displays) under
+            # PHP 50,000 as requested. 44,000 * 1.12 = 49,280, safely
+            # under the cap even before rounding.
+            target_total = random.uniform(500, 44_000)
+            q = max(1, round(target_total / price))
+            # Safety clamp: rounding q to the nearest whole unit can
+            # occasionally push the VAT-inclusive total slightly over the
+            # 50,000 cap - most noticeable for expensive materials bought
+            # in small quantities, where each whole unit is a large
+            # fraction of the total (e.g. rounding 4.5 up to 5 units of a
+            # PHP 9,780 item overshoots by ~10%). Step down until the cap
+            # actually holds, rather than trusting division-then-round alone.
+            while q > 1 and (q * price * 1.12) > 50_000:
+                q -= 1
+            amount = round(q * price, 2)
+
             cur.execute(
                 """INSERT INTO transactions
                      (project_id, customer_id, customer_name, txn_date, amount,
                       material_name, quantity, unit_price, payment_status, payment_method)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);""",
-                (pid, cust_ids[cust_name], cust_name, d, round(q * price, 2),
+                (pid, cust_ids[cust_name], cust_name, d, amount,
                  mat[1], q, price,
                  random.choice(["Paid", "Paid", "Partial", "Pending"]),
                  random.choice(["Bank Transfer", "Check", "Cash", "On Account"])),

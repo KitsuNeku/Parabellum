@@ -44,7 +44,6 @@
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
       {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
-      {% if 'commissions' in allowed_pages %}<a class="nav-link" href="/commissions"><i class="bi bi-cash-coin"></i><span>Commissions</span></a>{% endif %}
       <div class="nav-section">INTELLIGENCE</div>
       {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
       {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
@@ -192,20 +191,17 @@
         </div></div></div>
       </div>
 
-      <div class="card">
+      <div class="card mb-4">
         <div class="card-body">
           <!-- Toolbar -->
           <div class="toolbar">
             <div class="search-box"><i class="bi bi-search"></i>
-              <input type="text" class="form-control" placeholder="Search item name or ID…" data-table-search="#invTable">
+              <input type="text" class="form-control" id="moveSearchInput" placeholder="Search item name or ID…">
             </div>
-            <select class="form-select" style="max-width:170px" data-filter-target="#invTable" data-filter-col="1">
+            <select class="form-select" style="max-width:170px" id="moveCategoryFilter">
               <option value="">All Categories</option>
               <option>Bars</option><option>Plates</option><option>Sheets</option>
               <option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option>
-            </select>
-            <select class="form-select" style="max-width:170px" data-filter-target="#invTable" data-filter-col="4">
-              <option value="">All Status</option><option>In Stock</option><option>Low Stock</option><option>Out of Stock</option>
             </select>
             <div class="ms-auto d-flex gap-2">
               <button class="btn btn-light-2 btn-sm" data-bs-toggle="modal" data-bs-target="#stockInModal"><i class="bi bi-box-arrow-in-down me-1"></i>Stock In</button>
@@ -213,20 +209,47 @@
               <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addItemModal"><i class="bi bi-plus-lg me-1"></i>Add Item</button>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Table -->
-          <div class="table-wrap"><table class="table" id="invTable">
+      <!-- Stock In table -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="card-title-row mb-2">
+            <h2 class="panel-title mb-0"><i class="bi bi-box-arrow-in-down me-2 text-success"></i>Stock In</h2>
+          </div>
+          <p class="panel-sub mb-3">Every receiving event — materials added to inventory.</p>
+          <div class="table-wrap"><table class="table" id="stockInTable">
             <thead><tr>
-              <th>Item</th><th>Category</th><th class="text-end">Qty</th>
-              <th class="text-end">Unit Price</th><th>Status</th><th class="text-center">Actions</th>
+              <th>Item</th><th>Category</th><th class="text-end">Qty Received</th>
+              <th>Date</th><th>Remarks</th><th>Recorded By</th><th class="text-center">Actions</th>
             </tr></thead>
-            <tbody id="invBody"></tbody>
+            <tbody id="stockInBody"></tbody>
           </table></div>
-
-          <!-- Pagination -->
           <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
-            <span class="small text-muted-2" id="invCount">Loading inventory&hellip;</span>
-            <nav id="invPaginationNav"><ul class="pagination" id="invPagination"></ul></nav>
+            <span class="small text-muted-2" id="stockInCount">Loading…</span>
+            <nav id="stockInPaginationNav"><ul class="pagination" id="stockInPagination"></ul></nav>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stock Out table -->
+      <div class="card">
+        <div class="card-body">
+          <div class="card-title-row mb-2">
+            <h2 class="panel-title mb-0"><i class="bi bi-box-arrow-up me-2 text-danger"></i>Stock Out</h2>
+          </div>
+          <p class="panel-sub mb-3">Every issuance event — materials removed from inventory.</p>
+          <div class="table-wrap"><table class="table" id="stockOutTable">
+            <thead><tr>
+              <th>Item</th><th>Category</th><th class="text-end">Qty Issued</th>
+              <th>Date</th><th>Remarks</th><th>Recorded By</th><th class="text-center">Actions</th>
+            </tr></thead>
+            <tbody id="stockOutBody"></tbody>
+          </table></div>
+          <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+            <span class="small text-muted-2" id="stockOutCount">Loading…</span>
+            <nav id="stockOutPaginationNav"><ul class="pagination" id="stockOutPagination"></ul></nav>
           </div>
         </div>
       </div>
@@ -255,9 +278,16 @@
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-arrow-in-down me-2 text-success"></i>Stock In</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate data-reset data-entity="stock-in" data-success-msg="Stock added to inventory">
         <div class="modal-body"><div class="row g-3">
-          <div class="col-12"><label class="form-label">Select Item</label><select class="form-select" name="itemId" data-item-select required><option value="">Choose item…</option></select></div>
-          <div class="col-md-6"><label class="form-label">Quantity In</label><input type="number" class="form-control" name="qty" min="1" value="50" required></div>
-          <div class="col-md-6"><label class="form-label">Date</label><input type="date" class="form-control" name="date" value="2026-06-26"></div>
+          <div class="col-12"><div class="small text-muted-2 mb-1"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div></div>
+          <div class="col-12 position-relative">
+            <label class="form-label">Select Item</label>
+            <input type="text" class="form-control" id="stockInItemSearch" placeholder="Search item name or ID…" autocomplete="off" required>
+            <input type="hidden" name="itemId" id="stockInItemId">
+            <div class="item-search-results" id="stockInItemResults"></div>
+            <div class="invalid-feedback">Search and select an item from the list.</div>
+          </div>
+          <div class="col-md-6"><label class="form-label">Quantity In</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
+          <div class="col-md-6"><label class="form-label">Date</label><div class="form-control-plaintext fw-medium" id="stockInDate">—</div></div>
           <div class="col-12"><label class="form-label">Remarks</label><input class="form-control" name="remarks" placeholder="e.g. Delivery from SteelAsia"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Stock In</button></div>
@@ -269,9 +299,17 @@
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-arrow-up me-2 text-danger"></i>Stock Out</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate data-reset data-entity="stock-out" data-success-msg="Stock deducted from inventory">
         <div class="modal-body"><div class="row g-3">
-          <div class="col-12"><label class="form-label">Select Item</label><select class="form-select" name="itemId" data-item-select required><option value="">Choose item…</option></select></div>
-          <div class="col-md-6"><label class="form-label">Quantity Out</label><input type="number" class="form-control" name="qty" min="1" value="20" required></div>
-          <div class="col-md-6"><label class="form-label">Project / Reference</label><input class="form-control" name="ref" placeholder="e.g. PRJ-301"></div>
+          <div class="col-12"><div class="small text-muted-2 mb-1"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div></div>
+          <div class="col-12 position-relative">
+            <label class="form-label">Select Item</label>
+            <input type="text" class="form-control" id="stockOutItemSearch" placeholder="Search item name or ID…" autocomplete="off" required>
+            <input type="hidden" name="itemId" id="stockOutItemId">
+            <div class="item-search-results" id="stockOutItemResults"></div>
+            <div class="invalid-feedback">Search and select an item from the list.</div>
+          </div>
+          <div class="col-md-4"><label class="form-label">Quantity Out</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
+          <div class="col-md-4"><label class="form-label">Date</label><div class="form-control-plaintext fw-medium" id="stockOutDate">—</div></div>
+          <div class="col-md-4"><label class="form-label">Project / Reference</label><input class="form-control" name="ref" placeholder="e.g. PRJ-301"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Stock Out</button></div>
         </form>
@@ -299,6 +337,13 @@
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button type="button" class="btn btn-primary" id="idEditBtn">Edit Item</button></div>
       </div></div></div>
 
+      <!-- Stock Movement Slip (print) -->
+      <div class="modal fade" id="moveSlipModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2" style="color:var(--primary)"></i>Stock Movement Slip</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="moveSlipBody"></div>
+        <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" data-print><i class="bi bi-printer me-1"></i>Print Slip</button></div>
+      </div></div></div>
+
     </main>
       <footer class="app-footer">
         <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
@@ -315,72 +360,264 @@
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const tb  = document.getElementById('invBody');
       const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
       let currentDetailId = null;
 
-      /* ---------- Render: table + KPIs + attention lists + sidebar badge (re-runs after every mutation) ---------- */
-      const INV_PAGE_SIZE = 8;
-      let invCurrentPage = 1;
+      /* ---------- Searchable item picker (Stock In / Stock Out modals) ----------
+       Replaces the old plain "Choose item…" dropdown with a text search box
+       that filters the live materials list as you type. Selecting a result
+       fills a hidden input with the material's real id/code, which is what
+       actually gets submitted - the visible box just shows the chosen name. */
+      function wireItemSearch(searchId, hiddenId, resultsId){
+        const searchInput = document.getElementById(searchId);
+        const hiddenInput = document.getElementById(hiddenId);
+        const results = document.getElementById(resultsId);
+        if (!searchInput || !hiddenInput || !results) return;
 
-      function renderPaginationControls(totalItems){
-        const totalPages = Math.max(1, Math.ceil(totalItems / INV_PAGE_SIZE));
-        if (invCurrentPage > totalPages) invCurrentPage = totalPages;
-        const nav = document.getElementById('invPaginationNav');
-        const ul = document.getElementById('invPagination');
+        function renderResults(query){
+          const items = inventoryStore.all();
+          const q = query.trim().toLowerCase();
+          const matches = q
+            ? items.filter(i => i.name.toLowerCase().includes(q) || i.id.toLowerCase().includes(q)).slice(0, 8)
+            : items.slice(0, 8);
+          results.innerHTML = matches.length
+            ? matches.map(i => `<div class="isr-item" data-id="${i.id}">
+                <div class="fw-medium">${escapeHTML(i.name)}</div>
+                <div class="small text-muted-2">${i.id} \u2022 ${NUM(i.qty)} ${i.unit} on hand</div>
+              </div>`).join('')
+            : `<div class="isr-empty">No matching items.</div>`;
+          results.classList.add('show');
+        }
 
-        // Nothing to page through - don't show controls that would just
-        // be redundant decoration when everything already fits on screen.
-        if (totalPages <= 1) { nav.style.display = 'none'; return; }
+        searchInput.addEventListener('focus', () => renderResults(searchInput.value));
+        searchInput.addEventListener('input', () => {
+          // Typing invalidates whatever was previously selected - force a
+          // fresh pick from the list rather than submitting a stale id
+          // that no longer matches the displayed text.
+          hiddenInput.value = '';
+          searchInput.setCustomValidity('Search and select an item from the list.');
+          renderResults(searchInput.value);
+        });
+        results.addEventListener('mousedown', (e) => {
+          // mousedown (not click) fires before the input's blur, so the
+          // selection registers before the dropdown gets hidden.
+          const item = e.target.closest('.isr-item'); if (!item) return;
+          const material = inventoryStore.find(item.dataset.id); if (!material) return;
+          hiddenInput.value = material.id;
+          searchInput.value = material.name;
+          searchInput.setCustomValidity('');
+          results.classList.remove('show');
+        });
+        searchInput.addEventListener('blur', () => {
+          setTimeout(() => results.classList.remove('show'), 150);
+        });
+
+        // Reset to a clean, unselected state whenever the modal opens.
+        searchInput.closest('.modal')?.addEventListener('show.bs.modal', () => {
+          searchInput.value = '';
+          hiddenInput.value = '';
+          searchInput.setCustomValidity('Search and select an item from the list.');
+          results.classList.remove('show');
+        });
+      }
+      wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults');
+      wireItemSearch('stockOutItemSearch', 'stockOutItemId', 'stockOutItemResults');
+
+      /* ---------- Live date/time display (Stock In / Stock Out modals) ----------
+       The server always stamps the movement with its own real current date
+       regardless of what's shown here (see _apply_movement in app.py) - so
+       this is a static, non-editable, genuinely live clock rather than an
+       editable field that would misleadingly suggest the date can be
+       backdated or changed. */
+      function tickMoveDates(){
+        const now = new Date();
+        const text = now.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+          + ' \u2014 ' + now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const a = document.getElementById('stockInDate');  if (a) a.textContent = text;
+        const b = document.getElementById('stockOutDate'); if (b) b.textContent = text;
+      }
+      tickMoveDates();
+      setInterval(tickMoveDates, 1000);
+
+      /* ---------- Stock In / Stock Out movement tables ----------
+       window.ALL_MOVEMENTS holds every stock_movements row (both
+       RECEIPT and ISSUANCE), fetched by app.js's refreshInventory()
+       alongside the materials list itself. This page filters/paginates
+       that array into two independent tables by `type`. */
+      window.ALL_MOVEMENTS = window.ALL_MOVEMENTS || [];
+
+      const MOVE_PAGE_SIZE = 10;
+      let stockInPage = 1;
+      let stockOutPage = 1;
+      let moveSearchQuery = '';
+      let moveCategoryFilter = '';
+
+      document.getElementById('moveSearchInput')?.addEventListener('input', (e) => {
+        moveSearchQuery = e.target.value.toLowerCase().trim();
+        stockInPage = 1; stockOutPage = 1;
+        renderMovements();
+      });
+      document.getElementById('moveCategoryFilter')?.addEventListener('change', (e) => {
+        moveCategoryFilter = e.target.value;
+        stockInPage = 1; stockOutPage = 1;
+        renderMovements();
+      });
+
+      function buildMovePagination(navId, ulId, currentPage, totalItems, onChange){
+        const totalPages = Math.max(1, Math.ceil(totalItems / MOVE_PAGE_SIZE));
+        const clampedPage = Math.min(currentPage, totalPages);
+        const nav = document.getElementById(navId);
+        const ul  = document.getElementById(ulId);
+        if (!nav || !ul) return clampedPage;
+        if (totalPages <= 1) { nav.style.display = 'none'; return clampedPage; }
         nav.style.display = '';
-
         const pageLink = (label, page, opts = {}) => `
           <li class="page-item ${opts.active ? 'active' : ''} ${opts.disabled ? 'disabled' : ''}">
             <a class="page-link" href="#" data-page="${page}">${label}</a>
           </li>`;
-
-        let html = pageLink('<i class="bi bi-chevron-left"></i>', invCurrentPage - 1, { disabled: invCurrentPage === 1 });
-        buildPageWindow(invCurrentPage, totalPages).forEach(p => {
+        let html = pageLink('<i class="bi bi-chevron-left"></i>', clampedPage - 1, { disabled: clampedPage === 1 });
+        buildPageWindow(clampedPage, totalPages).forEach(p => {
           if (p === '\u2026') html += `<li class="page-item disabled"><span class="page-link">\u2026</span></li>`;
-          else html += pageLink(p, p, { active: p === invCurrentPage });
+          else html += pageLink(p, p, { active: p === clampedPage });
         });
-        html += pageLink('<i class="bi bi-chevron-right"></i>', invCurrentPage + 1, { disabled: invCurrentPage === totalPages });
+        html += pageLink('<i class="bi bi-chevron-right"></i>', clampedPage + 1, { disabled: clampedPage === totalPages });
         ul.innerHTML = html;
+        ul.onclick = (e) => {
+          const link = e.target.closest('[data-page]');
+          if (!link || link.closest('.disabled')) return;
+          e.preventDefault();
+          const page = parseInt(link.dataset.page, 10);
+          if (!page || page === clampedPage) return;
+          onChange(page);
+        };
+        return clampedPage;
       }
 
-      document.getElementById('invPagination').addEventListener('click', (e) => {
-        const link = e.target.closest('[data-page]');
-        if (!link || link.closest('.disabled')) return;
-        e.preventDefault();
-        const page = parseInt(link.dataset.page, 10);
-        if (!page || page === invCurrentPage) return;
-        invCurrentPage = page;
-        renderInventory();
-      });
+      /* Movement rows get their own action buttons - View / Edit / Print /
+       Delete - kept separate from the shared actionBtns() helper (used on
+       Customers/Projects/etc.) so adding Print here doesn't affect those
+       other pages. View/Edit/Delete operate on the underlying MATERIAL
+       (via material id); Print operates on this specific movement record
+       (via movementId), since each material can have many movements. */
+      function moveActionBtns(m){
+        return `<div class="d-inline-flex">
+            <button class="act-btn" data-bs-toggle="tooltip" title="View" data-act="view" data-id="${m.id}"><i class="bi bi-eye"></i></button>
+            <button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${m.id}"><i class="bi bi-pencil"></i></button>
+            <button class="act-btn print-move" data-bs-toggle="tooltip" title="Print Slip" data-movement-id="${m.movementId}"><i class="bi bi-printer"></i></button>
+            <button class="act-btn danger" data-bs-toggle="tooltip" title="Delete" data-act="del" data-id="${m.id}"><i class="bi bi-trash"></i></button>
+          </div>`;
+      }
 
-      function renderInventory(){
-        const items = inventoryStore.all();   // full list - KPIs below are counted across ALL of it
-        const start = (invCurrentPage - 1) * INV_PAGE_SIZE;
-        const pageItems = items.slice(start, start + INV_PAGE_SIZE);
+      const moveSlipModal = new bootstrap.Modal('#moveSlipModal');
+      function showMoveSlip(movementId){
+        const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
+        if (!m) return;
+        const isIn = m.type === 'RECEIPT';
+        document.getElementById('moveSlipBody').innerHTML = `
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div class="d-flex gap-2 align-items-center"><img src="{{ url_for('static', filename='assets/img/logo.svg') }}" style="width:40px"><div><div class="fw-bold" style="color:var(--primary)">PARABELLUM</div><div class="small text-muted-2">Steel &amp; Iron Works</div></div></div>
+            <div class="text-end"><div class="h5 mb-0">${isIn ? 'STOCK IN RECEIPT' : 'STOCK OUT SLIP'}</div><div class="small text-muted-2">MOV-${String(m.movementId).padStart(4,'0')}</div></div>
+          </div><hr>
+          <div class="row small mb-3">
+            <div class="col-6"><div class="text-muted-2">Material</div><div class="fw-medium">${escapeHTML(m.name)}</div><div>${m.id}</div></div>
+            <div class="col-6 text-end"><div class="text-muted-2">Date</div><div class="fw-medium">${m.date}</div></div>
+          </div>
+          <div class="table-responsive"><table class="table table-soft"><thead><tr><th>Category</th><th class="text-end">Quantity</th><th>Remarks</th></tr></thead>
+          <tbody><tr><td>${escapeHTML(m.cat)}</td><td class="text-end">${NUM(m.qty)} ${m.unit}</td><td>${escapeHTML(m.remarks || '\u2014')}</td></tr></tbody></table></div>
+          <div class="mt-3"><span class="badge ${isIn ? 'b-success' : 'b-danger'}">${isIn ? 'Stock In' : 'Stock Out'}</span></div>`;
+        moveSlipModal.show();
+      }
 
-        tb.innerHTML = '';
-        pageItems.forEach(i => {
-          tb.insertAdjacentHTML('beforeend', `<tr>
-            <td><div class="fw-medium">${escapeHTML(i.name)}</div><div class="small text-muted-2">${i.id}</div></td>
-            <td><span class="tag-chip">${i.cat}</span></td>
-            <td class="text-end">${NUM(i.qty)} <span class="text-muted-2">${i.unit}</span></td>
-            <td class="text-end">${PESO(i.price)}</td>
-            <td>${stockBadge(i.status)}</td>
-            <td class="text-center">${actionBtns(i.id)}</td></tr>`);
+      function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun){
+        const totalPages = Math.max(1, Math.ceil(rows.length / MOVE_PAGE_SIZE));
+        const clampedPage = Math.min(currentPage, totalPages);
+        const start = (clampedPage - 1) * MOVE_PAGE_SIZE;
+        const pageItems = rows.slice(start, start + MOVE_PAGE_SIZE);
+
+        const tbody = document.getElementById(ids.tbody);
+        tbody.innerHTML = '';
+        if (pageItems.length === 0) {
+          const reason = (moveSearchQuery || moveCategoryFilter) ? 'match your search or filter' : 'yet';
+          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" class="text-center text-muted-2 py-4">
+            No ${emptyNoun} records ${reason}.</td></tr>`);
+        }
+        pageItems.forEach(m => {
+          tbody.insertAdjacentHTML('beforeend', `<tr>
+            <td><div class="fw-medium">${escapeHTML(m.name)}</div><div class="small text-muted-2">${m.id}</div></td>
+            <td><span class="tag-chip">${escapeHTML(m.cat)}</span></td>
+            <td class="text-end">${NUM(m.qty)} <span class="text-muted-2">${m.unit}</span></td>
+            <td class="text-muted-2">${m.date}</td>
+            <td class="text-muted-2">${escapeHTML(m.remarks || '\u2014')}</td>
+            <td class="text-muted-2">${escapeHTML(m.recordedBy || '\u2014')}</td>
+            <td class="text-center">${moveActionBtns(m)}</td></tr>`);
         });
+        initTooltips(tbody);
+        set(ids.count, pageItems.length === rows.length
+          ? `Showing ${rows.length} record${rows.length===1?'':'s'}`
+          : `Showing ${start+1}\u2013${start+pageItems.length} of ${rows.length} records`);
+        buildMovePagination(ids.nav, ids.ul, clampedPage, rows.length, onPageChange);
+        return clampedPage;
+      }
+
+      function renderMovements(){
+        const filtered = (window.ALL_MOVEMENTS || []).filter(m => {
+          if (moveCategoryFilter && m.cat !== moveCategoryFilter) return false;
+          if (moveSearchQuery) {
+            const hay = `${m.id} ${m.name}`.toLowerCase();
+            if (!hay.includes(moveSearchQuery)) return false;
+          }
+          return true;
+        });
+        const inRows  = filtered.filter(m => m.type === 'RECEIPT');
+        const outRows = filtered.filter(m => m.type === 'ISSUANCE');
+
+        stockInPage = renderMoveSection(inRows, stockInPage,
+          { tbody: 'stockInBody', count: 'stockInCount', nav: 'stockInPaginationNav', ul: 'stockInPagination' },
+          (p) => { stockInPage = p; renderMovements(); }, 'stock-in');
+
+        stockOutPage = renderMoveSection(outRows, stockOutPage,
+          { tbody: 'stockOutBody', count: 'stockOutCount', nav: 'stockOutPaginationNav', ul: 'stockOutPagination' },
+          (p) => { stockOutPage = p; renderMovements(); }, 'stock-out');
+      }
+      window.renderMovements = renderMovements;
+
+      /* ---------- Delegated row actions on the movement tables: View / Edit /
+       Delete (they operate on the underlying MATERIAL, same as before -
+       just triggered from a movement row instead of a snapshot row) ---------- */
+      function handleRowAction(e){
+        const printBtn = e.target.closest('.print-move');
+        if (printBtn) { showMoveSlip(parseInt(printBtn.dataset.movementId, 10)); return; }
+
+        const btn = e.target.closest('[data-act]'); if (!btn) return;
+        const i = inventoryStore.find(btn.dataset.id); if (!i) return;
+        if (btn.dataset.act === 'view') openDetail(i);
+        if (btn.dataset.act === 'edit') openEdit(i);
+        if (btn.dataset.act === 'del')
+          confirmDelete(`Delete "${i.name}" (${i.id})? This cannot be undone.`, () => {
+            inventoryStore.remove(i.id);
+            // Delete doesn't go through refreshInventory()'s server refetch,
+            // so purge this material's movement rows from the local array
+            // too - otherwise they'd linger in the Stock In/Out tables
+            // until the next full page reload.
+            window.ALL_MOVEMENTS = (window.ALL_MOVEMENTS || []).filter(m => m.id !== i.id);
+            renderInventory();
+            showToast(`${i.name} deleted`, 'success', 'bi-trash');
+          });
+      }
+      document.getElementById('stockInBody').addEventListener('click', handleRowAction);
+      document.getElementById('stockOutBody').addEventListener('click', handleRowAction);
+
+      /* ---------- KPIs + attention lists + sidebar badge + item dropdowns
+       (unchanged - still computed from the MATERIALS list, not movement
+       history) - and triggers the movement tables to re-render too, since
+       any mutation here (add/edit/delete/stock in/out) should refresh both. ---------- */
+      function renderInventory(){
+        const items = inventoryStore.all();
+
         set('invKpiTotal', items.length);
         set('invKpiIn',  items.filter(i=>i.status==='In Stock').length);
         set('invKpiLow', items.filter(i=>i.status==='Low Stock').length);
         set('invKpiOut', items.filter(i=>i.status==='Out of Stock').length);
-        set('invCount', pageItems.length === items.length
-          ? `Showing ${items.length} item${items.length===1?'':'s'}`
-          : `Showing ${start+1}\u2013${start+pageItems.length} of ${items.length} items`);
-        renderPaginationControls(items.length);
 
         const low = items.filter(i => i.status === 'Low Stock');
         const out = items.filter(i => i.status === 'Out of Stock');
@@ -402,15 +639,7 @@
         document.querySelectorAll('.sidebar__nav a[href="/inventory"] .badge')
           .forEach(b => { b.textContent = oos; b.classList.toggle('d-none', oos === 0); });
 
-        // Stock In / Stock Out item dropdowns follow the live list
-        document.querySelectorAll('[data-item-select]').forEach(sel => {
-          const cur = sel.value;
-          sel.innerHTML = '<option value="">Choose item…</option>' +
-            items.map(i => `<option value="${i.id}">${escapeHTML(i.name)}</option>`).join('');
-          if (cur) sel.value = cur;
-        });
-
-        initTooltips(tb);
+        renderMovements();
       }
 
       /* ---------- Detail modal (Supplier & Location live here) ---------- */
@@ -444,19 +673,6 @@
         document.getElementById('invModalSubmit').textContent = 'Save Item';
       });
 
-      /* ---------- Delegated row actions: View / Edit / Delete ---------- */
-      tb.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-act]'); if (!btn) return;
-        const i = inventoryStore.find(btn.dataset.id); if (!i) return;
-        if (btn.dataset.act === 'view') openDetail(i);
-        if (btn.dataset.act === 'edit') openEdit(i);
-        if (btn.dataset.act === 'del')
-          confirmDelete(`Delete "${i.name}" (${i.id})? This cannot be undone.`, () => {
-            inventoryStore.remove(i.id);
-            renderInventory();
-            showToast(`${i.name} deleted`, 'success', 'bi-trash');
-          });
-      });
       // Detail modal → Edit
       document.getElementById('idEditBtn').addEventListener('click', () => {
         const i = inventoryStore.find(currentDetailId); if (!i) return;

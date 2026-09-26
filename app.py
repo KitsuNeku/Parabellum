@@ -93,7 +93,7 @@ app.config.update(
 )
 
 PAGES = ["dashboard", "inventory", "customers", "projects", "transactions",
-         "commissions", "forecasting", "reports", "settings", "profile"]
+         "forecasting", "reports", "settings", "profile"]
 
 
 # ---------------- Public routes ----------------
@@ -384,7 +384,7 @@ def api_inventory_save():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
-def _apply_movement(material_code, quantity, kind, remarks, project_id=None):
+def _apply_movement(material_code, quantity, kind, remarks, project_id=None, recorded_by=None):
     """
     Record a stock movement and adjust the balance.
 
@@ -392,6 +392,11 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None):
     For issuances this ENFORCES the non-negative-stock rule required by
     Objective 1.1 and test Table 2 - an over-issuance is rejected outright,
     not silently clamped to zero.
+
+    recorded_by: display name of the logged-in user performing this action,
+    stored alongside the movement so the Stock In / Stock Out tables can
+    show who did it - independent of `remarks`, which describes the
+    movement itself (a delivery note, a project reference), not the person.
     """
     rows = execute_query(DB_CONFIG,
         "SELECT material_id, material_name, unit, current_stock FROM materials WHERE material_code=%s;",
@@ -413,9 +418,9 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None):
 
     execute_query(DB_CONFIG, """
         INSERT INTO stock_movements
-            (material_id, movement_type, quantity, movement_date, project_id, remarks)
-        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s);
-    """, (m["material_id"], kind, quantity, project_id, remarks))
+            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by)
+        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s);
+    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by))
 
     execute_query(DB_CONFIG,
         "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
@@ -430,7 +435,8 @@ def api_stock_in():
     d = request.get_json(silent=True) or {}
     try:
         name, bal = _apply_movement(d.get("itemId"), d.get("qty"), "RECEIPT",
-                                    d.get("remarks") or "Stock received")
+                                    d.get("remarks") or "Stock received",
+                                    recorded_by=session["user"]["name"])
         log_audit(DB_CONFIG, "STOCK_IN", f"+{d.get('qty')} to {name} (now {bal:g}).",
                   session["user"]["username"])
         return jsonify({"ok": True})
@@ -447,7 +453,8 @@ def api_stock_out():
     d = request.get_json(silent=True) or {}
     try:
         name, bal = _apply_movement(d.get("itemId"), d.get("qty"), "ISSUANCE",
-                                    d.get("ref") or "Material issued")
+                                    d.get("ref") or "Material issued",
+                                    recorded_by=session["user"]["name"])
         log_audit(DB_CONFIG, "STOCK_OUT", f"-{d.get('qty')} from {name} (now {bal:g}).",
                   session["user"]["username"])
         return jsonify({"ok": True})
@@ -474,6 +481,46 @@ def api_inventory_delete():
         log_audit(DB_CONFIG, "MATERIAL_DELETED", f"Deleted material {code}.",
                   session["user"]["username"])
         return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/inventory/movements")
+@permission_required("inventory")
+def api_inventory_movements():
+    """
+    Full stock movement history (both RECEIPT and ISSUANCE), joined to
+    each material's current code/name/unit, most recent first. The
+    Inventory page splits this by `type` into its Stock In and Stock Out
+    tables. `id` is the material's code, matching the same value used
+    everywhere else on the page - so the existing Edit/Delete wiring
+    (inventoryStore.find(id) / inventoryStore.remove(id)) works
+    unchanged when those actions live on a movement row instead of a
+    material-snapshot row.
+    """
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT sm.movement_id, m.material_code, m.material_name, m.unit,
+                   m.category, sm.movement_type, sm.quantity, sm.movement_date,
+                   sm.remarks, sm.recorded_by
+              FROM stock_movements sm
+              JOIN materials m ON m.material_id = sm.material_id
+             ORDER BY sm.movement_date DESC, sm.movement_id DESC;
+        """, fetch=True)
+        data = [{
+            "id":         r["material_code"],
+            "movementId": r["movement_id"],
+            "name":       r["material_name"],
+            "unit":       r["unit"],
+            "cat":        r["category"] or "Uncategorized",
+            "type":       r["movement_type"],   # 'RECEIPT' or 'ISSUANCE'
+            "qty":        float(r["quantity"]),
+            "date":       str(r["movement_date"]),
+            "remarks":    r["remarks"] or "",
+            "recordedBy": r["recorded_by"] or "\u2014",
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -997,40 +1044,9 @@ def api_profile_avatar():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
-# ---------------- Commissions API ----------------
-@app.route("/api/commissions")
-@permission_required("commissions")
-def api_commissions():
-    """
-    Real per-employee commission data (see reports_export.compute_commissions
-    for the formula) plus the four summary stat cards the Commissions page
-    shows at the top.
-    """
-    try:
-        rows = compute_commissions(DB_CONFIG)
-
-        total_monthly = sum(e["monthly"] for e in rows)
-        completed_total = sum(e["completed"] for e in rows)
-        avg_rate = (sum(e["rate"] for e in rows) / len(rows)) if rows else 0
-        top = max(rows, key=lambda e: e["commission"], default=None)
-
-        return jsonify({"ok": True, "data": {
-            "employees": rows,
-            "stats": {
-                "total_monthly": total_monthly,
-                "completed_total": completed_total,
-                "avg_rate": avg_rate,
-                "top_earner": {"name": top["name"], "commission": top["commission"]} if top else None,
-            },
-        }})
-    except Exception as e:
-        app.logger.exception("Database error")
-        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
-
-
 # ---------------- Reports API ----------------
 from flask import send_file
-from reports_export import REPORT_BUILDERS, generate_pdf, generate_excel, compute_commissions
+from reports_export import REPORT_BUILDERS, generate_pdf, generate_excel
 
 REPORT_FILE_SLUGS = {
     "inventory": "Inventory_Report", "customer": "Customer_Report",

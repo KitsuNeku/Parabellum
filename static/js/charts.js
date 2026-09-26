@@ -99,20 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* ---------- Commission Overview (bar) ---------- */
-  if (el('chartCommission')) {
-    new Chart(el('chartCommission'), {
-      type:'bar',
-      data:{ labels:['Dela Cruz','Santos','Mendoza','Lim','Reyes'],
-        datasets:[{ label:'Commission (₱)', data:[48200,36800,29400,21600,42500],
-          backgroundColor:[C.primary,C.primary,C.primary,C.primary,C.gold], borderRadius:6, barThickness:30 }]},
-      options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:false } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:true,
-          ticks:{ color:C.grayText, callback:(v)=>'₱'+(v/1000)+'k' } }) } }
-    });
-  }
-
   /* ---------- Forecast Summary (line: actual vs predicted) ---------- */
   if (el('chartForecastSummary')) {
     new Chart(el('chartForecastSummary'), {

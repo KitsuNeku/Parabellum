@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
  on page load, and (2) intercept the Add/Stock-In/Stock-Out forms and the
  delete action so they persist. The server owns the negative-stock rule -
  a stock-out that exceeds the balance is rejected, not silently clamped. */
-  if (document.getElementById('invBody') && typeof INVENTORY !== 'undefined') {
+  if (document.getElementById('stockInBody') && typeof INVENTORY !== 'undefined') {
 
     // Clear demo rows NOW, before the page's own inline script (runs
     // right after this) paints them as if real. See the matching
@@ -327,15 +327,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refreshInventory = async () => {
       try {
-        const res = await fetch('/api/inventory');
-        const json = await res.json();
-        if (!json.ok) {
-          console.error('Failed to load real inventory from the server:', json.error || res.status);
+        const [invRes, moveRes] = await Promise.all([
+          fetch('/api/inventory'),
+          fetch('/api/inventory/movements'),
+        ]);
+        const invJson = await invRes.json();
+        const moveJson = await moveRes.json();
+        if (!invJson.ok || !moveJson.ok) {
+          console.error('Failed to load real inventory from the server:',
+                        invJson.error || moveJson.error || invRes.status);
           showToast('Could not load inventory from the database — showing may be outdated', 'error', 'bi-exclamation-triangle');
           return;
         }
         INVENTORY.length = 0;               // clear sample rows, keep the array reference
-        json.data.forEach(r => INVENTORY.push(r));
+        invJson.data.forEach(r => INVENTORY.push(r));
+        window.ALL_MOVEMENTS = moveJson.data;   // Stock In / Stock Out tables read this
         if (typeof window.renderInventory === 'function') window.renderInventory();
       } catch (err) {
         console.error('refreshInventory failed:', err);
@@ -502,7 +508,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Dashboard page: pulls from PROJECTS, TRANSACTIONS, and INVENTORY
   // all at once for its KPI cards + recent-transactions table. None of
   // the wiring above engages here (it's all gated behind projBody/
-  // txnBody/invBody, which don't exist on this page), so without this
+  // txnBody/stockInBody, which don't exist on this page), so without this
   // block the dashboard would show data.js's sample numbers forever -
   // not just a brief flash like the dedicated list pages, since nothing
   // would ever fetch real data for it at all.

@@ -14,10 +14,10 @@ let CURRENT_USER = { id:'', name:'', role:'' };
 
 /* ---------------------------------- Role-based nav/action visibility (per capstone Table 3.2) ---------------------------------- */
 const ROLE_PERMISSIONS = {
-  'System Administrator': ['dashboard','inventory','customers','projects','transactions','commissions','forecasting','reports','settings','profile'],
+  'System Administrator': ['dashboard','inventory','customers','projects','transactions','forecasting','reports','settings','profile'],
   'Inventory Personnel':  ['dashboard','inventory','profile'],
   'Operations Personnel': ['dashboard','projects','transactions','profile'],
-  'Management/Owner':     ['dashboard','projects','transactions','commissions','forecasting','reports','profile'],
+  'Management/Owner':     ['dashboard','projects','transactions','forecasting','reports','profile'],
 };
 
 /* ---------------------------------- Escape helper (safe HTML interpolation for user-editable fields) ---------------------------------- */
@@ -108,13 +108,17 @@ const TRANSACTIONS = [
   { inv:'TXN-4510', custId:'CUS-202',  proj:'PRJ-302', material:'Steel Pipe Sched 40 (3")', qty:25,  price:2240.00, pay:'Pending',  method:'On Account',    date:'2026-06-08' },
 ];
 
-/* ---------------------------------- Commissions ---------------------------------- */
+/* ---------------------------------- Employees / staff directory ----------------------------------
+ Used by staffName() below to resolve a staff id to a display name (e.g.
+ Projects' "Assigned" column). Real per-employee commission figures now
+ come exclusively from reports_export.compute_commissions() (server-side,
+ via the Reports page's Commission Report export) - not from this array. */
 const EMPLOYEES = [
-  { id:'EMP-01', name:'Engr. Juan Dela Cruz', role:'Senior Sales Engineer', completed:8, rate:5.0, sales:5840000, monthly:48200 },
-  { id:'EMP-02', name:'Engr. Maria Santos',   role:'Sales Engineer',        completed:6, rate:4.5, sales:4120000, monthly:36800 },
-  { id:'EMP-03', name:'Engr. Carlos Mendoza', role:'Project Engineer',      completed:5, rate:4.0, sales:3460000, monthly:29400 },
-  { id:'EMP-04', name:'Engr. Ana Lim',        role:'Sales Engineer',        completed:4, rate:4.5, sales:2280000, monthly:21600 },
-  { id:'EMP-05', name:'Engr. Pedro Reyes',    role:'Senior Sales Engineer', completed:7, rate:5.0, sales:5120000, monthly:42500 },
+  { id:'EMP-01', name:'Engr. Juan Dela Cruz', role:'Senior Sales Engineer' },
+  { id:'EMP-02', name:'Engr. Maria Santos',   role:'Sales Engineer' },
+  { id:'EMP-03', name:'Engr. Carlos Mendoza', role:'Project Engineer' },
+  { id:'EMP-04', name:'Engr. Ana Lim',        role:'Sales Engineer' },
+  { id:'EMP-05', name:'Engr. Pedro Reyes',    role:'Senior Sales Engineer' },
 ];
 
 /* ---------------------------------- Relational lookups (FK -> display name, mirrors DB joins) ---------------------------------- */

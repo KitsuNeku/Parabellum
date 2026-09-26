@@ -97,12 +97,12 @@ def hash_password(plain_password):
 # backend check would just be a locked door with the key taped to it.
 ROLE_PERMISSIONS = {
     "System Administrator": {"dashboard", "inventory", "customers", "projects",
-                              "transactions", "commissions", "forecasting",
+                              "transactions", "forecasting",
                               "reports", "settings", "profile"},
     "Inventory Personnel":  {"dashboard", "inventory", "profile"},
     "Operations Personnel": {"dashboard", "projects", "transactions", "profile"},
     "Management/Owner":     {"dashboard", "projects", "transactions",
-                              "commissions", "forecasting", "reports", "profile"},
+                              "forecasting", "reports", "profile"},
 }
 
 # Which permission-key each API endpoint falls under.

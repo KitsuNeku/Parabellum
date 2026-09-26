@@ -643,3 +643,35 @@ a { text-decoration: none; }
   .nav-link, .dropdown-item, .btn { min-height: 44px; }
   .sidebar__nav .nav-link { padding: .8rem 1rem; }
 }
+
+/* Searchable item picker (Stock In / Stock Out modals) - a lightweight
+   autocomplete dropdown under a plain text input, filtered client-side. */
+.item-search-results {
+  display: none;
+  position: absolute;
+  z-index: 1070; /* above modal content */
+  left: 0; right: 0;
+  top: 100%;
+  margin-top: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border, #dee2e6);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,.12));
+}
+.item-search-results.show { display: block; }
+.item-search-results .isr-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: .9rem;
+}
+.item-search-results .isr-item:hover,
+.item-search-results .isr-item.active {
+  background: var(--bg-soft, #f5f5f5);
+}
+.item-search-results .isr-empty {
+  padding: 10px 12px;
+  font-size: .85rem;
+  color: var(--text-muted-2, #888);
+}

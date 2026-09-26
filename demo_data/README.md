@@ -88,6 +88,17 @@ cap are left untouched. `seed_data.py` has also been fixed so future
 transactions are generated from a realistic target-total range instead
 of an independent random quantity.
 
+### `add_recorded_by_column.sql`
+
+Adds a `recorded_by` column to the existing `stock_movements` table so
+the Inventory page's Stock In / Stock Out tables can show which
+logged-in user performed each movement. **Run this once** if your
+database was created before this feature existed — otherwise new
+Stock In / Stock Out actions will fail to record (or the column simply
+won't exist yet). Existing historical movements will show "—" for
+Recorded By, since there's no way to know retroactively who performed
+them; every new movement from this point on captures it automatically.
+
 ## Operational notes
 
 - **Only run ONE** of the three SQL files.

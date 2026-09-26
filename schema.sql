@@ -102,7 +102,8 @@ CREATE TABLE stock_movements (
     quantity      NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
     movement_date DATE NOT NULL,
     project_id    INT REFERENCES projects(project_id),
-    remarks       TEXT
+    remarks       TEXT,
+    recorded_by   VARCHAR(80)   -- display name of the user who performed this movement
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);

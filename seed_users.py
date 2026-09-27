@@ -30,6 +30,10 @@ DEMO_USERS = [
      "ops@parabellumsteel.com.ph", "Operations"),
     ("manager1",   "Manager!2026",    "Management Owner",   "Management/Owner",
      "manager@parabellumsteel.com.ph", "Executive"),
+    ("jramos",     "Ramos!2026warehouse",   "John Erick Ramos",  "Inventory Personnel",
+     "jramos@parabellumsteel.com.ph", "Warehouse"),
+    ("rbautista",  "Bautista!2026warehouse", "Ronnel Bautista",  "Inventory Personnel",
+     "rbautista@parabellumsteel.com.ph", "Warehouse"),
 ]
 
 

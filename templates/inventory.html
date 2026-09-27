@@ -203,6 +203,13 @@
               <option>Bars</option><option>Plates</option><option>Sheets</option>
               <option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option>
             </select>
+            <div class="d-flex align-items-center gap-1">
+              <label for="moveDateFrom" class="form-label mb-0 text-muted-2 small">From</label>
+              <input type="date" class="form-control form-control-sm" style="max-width:160px" id="moveDateFrom">
+              <label for="moveDateTo" class="form-label mb-0 text-muted-2 small ms-1">To</label>
+              <input type="date" class="form-control form-control-sm" style="max-width:160px" id="moveDateTo">
+              <button type="button" class="btn btn-light-2 btn-sm" id="moveDateClearBtn" title="Clear date filter"><i class="bi bi-x-lg"></i></button>
+            </div>
             <div class="ms-auto d-flex gap-2">
               <button class="btn btn-light-2 btn-sm" data-bs-toggle="modal" data-bs-target="#stockInModal"><i class="bi bi-box-arrow-in-down me-1"></i>Stock In</button>
               <button class="btn btn-light-2 btn-sm" data-bs-toggle="modal" data-bs-target="#stockOutModal"><i class="bi bi-box-arrow-up me-1"></i>Stock Out</button>
@@ -451,6 +458,8 @@
       let stockOutPage = 1;
       let moveSearchQuery = '';
       let moveCategoryFilter = '';
+      let moveDateFrom = '';   // e.g. "2026-01-01" (yyyy-mm-dd from <input type="date">)
+      let moveDateTo = '';     // e.g. "2026-05-31"
 
       document.getElementById('moveSearchInput')?.addEventListener('input', (e) => {
         moveSearchQuery = e.target.value.toLowerCase().trim();
@@ -459,6 +468,25 @@
       });
       document.getElementById('moveCategoryFilter')?.addEventListener('change', (e) => {
         moveCategoryFilter = e.target.value;
+        stockInPage = 1; stockOutPage = 1;
+        renderMovements();
+      });
+      document.getElementById('moveDateFrom')?.addEventListener('change', (e) => {
+        moveDateFrom = e.target.value;
+        stockInPage = 1; stockOutPage = 1;
+        renderMovements();
+      });
+      document.getElementById('moveDateTo')?.addEventListener('change', (e) => {
+        moveDateTo = e.target.value;
+        stockInPage = 1; stockOutPage = 1;
+        renderMovements();
+      });
+      document.getElementById('moveDateClearBtn')?.addEventListener('click', () => {
+        moveDateFrom = ''; moveDateTo = '';
+        const fromEl = document.getElementById('moveDateFrom');
+        const toEl = document.getElementById('moveDateTo');
+        if (fromEl) fromEl.value = '';
+        if (toEl) toEl.value = '';
         stockInPage = 1; stockOutPage = 1;
         renderMovements();
       });
@@ -566,6 +594,12 @@
             const hay = `${m.id} ${m.name}`.toLowerCase();
             if (!hay.includes(moveSearchQuery)) return false;
           }
+          // m.date is "yyyy-mm-dd" (or a datetime string starting with that),
+          // which sorts/compares correctly as a plain string against the
+          // <input type="date"> values, so no Date parsing is needed.
+          const moveDate = (m.date || '').slice(0, 10);
+          if (moveDateFrom && moveDate < moveDateFrom) return false;
+          if (moveDateTo && moveDate > moveDateTo) return false;
           return true;
         });
         const inRows  = filtered.filter(m => m.type === 'RECEIPT');

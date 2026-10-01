@@ -71,7 +71,7 @@ def main():
     cur.execute("""
         TRUNCATE monthly_demand, forecast_results, model_metrics,
                  stock_movements, transactions, projects, customers,
-                 employees, materials, audit_logs
+                 employees, materials, suppliers, audit_logs
         RESTART IDENTITY CASCADE;
     """)
 
@@ -87,6 +87,32 @@ def main():
         )
         ids[code] = cur.fetchone()[0]
     print(f"  {len(ids)} materials")
+
+    # ---- Suppliers (names match MATERIALS' `supplier` column exactly, so
+    # the Suppliers page's "Materials Supplied" list links up automatically) ----
+    SUPPLIER_INFO = {
+        "SteelAsia":            ("Roberto Villanueva", "Raw Material Supplier",      "Net 30", "Calaca, Batangas"),
+        "Puyat Steel":          ("Dennis Ramos",        "Raw Material Supplier",      "Net 30", "Mandaluyong City"),
+        "Capitol Steel":        ("Melissa Go",          "Raw Material Supplier",      "Net 30", "Valenzuela City"),
+        "Pag-asa Steel":        ("Arnel Bautista",      "Raw Material Supplier",      "Net 45", "Bulacan"),
+        "Cathay Metal":         ("Jenny Lao",            "Hardware/Fastener Supplier", "Cash on Delivery", "Binondo, Manila"),
+        "Treasure Steelworks":  ("Lorna Castillo",      "Raw Material Supplier",      "Net 15", "Lipa City, Batangas"),
+    }
+    supplier_names = sorted({supplier for _, _, _, _, _, _, supplier, _ in MATERIALS})
+    for idx, sname in enumerate(supplier_names):
+        contact, category, terms, addr = SUPPLIER_INFO.get(
+            sname, ("", "Raw Material Supplier", "Net 30", ""))
+        code = f"SUP-{401 + idx}"
+        cur.execute(
+            """INSERT INTO suppliers
+                 (supplier_code, name, contact_person, phone, email, address,
+                  category, terms, status)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Active');""",
+            (code, sname, contact,
+             f"09{random.randint(10,99)}-{random.randint(100,999)}-{random.randint(1000,9999)}",
+             f"sales@{sname.split()[0].lower()}.sample.ph", addr, category, terms),
+        )
+    print(f"  {len(supplier_names)} suppliers")
 
     # ---- Employees (commission computation reads this) ----
     # Codes must match the EMP-01..EMP-06 range projects.staff uses below.

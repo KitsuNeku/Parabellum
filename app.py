@@ -99,7 +99,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=1800,  # auto sign-out after 30 idle minutes
 )
 
-PAGES = ["dashboard", "inventory", "customers", "projects", "transactions",
+PAGES = ["dashboard", "inventory", "suppliers", "customers", "projects", "transactions",
          "forecasting", "reports", "settings", "profile"]
 
 
@@ -362,6 +362,23 @@ def api_inventory_save():
                   price, reorder, d.get("loc"))
         edit_id = d.get("edit_id")
 
+        if not edit_id:
+            # Guard against creating a second row for an item that already
+            # exists under (near enough) the same name - e.g. from the Stock
+            # In modal's "type a new item name" box, if someone types a name
+            # that's a different case or has stray whitespace compared to an
+            # existing item instead of picking it from the search dropdown.
+            # Without this, the two rows silently split one item's stock
+            # history across two material_ids, and nothing on screen would
+            # tell you why the numbers stopped adding up.
+            dup = execute_query(DB_CONFIG,
+                "SELECT material_code FROM materials WHERE LOWER(TRIM(material_name)) = LOWER(TRIM(%s));",
+                (name,), fetch=True)
+            if dup:
+                return jsonify({"ok": False, "error":
+                    f"An item named \"{name}\" already exists ({dup[0]['material_code']}). "
+                    "Search for it above and pick it from the list instead of typing the name again."}), 400
+
         if edit_id:
             execute_query(DB_CONFIG, """
                 UPDATE materials SET material_name=%s, category=%s, supplier=%s,
@@ -409,16 +426,21 @@ def api_inventory_save():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
-def _apply_movement(material_code, quantity, kind, remarks, project_id=None, recorded_by=None):
+def _apply_movement(material_code, quantity, kind, remarks, project_id=None, recorded_by=None, is_damaged=False, back_order_by=None):
     """
     Record a stock movement and adjust the balance.
 
     kind = 'RECEIPT'  (stock in from supplier, increases balance),
            'ISSUANCE' (stock out to project/customer, decreases balance), or
-           'RETURN'   (back-order: material returned by a customer; increases
-                       balance like a RECEIPT, but tracked separately so the
-                       Stock Summary can show what came back vs. what was
-                       newly received).
+           'RETURN'   (back-order: material returned by a customer. Logged
+                       in the Back Orders table/report and the Stock
+                       Movement Summary, but does NOT change
+                       materials.current_stock - a back order is tracked
+                       separately from on-hand stock, not folded into it,
+                       so the material's "pcs on hand" figure everywhere
+                       else in the app (Inventory, Dashboard's Low Stock
+                       list, etc.) only ever reflects actual Stock In /
+                       Stock Out, never a return).
 
     For issuances this ENFORCES the non-negative-stock rule required by
     Objective 1.1 and test Table 2 - an over-issuance is rejected outright,
@@ -429,6 +451,18 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
     tables can show who did it - independent of `remarks`, which describes
     the movement itself (a delivery note, a project reference), not the
     person.
+
+    is_damaged: dormant - RETURN never touches current_stock any more
+    (see above), so "damaged vs good" no longer changes the balance
+    math either way. The column and parameter are kept only so historical
+    rows and the Back Orders report/badge still mean what they always
+    meant, not because anything can set it True from the UI any more.
+
+    back_order_by: only meaningful when kind='RETURN'. The customer or
+    project that returned the material - who initiated the back order -
+    stored as its own column so the Back Orders table/report can show it
+    separately from `recorded_by` (the staff member who typed it in) and
+    from `remarks` (the free-text reason for the return).
     """
     rows = execute_query(DB_CONFIG,
         "SELECT material_id, material_name, unit, current_stock FROM materials WHERE material_code=%s;",
@@ -438,6 +472,7 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
     m = rows[0]
     balance = float(m["current_stock"])
     quantity = float(quantity)
+    is_damaged = bool(is_damaged) and kind == "RETURN"
 
     if quantity <= 0:
         raise ValueError("Quantity must be greater than zero.")
@@ -446,14 +481,23 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
         raise ValueError(
             f"Cannot issue {quantity:g} {m['unit']} — only {balance:g} in stock.")
 
-    # RECEIPT and RETURN both add stock; ISSUANCE subtracts.
-    new_balance = (balance - quantity) if kind == "ISSUANCE" else (balance + quantity)
+    # RECEIPT adds stock, ISSUANCE subtracts - a RETURN (back order) is
+    # logged but deliberately leaves current_stock untouched either way;
+    # see the kind/is_damaged docstring notes above for why.
+    if kind == "ISSUANCE":
+        new_balance = balance - quantity
+    elif kind == "RETURN":
+        new_balance = balance
+    else:
+        new_balance = balance + quantity
+
+    back_order_by = (back_order_by or None) if kind == "RETURN" else None
 
     execute_query(DB_CONFIG, """
         INSERT INTO stock_movements
-            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by)
-        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s);
-    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by))
+            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by, is_damaged, back_order_by)
+        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s);
+    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by, is_damaged, back_order_by))
 
     execute_query(DB_CONFIG,
         "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
@@ -504,26 +548,24 @@ def api_stock_out():
 def api_inventory_return():
     """
     Record a back-order return: material coming back from a customer or
-    project. Stock is added back to the balance (same effect as a RECEIPT)
-    but tracked with movement_type = 'RETURN' so the Stock Movement
-    Summary can distinguish returns from newly-received stock.
+    project. Logged with movement_type = 'RETURN' so the Back Orders
+    table/report and the Stock Movement Summary can show it, but it does
+    NOT change the material's on-hand current_stock - a back order is
+    tracked as its own figure, separate from actual Stock In/Stock Out,
+    so it never inflates the "pcs on hand" shown on Inventory or the
+    Dashboard's Low Stock list.
     """
     d = request.get_json(silent=True) or {}
     try:
         remarks = d.get("remarks") or ""
         customer = (d.get("customer") or "").strip()
-        # Prefix the remarks with the customer/reference so the Back Orders
-        # table can show at a glance who returned it, without needing a
-        # separate DB column.
-        if customer:
-            remarks = f"Returned by {customer}" + (f" — {remarks}" if remarks else "")
-        elif not remarks:
-            remarks = "Returned by customer"
         name, bal = _apply_movement(d.get("itemId"), d.get("qty"), "RETURN",
                                     remarks,
-                                    recorded_by=session["user"]["name"])
+                                    recorded_by=session["user"]["name"],
+                                    back_order_by=customer or None)
         log_audit(DB_CONFIG, "STOCK_RETURN",
-                  f"+{d.get('qty')} back to {name} (now {bal:g}).",
+                  f"{d.get('qty')} of {name} logged as a back order (on-hand stock unchanged, still {bal:g})."
+                  + (f" Back-ordered by {customer}." if customer else ""),
                   session["user"]["username"])
         return jsonify({"ok": True})
     except ValueError as e:
@@ -539,12 +581,19 @@ def api_inventory_summary():
     """
     Per-material aggregated totals across the entire stock_movements
     history: Total In (RECEIPT), Total Out (ISSUANCE), and Back Orders
-    (RETURN — material that came back from a customer).
+    (RETURN — material that came back from a customer or project).
 
-    Net Stock = In + Back Orders - Out, which for any material with no
-    manual adjustments equals the current on-hand quantity in
-    materials.current_stock — surfacing the same number two ways is a
-    quick reconciliation check for the person managing inventory.
+    Back Orders is informational only - it does NOT feed into Net Stock.
+    A back order is logged (so the Back Orders table/report can show it)
+    but deliberately never changes materials.current_stock (see
+    _apply_movement in app.py), so Net Stock = In - Out, which for any
+    material with no manual adjustments equals the current on-hand
+    quantity in materials.current_stock — surfacing the same number two
+    ways is a quick reconciliation check for the person managing
+    inventory. "damagedReturn" is a leftover field from a removed UI
+    control (see _apply_movement's is_damaged docstring note); it no
+    longer affects anything and is always 0 for any return logged since
+    that control was removed.
     """
     try:
         rows = execute_query(DB_CONFIG, """
@@ -552,7 +601,8 @@ def api_inventory_summary():
                    m.current_stock,
                    COALESCE(SUM(CASE WHEN sm.movement_type = 'RECEIPT'  THEN sm.quantity ELSE 0 END), 0) AS total_in,
                    COALESCE(SUM(CASE WHEN sm.movement_type = 'ISSUANCE' THEN sm.quantity ELSE 0 END), 0) AS total_out,
-                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN'   THEN sm.quantity ELSE 0 END), 0) AS total_return
+                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' AND NOT sm.is_damaged THEN sm.quantity ELSE 0 END), 0) AS total_return,
+                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' AND sm.is_damaged     THEN sm.quantity ELSE 0 END), 0) AS total_damaged
               FROM materials m
               LEFT JOIN stock_movements sm ON sm.material_id = m.material_id
              GROUP BY m.material_id, m.material_code, m.material_name,
@@ -560,15 +610,16 @@ def api_inventory_summary():
              ORDER BY m.material_code;
         """, fetch=True)
         data = [{
-            "id":         r["material_code"],
-            "name":       r["material_name"],
-            "cat":        r["category"] or "Uncategorized",
-            "unit":       r["unit"],
-            "totalIn":    float(r["total_in"]),
-            "totalOut":   float(r["total_out"]),
-            "backOrder":  float(r["total_return"]),
-            "netStock":   float(r["total_in"]) + float(r["total_return"]) - float(r["total_out"]),
-            "onHand":     float(r["current_stock"]),
+            "id":            r["material_code"],
+            "name":          r["material_name"],
+            "cat":           r["category"] or "Uncategorized",
+            "unit":          r["unit"],
+            "totalIn":       float(r["total_in"]),
+            "totalOut":      float(r["total_out"]),
+            "backOrder":     float(r["total_return"]),
+            "damagedReturn": float(r["total_damaged"]),
+            "netStock":      float(r["total_in"]) - float(r["total_out"]),
+            "onHand":        float(r["current_stock"]),
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
@@ -613,7 +664,7 @@ def api_inventory_movements():
         rows = execute_query(DB_CONFIG, """
             SELECT sm.movement_id, m.material_code, m.material_name, m.unit,
                    m.category, sm.movement_type, sm.quantity, sm.movement_date,
-                   sm.remarks, sm.recorded_by
+                   sm.remarks, sm.recorded_by, sm.is_damaged, sm.back_order_by
               FROM stock_movements sm
               JOIN materials m ON m.material_id = sm.material_id
              ORDER BY sm.movement_date DESC, sm.movement_id DESC;
@@ -624,11 +675,19 @@ def api_inventory_movements():
             "name":       r["material_name"],
             "unit":       r["unit"],
             "cat":        r["category"] or "Uncategorized",
-            "type":       r["movement_type"],   # 'RECEIPT' or 'ISSUANCE'
+            "type":       r["movement_type"],   # 'RECEIPT', 'ISSUANCE' or 'RETURN'
             "qty":        float(r["quantity"]),
             "date":       str(r["movement_date"]),
             "remarks":    r["remarks"] or "",
             "recordedBy": r["recorded_by"] or "\u2014",
+            # Only meaningful for type='RETURN' - a damaged return was
+            # logged but did NOT add back to current_stock (see
+            # _apply_movement in app.py). Always False for RECEIPT/ISSUANCE.
+            "isDamaged":  bool(r["is_damaged"]),
+            # Only meaningful for type='RETURN' - who returned the material
+            # (customer/project), distinct from recordedBy (the staff user
+            # who entered it).
+            "backOrderBy": r["back_order_by"] or "",
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
@@ -672,6 +731,107 @@ def api_inventory_projects_for_stockout():
             "addr": r["address"] or "",
         } for r in cust_rows]
         return jsonify({"ok": True, "projects": projects, "customers": customers})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Suppliers API ----------------
+# Companies Parabellum buys materials from (Suppliers page). Kept as its
+# own table rather than reusing materials.supplier (a free-text field
+# that's been on Inventory since the start) - the frontend links a
+# supplier to its materials by matching this table's `name` against each
+# material's `sup` text, the same fallback the page's data.js already
+# ships with, so existing inventory rows link up with no extra wiring.
+@app.route("/api/suppliers")
+@permission_required("suppliers")
+def api_suppliers():
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT supplier_code, name, contact_person, phone, email, address,
+                   category, terms, status, remarks, created_at
+            FROM suppliers ORDER BY name;
+        """, fetch=True)
+        data = [{
+            "id": r["supplier_code"], "name": r["name"],
+            "contact": r["contact_person"] or "", "phone": r["phone"] or "",
+            "email": r["email"] or "", "addr": r["address"] or "",
+            "category": r["category"] or "", "terms": r["terms"] or "",
+            "status": r["status"], "remarks": r["remarks"] or "",
+            "dateAdded": str(r["created_at"].date()) if r["created_at"] else "",
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/suppliers/save", methods=["POST"])
+@permission_required("suppliers")
+def api_suppliers_save():
+    d = request.get_json(silent=True) or {}
+    name = (d.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Company name is required."}), 400
+    try:
+        edit_id = d.get("edit_id")
+
+        # Case-insensitive duplicate-name guard, same reasoning as the
+        # one on /api/inventory/save: without it, two records for the
+        # same actual supplier can silently exist (e.g. one typed with
+        # different spacing/case), splitting its history across two rows.
+        dup = execute_query(DB_CONFIG,
+            "SELECT supplier_code FROM suppliers WHERE LOWER(TRIM(name)) = LOWER(TRIM(%s)) AND supplier_code != COALESCE(%s, '');",
+            (name, edit_id), fetch=True)
+        if dup:
+            return jsonify({"ok": False, "error":
+                f"A supplier named \"{name}\" already exists ({dup[0]['supplier_code']})."}), 400
+
+        fields = (name, d.get("contact"), d.get("phone"), d.get("email"),
+                  d.get("addr"), d.get("category"), d.get("terms") or "Net 30",
+                  d.get("status") or "Active", d.get("remarks"))
+        if edit_id:
+            execute_query(DB_CONFIG, """
+                UPDATE suppliers SET name=%s, contact_person=%s, phone=%s, email=%s,
+                       address=%s, category=%s, terms=%s, status=%s, remarks=%s
+                WHERE supplier_code=%s;
+            """, fields + (edit_id,))
+            log_audit(DB_CONFIG, "SUPPLIER_UPDATED", f"Edited {edit_id} ({name}).",
+                      session["user"]["username"])
+        else:
+            row = execute_query(DB_CONFIG, """
+                SELECT COALESCE(MAX(CAST(SUBSTRING(supplier_code FROM 5) AS INTEGER)), 400) + 1 AS n
+                FROM suppliers WHERE supplier_code LIKE 'SUP-%';
+            """, fetch=True)
+            code = f"SUP-{row[0]['n']}"
+            execute_query(DB_CONFIG, """
+                INSERT INTO suppliers
+                    (supplier_code, name, contact_person, phone, email, address,
+                     category, terms, status, remarks)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            """, (code,) + fields)
+            log_audit(DB_CONFIG, "SUPPLIER_ADDED", f"Added {code} ({name}).",
+                      session["user"]["username"])
+        return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/suppliers/delete", methods=["POST"])
+@permission_required("suppliers")
+def api_suppliers_delete():
+    # Not reachable from the Suppliers page itself (suppliers are
+    # deactivated via /api/suppliers/save, never deleted, so Stock In
+    # history always stays traceable) - kept only for API completeness
+    # and admin/script use, matching the other entity-delete endpoints.
+    d = request.get_json(silent=True) or {}
+    code = d.get("id")
+    try:
+        execute_query(DB_CONFIG, "DELETE FROM suppliers WHERE supplier_code=%s;", (code,))
+        log_audit(DB_CONFIG, "SUPPLIER_DELETED", f"Deleted {code}.",
+                  session["user"]["username"])
+        return jsonify({"ok": True})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -1331,18 +1491,48 @@ def api_settings_restore():
     # audit_logs itself was just truncated and reloaded as part of the
     # restore, so this is the first row logged into the restored table --
     # recording it now (not before) is what makes it survive.
+    signed_in_user_id = session["user"]["user_id"]
+    signed_in_username = session["user"]["username"]
     try:
         log_audit(DB_CONFIG, "DATABASE_RESTORED", f"Restored database from {filename}.",
-                  session["user"]["username"])
+                  signed_in_username)
     except Exception:
         pass
 
-    # The restored data may not even include the account that's currently
-    # signed in (or may have different users/roles entirely), so the
-    # session this request was made with can no longer be trusted. Clear it
-    # and send everyone back to the login screen.
-    session.clear()
-    return jsonify({"ok": True})
+    # The restored data may not include the account that's currently signed
+    # in at all (a backup from before that account existed), or that
+    # username/user_id may now belong to someone else, or their role/
+    # permissions may have changed in the restored data - in any of those
+    # cases the session can no longer be trusted, so it's cleared and
+    # everyone is sent back to login. But when the exact same account (same
+    # user_id AND username) is still present and active in what was just
+    # restored, there's nothing stale about the session - rebuild it from
+    # the restored row (picking up any role/permission changes the restore
+    # brought with it) and let the admin carry on without being bounced out
+    # for no real reason.
+    stayed_signed_in = False
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT user_id, username, full_name, role, is_active, custom_permissions
+            FROM users WHERE user_id = %s AND username = %s;
+        """, (signed_in_user_id, signed_in_username), fetch=True)
+        u = rows[0] if rows else None
+        if u and u["is_active"]:
+            session["user"] = {
+                "user_id": u["user_id"],
+                "username": u["username"],
+                "name": u["full_name"] or u["username"],
+                "role": u["role"],
+                "allowed_pages": sorted(resolve_permissions(
+                    u["role"], u.get("custom_permissions"), get_role_permissions(DB_CONFIG))),
+            }
+            stayed_signed_in = True
+    except Exception:
+        app.logger.exception("Could not re-check the signed-in account after restore")
+
+    if not stayed_signed_in:
+        session.clear()
+    return jsonify({"ok": True, "stayed_signed_in": stayed_signed_in})
 
 
 # ---------------- System Logs / Audit Trail API (Settings > Logs) ----------------

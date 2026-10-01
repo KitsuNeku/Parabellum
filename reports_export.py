@@ -156,14 +156,19 @@ def build_stock_out_report(db_config):
 
 def build_back_order_report(db_config):
     """
-    Every RETURN movement - materials returned by a customer/project and
-    added back to stock (the Inventory page's "Back Orders (Returns from
-    Customers)" table). Not a supplier re-order; see the matching comment
-    on the inventory page's Record Return modal.
+    Every RETURN movement - materials returned by a customer/project (the
+    Inventory page's "Back Orders (Returns from Customers)" table). Not a
+    supplier re-order; see the matching comment on the inventory page's
+    Record Return modal. A back order is logged here but does NOT add to
+    the material's on-hand stock (see _apply_movement in app.py), so this
+    report is the only place that quantity is counted as "returned".
+    Includes a Back-Ordered By column - the customer or project that
+    returned the material - separate from Recorded By (the staff member
+    who entered it into the system).
     """
     rows = execute_query(db_config, """
         SELECT m.material_name, m.category, sm.quantity, m.unit,
-               sm.movement_date, sm.remarks, sm.recorded_by
+               sm.movement_date, sm.remarks, sm.recorded_by, sm.back_order_by
         FROM stock_movements sm
         JOIN materials m ON m.material_id = sm.material_id
         WHERE sm.movement_type = 'RETURN'
@@ -172,9 +177,10 @@ def build_back_order_report(db_config):
     out = [[r["material_name"], r["category"] or "\u2014",
             f"{float(r['quantity']):g} {r['unit']}",
             str(r["movement_date"]) if r["movement_date"] else "\u2014",
-            r["remarks"] or "\u2014", r["recorded_by"] or "\u2014"] for r in rows]
+            r["remarks"] or "\u2014", r["back_order_by"] or "\u2014",
+            r["recorded_by"] or "\u2014"] for r in rows]
     return ("Back Order Report", "Materials returned from customers/projects",
-            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Recorded By"], out)
+            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Back-Ordered By", "Recorded By"], out)
 
 
 

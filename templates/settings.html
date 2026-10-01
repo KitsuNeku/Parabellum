@@ -41,6 +41,7 @@
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
       {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
       {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
@@ -73,6 +74,10 @@
           <a href="/inventory" class="dp-item text-decoration-none">
             <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
             <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/suppliers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-truck"></i></div>
+            <div><div class="dp-title text-dark">Search Suppliers</div><div class="dp-time">Open suppliers module</div></div>
           </a>
           <a href="/customers" class="dp-item text-decoration-none">
             <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
@@ -469,6 +474,7 @@
       const ACCESS_MODULES = [
         ['dashboard',    'Dashboard'],
         ['inventory',    'Inventory'],
+        ['suppliers',    'Suppliers'],
         ['customers',    'Customers'],
         ['projects',     'Projects'],
         ['transactions', 'Client Transactions'],
@@ -614,7 +620,7 @@
        anyone else, and no role can be left with zero modules) - this page
        just reflects those rules and reverts a cell if the server rejects it. */
       const MODULES = [
-        ['dashboard','Dashboard'], ['inventory','Inventory'], ['customers','Customers'],
+        ['dashboard','Dashboard'], ['inventory','Inventory'], ['suppliers','Suppliers'], ['customers','Customers'],
         ['projects','Projects'], ['transactions','Client Transactions'],
         ['forecasting','Forecasting'], ['reports','Reports'], ['settings','Settings'],
       ];
@@ -860,12 +866,23 @@
           if (!json.ok) throw new Error(json.error || 'Restore failed.');
 
           restoreConfirmModal.hide();
-          showToast(`Database restored from "${restoreSelectedFile.name}". Signing you back in…`, 'success', 'bi-check-circle-fill');
-          // The restored data may not include the current session's user
-          // row (or may have changed its role/permissions), so the
-          // session is no longer trustworthy. The server already cleared
-          // it; send everyone to login to re-establish a clean session.
-          setTimeout(() => { window.location.href = '/login'; }, 1500);
+          if (json.stayed_signed_in) {
+            // This account is still present (and active) in the data that
+            // was just restored, so the server kept the session instead of
+            // clearing it. Reload rather than navigate away - every page
+            // on-screen may be showing now-stale data (old inventory
+            // counts, old users, old permissions), and a reload is the
+            // simplest way to make sure nothing stale lingers in memory.
+            showToast(`Database restored from "${restoreSelectedFile.name}". Reloading…`, 'success', 'bi-check-circle-fill');
+            setTimeout(() => { window.location.reload(); }, 1200);
+          } else {
+            // This account wasn't in the restored data (or is no longer
+            // active there), so the server cleared the session - it can no
+            // longer be trusted. Send everyone to login to re-establish a
+            // clean one.
+            showToast(`Database restored from "${restoreSelectedFile.name}". Signing you back in…`, 'success', 'bi-check-circle-fill');
+            setTimeout(() => { window.location.href = '/login'; }, 1500);
+          }
         } catch (err) {
           showToast(err.message || 'Could not restore the database.', 'error', 'bi-exclamation-triangle');
           confirmBtn.disabled = false;

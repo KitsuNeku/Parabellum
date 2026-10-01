@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 );
 
 INSERT INTO role_permissions (role, permissions) VALUES
-    ('System Administrator', 'dashboard,inventory,customers,projects,transactions,forecasting,reports,settings,profile'),
-    ('Inventory Personnel',  'dashboard,inventory,profile'),
+    ('System Administrator', 'dashboard,inventory,suppliers,customers,projects,transactions,forecasting,reports,settings,profile'),
+    ('Inventory Personnel',  'dashboard,inventory,suppliers,profile'),
     ('Operations Personnel', 'dashboard,projects,transactions,profile'),
     ('Management/Owner',     'dashboard,projects,transactions,forecasting,reports,profile')
 ON CONFLICT (role) DO NOTHING;

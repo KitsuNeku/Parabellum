@@ -14,8 +14,8 @@ let CURRENT_USER = { id:'', name:'', role:'' };
 
 /* ---------------------------------- Role-based nav/action visibility (per capstone Table 3.2) ---------------------------------- */
 const ROLE_PERMISSIONS = {
-  'System Administrator': ['dashboard','inventory','customers','projects','transactions','forecasting','reports','settings','profile'],
-  'Inventory Personnel':  ['dashboard','inventory','profile'],
+  'System Administrator': ['dashboard','inventory','suppliers','customers','projects','transactions','forecasting','reports','settings','profile'],
+  'Inventory Personnel':  ['dashboard','inventory','suppliers','profile'],
   'Operations Personnel': ['dashboard','projects','transactions','profile'],
   'Management/Owner':     ['dashboard','projects','transactions','forecasting','reports','profile'],
 };
@@ -49,6 +49,25 @@ function invStatus(qty, reorder){
   if (qty <= reorder) return 'Low Stock';
   return 'In Stock';
 }
+
+/* ---------------------------------- Suppliers ----------------------------------
+ Companies Parabellum buys materials from (Suppliers page). A real `suppliers`
+ table on the backend, separate from each material's free-text `sup` field
+ below - see itemSupplierId() further down for how the two link up without
+ either side needing to change. Suppliers are deactivated, never deleted, so
+ a material's Stock In history always stays traceable back to who supplied
+ it. This demo array is only the first-paint placeholder; wireEntityPage()
+ in app.js clears it and loads the real rows from /api/suppliers. */
+const SUPPLIER_CATEGORIES = ['Raw Material Supplier','Hardware/Fastener Supplier','Equipment Supplier','Consumables Supplier','Other'];
+const SUPPLIER_TERMS      = ['Cash on Delivery','Net 15','Net 30','Net 45','Net 60'];
+const SUPPLIERS = [
+  { id:'SUP-401', name:'SteelAsia',           contact:'Roberto Villanueva', phone:'0917-552-0181', email:'sales@steelasia.sample.ph',     addr:'Calaca, Batangas',    category:'Raw Material Supplier',      terms:'Net 30',           status:'Active', dateAdded:'2026-01-08', remarks:'Primary rebar and H-beam source.' },
+  { id:'SUP-402', name:'Capitol Steel',       contact:'Melissa Go',         phone:'0918-334-7720', email:'orders@capitolsteel.sample.ph', addr:'Valenzuela City',     category:'Raw Material Supplier',      terms:'Net 30',           status:'Active', dateAdded:'2026-01-15', remarks:'' },
+  { id:'SUP-403', name:'Pag-asa Steel',       contact:'Arnel Bautista',     phone:'0920-118-4456', email:'supply@pagasasteel.sample.ph',  addr:'Bulacan',             category:'Raw Material Supplier',      terms:'Net 45',           status:'Active', dateAdded:'2026-02-02', remarks:'Angle bars and pipes.' },
+  { id:'SUP-404', name:'Cathay Metal',        contact:'Jenny Lao',          phone:'0915-660-2394', email:'cathay.orders@sample.ph',       addr:'Binondo, Manila',     category:'Hardware/Fastener Supplier', terms:'Cash on Delivery', status:'Active', dateAdded:'2026-02-10', remarks:'Fasteners, consumables, stainless.' },
+  { id:'SUP-405', name:'Puyat Steel',         contact:'Dennis Ramos',       phone:'0917-904-6613', email:'sales@puyatsteel.sample.ph',    addr:'Mandaluyong City',    category:'Raw Material Supplier',      terms:'Net 30',           status:'Active', dateAdded:'2026-02-21', remarks:'GI sheets and purlins.' },
+  { id:'SUP-406', name:'Treasure Steelworks', contact:'Lorna Castillo',     phone:'0919-275-3308', email:'treasure.steel@sample.ph',      addr:'Lipa City, Batangas', category:'Raw Material Supplier',      terms:'Net 15',           status:'Inactive', dateAdded:'2026-03-05', remarks:'On pause pending price review.' },
+];
 
 /* ---------------------------------- Inventory ---------------------------------- */
 const INVENTORY = [
@@ -122,6 +141,12 @@ const EMPLOYEES = [
 /* ---------------------------------- Relational lookups (FK -> display name, mirrors DB joins) ---------------------------------- */
 const custName  = (id) => CUSTOMERS.find(c => c.id === id)?.name  || id;
 const staffName = (id) => EMPLOYEES.find(e => e.id === id)?.name || id;
+const supplierName = (id) => SUPPLIERS.find(s => s.id === id)?.name || id || '';
+/* An item's supplier id. Materials don't carry a supplier id column (the
+ real `supplier` field on `materials` stays free text, unchanged), so this
+ matches on name instead - the same seam the Suppliers page's "Materials
+ Supplied" list and material count are built on. */
+const itemSupplierId = (i) => i?.supId || SUPPLIERS.find(s => s.name === i?.sup)?.id || '';
 /* Derive display fields once so existing render code (p.cust / t.cust / p.staff) keeps working. */
 PROJECTS.forEach(p => { p.cust = custName(p.custId); p.staff = staffName(p.staffId); });
 TRANSACTIONS.forEach(t => { t.cust = custName(t.custId); });
@@ -202,6 +227,10 @@ function custStatusBadge(s){
   const m={Active:'b-success','On Hold':'b-warning',Inactive:'b-neutral'};
   return `<span class="badge ${m[s]||'b-neutral'}">${s}</span>`;
 }
+function supplierStatusBadge(s){
+  const m={Active:'b-success',Inactive:'b-warning',Archived:'b-neutral'};
+  return `<span class="badge ${m[s]||'b-neutral'}">${s}</span>`;
+}
 function progressBar(p){
   const cls = p>=100?'green':(p>=50?'':'gold');
   return `<div class="d-flex align-items-center gap-2">
@@ -222,6 +251,7 @@ function initTooltips(scope){
 
 /* ---------------------------------- Entity stores (the exact seam a backend swaps into) ---------------------------------- */
 const inventoryStore   = makeStore(INVENTORY);
+const supplierStore    = makeStore(SUPPLIERS);
 const customerStore    = makeStore(CUSTOMERS);
 const projectStore     = makeStore(PROJECTS);
 const transactionStore = makeStore(TRANSACTIONS, 'inv');
@@ -239,3 +269,5 @@ window.PROJECTS      = PROJECTS;
 window.CUSTOMERS     = CUSTOMERS;
 window.projectStore  = projectStore;
 window.customerStore = customerStore;
+window.SUPPLIERS     = SUPPLIERS;
+window.supplierStore = supplierStore;

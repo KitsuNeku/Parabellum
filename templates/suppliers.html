@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suppliers · Parabellum ISOS</title>
+  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
+  <!-- Google Font: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Bootstrap 5 + Icons (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Custom design system -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar__brand d-flex align-items-center gap-2">
+      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
+      <div>
+        <div class="brand-name">PARABELLUM</div>
+        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
+      </div>
+    </div>
+
+    <div class="sidebar__user">
+      <div class="avatar-gold">{{ current_user_initials }}</div>
+      <div>
+        <div class="u-name">{{ current_user.name }}</div>
+        <div class="u-role">{{ current_user.role }}</div>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <div class="nav-section">MAIN</div>
+      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
+      <div class="nav-section">INVENTORY &amp; SALES</div>
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'suppliers' in allowed_pages %}<a class="nav-link active" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
+      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
+      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
+      {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
+      <div class="nav-section">INTELLIGENCE</div>
+      {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
+      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
+      <div class="nav-section">SYSTEM</div>
+      {% if 'settings' in allowed_pages %}<a class="nav-link" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
+      {% if 'profile' in allowed_pages %}<a class="nav-link" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
+    </nav>
+
+    <div class="sidebar__footer">
+      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
+        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
+      </a>
+    </div>
+  </aside>
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <!-- ============ TOPBAR ============ -->
+    <header class="topbar">
+      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
+
+      <div class="topbar__search dropdown">
+        <i class="bi bi-search"></i>
+        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
+               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
+        <ul class="dropdown-menu dropdown-panel mt-2">
+          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
+          <a href="/inventory" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
+            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/suppliers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-truck"></i></div>
+            <div><div class="dp-title text-dark">Search Suppliers</div><div class="dp-time">Open suppliers module</div></div>
+          </a>
+          <a href="/customers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
+            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
+          </a>
+          <a href="/projects" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
+            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
+          </a>
+          <a href="/transactions" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
+            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
+          </a>
+        </ul>
+      </div>
+
+      <div class="topbar__actions">
+        <!-- Notifications -->
+        <div class="dropdown">
+          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
+            <i class="bi bi-bell"></i><span class="dot"></span>
+          </button>
+          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
+            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
+          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
+          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
+          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
+          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
+        </a>
+        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
+          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
+          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
+        </a>
+            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <button class="icon-btn" data-bs-toggle="tooltip" title="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
+
+        <!-- Profile -->
+        <div class="dropdown">
+          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
+            <div class="avatar-sm">{{ current_user_initials }}</div>
+            <div class="p-meta">
+              <div class="p-name">{{ current_user.name }}</div>
+              <div class="p-role">{{ current_user.role }}</div>
+            </div>
+            <i class="bi bi-chevron-down small text-muted-2"></i>
+          </div>
+          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
+            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
+            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+    <main class="page">
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Suppliers</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Supplier Management</h1>
+          <p class="page-subtitle">Record, track and manage the companies that supply Parabellum's materials.</p>
+        </div>
+      </div>
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-truck"></i></div>
+          <div class="stat-label">Total Suppliers</div><div class="stat-value" id="supStatTotal">&mdash;</div><div class="stat-desc">Registered supplier records</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
+          <div class="stat-label">Active</div><div class="stat-value" id="supStatActive">&mdash;</div><div class="stat-desc">Available for Stock In</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-pause-circle"></i></div>
+          <div class="stat-label">Inactive / Archived</div><div class="stat-value" id="supStatInactive">&mdash;</div><div class="stat-desc">Kept for history</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-box-seam"></i></div>
+          <div class="stat-label">Materials Supplied</div><div class="stat-value" id="supStatMaterials">&mdash;</div><div class="stat-desc">Inventory items linked to a supplier</div></div></div>
+      </div>
+
+      <div class="card"><div class="card-body">
+        <!-- Search + filters + sort all run together in this page's script (view object below),
+             so they never undo each other. -->
+        <div class="toolbar">
+          <div class="search-box"><i class="bi bi-search"></i>
+            <input type="search" class="form-control" id="supSearch" placeholder="Search supplier, contact, material…" aria-label="Search suppliers"></div>
+          <select class="form-select" style="max-width:170px" id="supStatusFilter" aria-label="Filter by status">
+            <option value="">All Status</option><option>Active</option><option>Inactive</option><option>Archived</option></select>
+          <select class="form-select" style="max-width:230px" id="supCategoryFilter" aria-label="Filter by category"></select>
+          <div class="ms-auto"><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSupModal"><i class="bi bi-plus-lg me-1"></i>Add Supplier</button></div>
+        </div>
+        <div class="table-wrap"><table class="table" id="supTable">
+          <thead><tr id="supHead"></tr></thead>
+          <tbody id="supBody"></tbody>
+        </table></div>
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <span class="small text-muted-2" id="supCount">Loading…</span>
+          <span class="small text-muted-2"><i class="bi bi-info-circle me-1"></i>Click a column header to sort.</span>
+        </div>
+      </div></div>
+
+      <!-- Add / Edit Supplier Modal -->
+      <div class="modal fade" id="addSupModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-truck me-2" style="color:var(--primary)"></i><span id="supModalTitle">Add Supplier</span></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form class="needs-validation" novalidate data-reset data-entity="suppliers" id="supForm" data-success-msg="Supplier saved">
+        <div class="modal-body"><div class="row g-3">
+          <div class="col-md-4"><label class="form-label" for="supFormId">Supplier ID</label>
+            <input class="form-control bg-light" name="id" id="supFormId" readonly>
+            <div class="form-text">Generated automatically.</div></div>
+          <div class="col-md-8"><label class="form-label" for="supFormName">Company Name</label>
+            <input class="form-control" name="name" id="supFormName" placeholder="e.g. SteelAsia" required autocomplete="off">
+            <div class="invalid-feedback" id="supNameFeedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" name="contact" placeholder="Full name" required><div class="invalid-feedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label">Phone Number</label><input class="form-control" name="phone" placeholder="0917-000-0000" required><div class="invalid-feedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" name="email" placeholder="name@company.com"><div class="invalid-feedback">Enter a valid email address.</div></div>
+          <div class="col-md-6"><label class="form-label">Business Address</label><input class="form-control" name="addr" placeholder="Street, City, Province"></div>
+          <div class="col-md-4"><label class="form-label">Supplier Category / Type</label><select class="form-select" name="category" id="supFormCategory" required></select></div>
+          <div class="col-md-4"><label class="form-label">Payment Terms</label><select class="form-select" name="terms" id="supFormTerms"></select></div>
+          <div class="col-md-4"><label class="form-label">Status</label><select class="form-select" name="status"><option>Active</option><option>Inactive</option><option>Archived</option></select></div>
+          <div class="col-12"><label class="form-label">Remarks</label><textarea class="form-control" name="remarks" rows="2" placeholder="Notes about this supplier (optional)"></textarea></div>
+          <div class="col-12"><div class="small text-muted-2"><i class="bi bi-info-circle me-1"></i>Materials are linked to a supplier by matching their Supplier field on the Inventory page, so this list stays in sync with real stock.</div></div>
+        </div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="supModalSubmit">Save Supplier</button></div>
+        </form>
+      </div></div></div>
+
+      <!-- Supplier Details Modal -->
+      <div class="modal fade" id="supDetailModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-truck me-2" style="color:var(--primary)"></i>Supplier Details</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="supDetailBody"></div>
+        <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button>
+          <button class="btn btn-light-2" id="sdStatusBtn">Deactivate</button>
+          <button class="btn btn-primary" id="sdEditBtn"><i class="bi bi-pencil me-1"></i>Edit</button></div>
+      </div></div></div>
+
+      <!-- Deactivate / Reactivate confirmation (suppliers are never deleted) -->
+      <div class="modal fade" id="supStatusModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="supStatusTitle">Deactivate Supplier</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><p class="mb-0" id="supStatusMsg"></p></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-primary" id="supStatusConfirm">Deactivate</button></div>
+      </div></div></div>
+
+    </main>
+      <footer class="app-footer">
+        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
+        <div class="d-flex gap-3">
+          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
+          <span class="text-muted-2">v1.0.0</span>
+        </div>
+      </footer>
+  </div>
+</div>
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tb          = document.getElementById('supBody');
+      const head        = document.getElementById('supHead');
+      const supForm     = document.getElementById('supForm');
+      const supModal    = new bootstrap.Modal('#addSupModal');
+      const detailModal = new bootstrap.Modal('#supDetailModal');
+      const statusModal = new bootstrap.Modal('#supStatusModal');
+      let currentDetailId = null;
+
+      /* ---------- Lookups ---------- */
+      // Inventory items linked to a supplier (derived, never stored on the supplier).
+      const materialsOf = (s) => (window.INVENTORY || []).filter(i => itemSupplierId(i) === s.id);
+      const isActive = (s) => s.status === 'Active';
+      const fmtDate = (d) => d ? String(d).slice(0, 10) : '—';
+
+      /* ---------- Filter dropdown + form selects from the shared lists in data.js ---------- */
+      document.getElementById('supCategoryFilter').innerHTML =
+        '<option value="">All Categories</option>' + SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
+      document.getElementById('supFormCategory').innerHTML =
+        '<option value="">Select…</option>' + SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
+      document.getElementById('supFormTerms').innerHTML =
+        SUPPLIER_TERMS.map(t => `<option ${t === 'Net 30' ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('');
+
+      /* ---------- Table columns (key = sort key) ---------- */
+      const COLS = [
+        { key:'id',        label:'Supplier ID' },
+        { key:'name',      label:'Supplier / Company Name' },
+        { key:'contact',   label:'Contact Person' },
+        { key:'phone',     label:'Contact Number' },
+        { key:'email',     label:'Email Address' },
+        { key:'addr',      label:'Business Address' },
+        { key:'category',  label:'Category / Type' },
+        { key:'materials', label:'Materials Supplied', sortable:false },
+        { key:'count',     label:'No. of Materials', cls:'text-center' },
+        { key:'status',    label:'Status' },
+        { key:'dateAdded', label:'Date Added' },
+        { key:'remarks',   label:'Remarks', sortable:false },
+        { key:'actions',   label:'Actions', sortable:false, cls:'text-center' },
+      ];
+      const view = { q:'', status:'', category:'', sortKey:'id', sortDir:'asc' };
+
+      function renderHead(){
+        head.innerHTML = COLS.map(c => {
+          if (c.sortable === false) return `<th class="${c.cls || ''}" style="white-space:nowrap">${c.label}</th>`;
+          const on = view.sortKey === c.key;
+          const icon = on ? (view.sortDir === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill') : 'bi-chevron-expand';
+          return `<th class="${c.cls || ''}" style="white-space:nowrap" aria-sort="${on ? (view.sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}">
+            <button type="button" class="btn btn-link p-0 text-reset text-decoration-none" style="font:inherit;letter-spacing:inherit;text-transform:inherit" data-sort="${c.key}">
+              ${c.label} <i class="bi ${icon} ms-1" style="opacity:${on ? 1 : .5}"></i></button></th>`;
+        }).join('');
+      }
+      head.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-sort]'); if (!b) return;
+        if (view.sortKey === b.dataset.sort) view.sortDir = view.sortDir === 'asc' ? 'desc' : 'asc';
+        else { view.sortKey = b.dataset.sort; view.sortDir = 'asc'; }
+        renderSuppliers();
+      });
+
+      function supActionBtns(s){
+        // View / Edit / Deactivate (or Reactivate). No delete - a supplier's
+        // Stock In history must stay traceable.
+        const toggle = isActive(s)
+          ? `<button class="act-btn danger" data-bs-toggle="tooltip" title="Deactivate" data-act="deactivate" data-id="${escapeHTML(s.id)}" aria-label="Deactivate ${escapeHTML(s.name)}"><i class="bi bi-slash-circle"></i></button>`
+          : `<button class="act-btn" data-bs-toggle="tooltip" title="Reactivate" data-act="reactivate" data-id="${escapeHTML(s.id)}" aria-label="Reactivate ${escapeHTML(s.name)}"><i class="bi bi-arrow-counterclockwise"></i></button>`;
+        return `<div class="d-inline-flex">
+            <button class="act-btn" data-bs-toggle="tooltip" title="View" data-act="view" data-id="${escapeHTML(s.id)}" aria-label="View ${escapeHTML(s.name)}"><i class="bi bi-eye"></i></button>
+            <button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${escapeHTML(s.id)}" aria-label="Edit ${escapeHTML(s.name)}"><i class="bi bi-pencil"></i></button>
+            ${toggle}
+          </div>`;
+      }
+
+      function materialsSummary(mats){
+        if (!mats.length) return '<span class="text-muted-2">—</span>';
+        const names = mats.map(m => m.name);
+        const shown = names.slice(0, 2).map(escapeHTML).join(', ');
+        const more = names.length > 2 ? ` <span class="text-muted-2">+${names.length - 2} more</span>` : '';
+        return `<span title="${escapeHTML(names.join(', '))}">${shown}${more}</span>`;
+      }
+
+      function renderSuppliers(){
+        const all = supplierStore.all();
+        const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+        setStat('supStatTotal', all.length);
+        setStat('supStatActive', all.filter(isActive).length);
+        setStat('supStatInactive', all.filter(s => !isActive(s)).length);
+        setStat('supStatMaterials', (window.INVENTORY || []).filter(i => all.some(s => s.id === itemSupplierId(i))).length);
+
+        const q = view.q;
+        const rows = all.map(s => ({ s, mats: materialsOf(s) })).filter(({ s, mats }) => {
+          if (view.status && s.status !== view.status) return false;
+          if (view.category && s.category !== view.category) return false;
+          if (q) {
+            const hay = [s.id, s.name, s.contact, s.phone, s.email, s.addr, s.category, s.status, s.remarks, ...mats.map(m => m.name)]
+              .join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          return true;
+        });
+        const val = ({ s, mats }) => view.sortKey === 'count' ? mats.length : String(s[view.sortKey] ?? '').toLowerCase();
+        rows.sort((a, b) => {
+          const x = val(a), y = val(b);
+          const r = typeof x === 'number' ? x - y : x.localeCompare(y, 'en', { numeric: true });
+          return view.sortDir === 'asc' ? r : -r;
+        });
+
+        renderHead();
+        tb.innerHTML = rows.length ? rows.map(({ s, mats }) => `<tr>
+            <td class="fw-id" style="white-space:nowrap">${escapeHTML(s.id)}</td>
+            <td class="fw-medium" style="min-width:160px">${escapeHTML(s.name)}</td>
+            <td style="white-space:nowrap">${escapeHTML(s.contact || '—')}</td>
+            <td style="white-space:nowrap">${escapeHTML(s.phone || '—')}</td>
+            <td class="text-muted-2">${escapeHTML(s.email || '—')}</td>
+            <td class="text-muted-2" style="min-width:150px">${escapeHTML(s.addr || '—')}</td>
+            <td style="min-width:150px">${escapeHTML(s.category || '—')}</td>
+            <td style="min-width:200px">${materialsSummary(mats)}</td>
+            <td class="text-center"><span class="badge b-info">${mats.length}</span></td>
+            <td>${supplierStatusBadge(s.status)}</td>
+            <td class="text-muted-2" style="white-space:nowrap">${fmtDate(s.dateAdded)}</td>
+            <td class="text-muted-2"><div class="text-truncate" style="max-width:180px" title="${escapeHTML(s.remarks || '')}">${escapeHTML(s.remarks || '—')}</div></td>
+            <td class="text-center">${supActionBtns(s)}</td></tr>`).join('')
+          : `<tr><td colspan="${COLS.length}" class="text-center text-muted-2 py-4">No suppliers match your search or filters.</td></tr>`;
+        const el = document.getElementById('supCount');
+        if (el) el.textContent = rows.length === all.length
+          ? `Showing ${all.length} supplier${all.length === 1 ? '' : 's'}`
+          : `Showing ${rows.length} of ${all.length} suppliers`;
+        initTooltips(tb);
+        if (currentDetailId && document.getElementById('supDetailModal').classList.contains('show')) {
+          const s = supplierStore.find(currentDetailId); if (s) fillDetail(s);
+        }
+      }
+      // app.js (wireEntityPage) calls this after loading / saving real rows.
+      window.renderSuppliers = renderSuppliers;
+
+      document.getElementById('supSearch').addEventListener('input', (e) => { view.q = e.target.value.toLowerCase().trim(); renderSuppliers(); });
+      document.getElementById('supStatusFilter').addEventListener('change', (e) => { view.status = e.target.value; renderSuppliers(); });
+      document.getElementById('supCategoryFilter').addEventListener('change', (e) => { view.category = e.target.value; renderSuppliers(); });
+
+      /* ---------- Details modal: profile + materials linked by supplier ---------- */
+      function fillDetail(s){
+        const mats = materialsOf(s);
+        const initials = escapeHTML(String(s.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase());
+        const info = (label, v, col = 'col-md-4 col-6') => `<div class="${col}"><div class="text-muted-2">${label}</div><div class="fw-medium">${v}</div></div>`;
+        document.getElementById('supDetailBody').innerHTML = `
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="avatar-sm" style="width:54px;height:54px;font-size:1.1rem;">${initials}</div>
+            <div><h5 class="mb-1">${escapeHTML(s.name)}</h5>
+              <div class="d-flex align-items-center gap-2"><span class="fw-id small">${escapeHTML(s.id)}</span>${supplierStatusBadge(s.status)}</div></div>
+          </div>
+          <div class="row g-3 small mb-4">
+            ${info('Contact Person', escapeHTML(s.contact || '—'))}
+            ${info('Contact Number', escapeHTML(s.phone || '—'))}
+            ${info('Email Address', escapeHTML(s.email || '—'))}
+            ${info('Business Address', escapeHTML(s.addr || '—'))}
+            ${info('Category / Type', escapeHTML(s.category || '—'))}
+            ${info('Payment Terms', escapeHTML(s.terms || '—'))}
+            ${info('Date Added', fmtDate(s.dateAdded))}
+            ${info('Remarks', escapeHTML(s.remarks || '—'), 'col-md-8 col-12')}
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="panel-title mb-0">Materials Supplied</h6><span class="badge b-neutral">${mats.length} item${mats.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="table-wrap mb-0"><table class="table table-soft mb-0">
+            <thead><tr><th>Material ID</th><th>Material Name</th><th>Category</th><th>Unit</th><th class="text-end">Current Stock</th>
+              <th class="text-end">Unit Cost</th><th class="text-end">Reorder Level</th><th>Location</th><th>Stock Status</th></tr></thead>
+            <tbody>${mats.length ? mats.map(i => `<tr>
+                <td class="fw-id">${escapeHTML(i.id)}</td><td class="fw-medium">${escapeHTML(i.name)}</td><td>${escapeHTML(i.cat)}</td>
+                <td>${escapeHTML(i.unit)}</td><td class="text-end">${NUM(i.qty)}</td><td class="text-end">${PESO(i.price)}</td>
+                <td class="text-end">${NUM(i.reorder)}</td><td>${escapeHTML(i.loc)}</td><td>${stockBadge(escapeHTML(i.status))}</td></tr>`).join('')
+              : '<tr><td colspan="9" class="text-center text-muted-2 py-3">No inventory items are linked to this supplier yet (match the Supplier field on Inventory to this company\'s name).</td></tr>'}</tbody>
+          </table></div>`;
+        const btn = document.getElementById('sdStatusBtn');
+        btn.innerHTML = isActive(s) ? '<i class="bi bi-slash-circle me-1"></i>Deactivate' : '<i class="bi bi-arrow-counterclockwise me-1"></i>Reactivate';
+      }
+      function openDetail(s){ currentDetailId = s.id; fillDetail(s); detailModal.show(); }
+
+      /* ---------- Add / Edit ---------- */
+      const idInput   = document.getElementById('supFormId');
+      const nameInput = document.getElementById('supFormName');
+      // Client-side duplicate-name hint (fast feedback); the server has the
+      // authoritative, case-insensitive check and is the one that actually
+      // rejects it if this preview ever drifts from the real list.
+      function validateUnique(){
+        const editId = supForm.getAttribute('data-edit-id');
+        const nm = nameInput.value.trim().toLowerCase();
+        const dup = nm && (SUPPLIERS || []).find(s => s.id !== editId && String(s.name).trim().toLowerCase() === nm);
+        nameInput.setCustomValidity(dup ? 'duplicate' : '');
+        document.getElementById('supNameFeedback').textContent = dup ? `${dup.name} is already registered (${dup.id}).` : 'Required.';
+      }
+      nameInput.addEventListener('input', validateUnique);
+      supForm.addEventListener('submit', validateUnique, true);   // runs before the save handler checks validity
+
+      document.getElementById('addSupModal').addEventListener('show.bs.modal', () => {
+        if (!supForm.hasAttribute('data-edit-id')) {
+          supForm.reset();
+          supForm.classList.remove('was-validated');
+          idInput.value = nextId('SUP-', SUPPLIERS);
+        }
+        validateUnique();
+      });
+      function openEdit(s){
+        supForm.setAttribute('data-edit-id', s.id);
+        document.getElementById('supModalTitle').textContent = 'Edit Supplier';
+        document.getElementById('supModalSubmit').textContent = 'Save Changes';
+        const f = supForm.elements;
+        f.id.value = s.id; f.name.value = s.name || ''; f.contact.value = s.contact || ''; f.phone.value = s.phone || '';
+        f.email.value = s.email || ''; f.addr.value = s.addr || ''; f.category.value = s.category || '';
+        f.terms.value = s.terms || SUPPLIER_TERMS[0]; f.status.value = s.status || 'Active'; f.remarks.value = s.remarks || '';
+        supModal.show();
+      }
+      document.getElementById('addSupModal').addEventListener('hidden.bs.modal', () => {
+        supForm.removeAttribute('data-edit-id');
+        document.getElementById('supModalTitle').textContent = 'Add Supplier';
+        document.getElementById('supModalSubmit').textContent = 'Save Supplier';
+      });
+
+      /* ---------- Deactivate / Reactivate (status change only - never a delete) ---------- */
+      let pendingStatus = null;
+      function askStatusChange(s){
+        const toActive = !isActive(s);
+        pendingStatus = { id: s.id, status: toActive ? 'Active' : 'Inactive' };
+        const n = materialsOf(s).length;
+        document.getElementById('supStatusTitle').textContent = toActive ? 'Reactivate Supplier' : 'Deactivate Supplier';
+        document.getElementById('supStatusMsg').textContent = toActive
+          ? `Reactivate ${s.name} (${s.id})? It will be available again when adding items and recording Stock In.`
+          : `Deactivate ${s.name} (${s.id})? It won't be offered for new items or Stock In. Its ${n} linked material${n === 1 ? '' : 's'} and all past Stock In records stay unchanged.`;
+        document.getElementById('supStatusConfirm').textContent = toActive ? 'Reactivate' : 'Deactivate';
+        statusModal.show();
+      }
+      document.getElementById('supStatusConfirm').addEventListener('click', async () => {
+        if (!pendingStatus) return;
+        const s = supplierStore.find(pendingStatus.id); if (!s) return;
+        const next = pendingStatus.status;
+        statusModal.hide();
+        try {
+          // Saved through the same endpoint as Edit (status field only changes).
+          if (typeof window.saveSupplierRecord === 'function') await window.saveSupplierRecord({ ...s, status: next });
+          else { supplierStore.update(s.id, { status: next }); renderSuppliers(); }
+          showToast(`${s.name} ${next === 'Active' ? 'reactivated' : 'deactivated'}`, 'success');
+        } catch (err) {
+          showToast(err.message || 'Could not update the supplier.', 'error', 'bi-exclamation-triangle');
+        }
+      });
+
+      /* ---------- Row + detail-modal actions ---------- */
+      tb.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-act]'); if (!btn) return;
+        const s = supplierStore.find(btn.dataset.id); if (!s) return;
+        bootstrap.Tooltip.getInstance(btn)?.hide();
+        if (btn.dataset.act === 'view') openDetail(s);
+        if (btn.dataset.act === 'edit') openEdit(s);
+        if (btn.dataset.act === 'deactivate' || btn.dataset.act === 'reactivate') askStatusChange(s);
+      });
+      document.getElementById('sdEditBtn').addEventListener('click', () => {
+        const s = supplierStore.find(currentDetailId); if (!s) return;
+        detailModal.hide(); openEdit(s);
+      });
+      document.getElementById('sdStatusBtn').addEventListener('click', () => {
+        const s = supplierStore.find(currentDetailId); if (!s) return;
+        detailModal.hide(); askStatusChange(s);
+      });
+
+      /* ---------- Local save path (used only if app.js's wireEntityPage()
+       isn't persisting to the server for some reason - its capture-phase
+       listener normally intercepts this form's submit first) ---------- */
+      document.addEventListener('entity:submit', (e) => {
+        const { entity, data, editId } = e.detail;
+        if (entity !== 'suppliers') return;
+        const rec = { name:data.name.trim(), contact:(data.contact||'').trim(), phone:(data.phone||'').trim(),
+                      email:(data.email||'').trim(), addr:(data.addr||'').trim(), category:data.category,
+                      terms:data.terms, status:data.status, remarks:(data.remarks||'').trim() };
+        if (editId) supplierStore.update(editId, rec);
+        else supplierStore.add({ id: SUPPLIERS.some(s => s.id === data.id) ? nextId('SUP-', SUPPLIERS) : data.id,
+                                 dateAdded: new Date().toISOString().slice(0, 10), ...rec });
+        renderSuppliers();
+      });
+
+      renderSuppliers();
+    });
+  </script>
+</body>
+</html>

@@ -7,7 +7,7 @@
 
 DROP TABLE IF EXISTS audit_logs, model_metrics, forecast_results,
                      monthly_weather, monthly_demand, stock_movements, transactions,
-                     projects, customers, employees, materials, users CASCADE;
+                     projects, customers, suppliers, employees, materials, users CASCADE;
 
 -- ---- D1: User Records -------------------------------------------
 CREATE TABLE users (
@@ -67,6 +67,31 @@ CREATE TABLE customers (
     created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ---- Suppliers --------------------------------------------------
+-- Companies Parabellum buys materials from (Suppliers page). Kept as
+-- its own table, separate from materials.supplier (a free-text field
+-- that's been on `materials` since the start) rather than replacing
+-- it, so existing material rows keep working unchanged - the Suppliers
+-- page links to materials by matching this table's `name` against
+-- materials.supplier, the same way the Customers/Projects link works
+-- by code. Suppliers are deactivated, never deleted, so a material's
+-- Stock In history always stays traceable back to who supplied it.
+CREATE TABLE suppliers (
+    supplier_id    SERIAL PRIMARY KEY,
+    supplier_code  VARCHAR(40)  UNIQUE NOT NULL,
+    name           VARCHAR(150) NOT NULL,
+    contact_person VARCHAR(120),
+    phone          VARCHAR(40),
+    email          VARCHAR(120),
+    address        VARCHAR(200),
+    category       VARCHAR(60),
+    terms          VARCHAR(30)  DEFAULT 'Net 30',
+    status         VARCHAR(20)  NOT NULL DEFAULT 'Active'
+                   CHECK (status IN ('Active', 'Inactive', 'Archived')),
+    remarks        TEXT,
+    created_at     TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ---- Projects (source of the "project activity" predictor) ------
 CREATE TABLE projects (
     project_id    SERIAL PRIMARY KEY,
@@ -110,7 +135,17 @@ CREATE TABLE stock_movements (
     movement_date DATE NOT NULL,
     project_id    INT REFERENCES projects(project_id),
     remarks       TEXT,
-    recorded_by   VARCHAR(80)   -- display name of the user who performed this movement
+    recorded_by   VARCHAR(80),  -- display name of the user who performed this movement
+    -- Only meaningful for movement_type = 'RETURN': a damaged return is
+    -- still logged (so the Back Orders table/report shows it came back),
+    -- but is NOT added to materials.current_stock - see _apply_movement()
+    -- in app.py. Always FALSE for RECEIPT/ISSUANCE rows.
+    is_damaged    BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Only meaningful for movement_type = 'RETURN': the customer or
+    -- project that returned the material, i.e. who initiated the back
+    -- order. Kept separate from recorded_by (the staff member who typed
+    -- it in) and from remarks (free-text reason for the return).
+    back_order_by VARCHAR(120)
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);
@@ -202,7 +237,7 @@ CREATE TABLE role_permissions (
 );
 
 INSERT INTO role_permissions (role, permissions) VALUES
-    ('System Administrator', 'dashboard,inventory,customers,projects,transactions,forecasting,reports,settings,profile'),
-    ('Inventory Personnel',  'dashboard,inventory,profile'),
+    ('System Administrator', 'dashboard,inventory,suppliers,customers,projects,transactions,forecasting,reports,settings,profile'),
+    ('Inventory Personnel',  'dashboard,inventory,suppliers,profile'),
     ('Operations Personnel', 'dashboard,projects,transactions,profile'),
     ('Management/Owner',     'dashboard,projects,transactions,forecasting,reports,profile');

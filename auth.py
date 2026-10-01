@@ -98,10 +98,10 @@ def hash_password(plain_password):
 # ever empty or unreachable, so the app degrades to its original
 # hardcoded behavior instead of locking everyone out.
 ROLE_PERMISSIONS = {
-    "System Administrator": {"dashboard", "inventory", "customers", "projects",
+    "System Administrator": {"dashboard", "inventory", "suppliers", "customers", "projects",
                               "transactions", "forecasting",
                               "reports", "settings", "profile"},
-    "Inventory Personnel":  {"dashboard", "inventory", "profile"},
+    "Inventory Personnel":  {"dashboard", "inventory", "suppliers", "profile"},
     "Operations Personnel": {"dashboard", "projects", "transactions", "profile"},
     "Management/Owner":     {"dashboard", "projects", "transactions",
                               "forecasting", "reports", "profile"},
@@ -115,7 +115,7 @@ ROLE_NAMES = set(ROLE_PERMISSIONS.keys())
 # Every valid page-permission key. Used to sanitize `custom_permissions` so
 # a corrupted DB row or a stray value from the Settings UI can't accidentally
 # grant access to something that isn't a real page.
-ALL_PERMISSIONS = {"dashboard", "inventory", "customers", "projects",
+ALL_PERMISSIONS = {"dashboard", "inventory", "suppliers", "customers", "projects",
                    "transactions", "forecasting", "reports", "settings",
                    "profile"}
 

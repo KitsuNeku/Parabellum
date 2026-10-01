@@ -41,6 +41,7 @@
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
       {% if 'inventory' in allowed_pages %}<a class="nav-link active" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
       {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
@@ -73,6 +74,10 @@
           <a href="/inventory" class="dp-item text-decoration-none">
             <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
             <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/suppliers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-truck"></i></div>
+            <div><div class="dp-title text-dark">Search Suppliers</div><div class="dp-time">Open suppliers module</div></div>
           </a>
           <a href="/customers" class="dp-item text-decoration-none">
             <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
@@ -171,9 +176,9 @@
         </div></div>
       </div>
 
-      <!-- Attention lists: Low Stock / Out of Stock (data-driven from INVENTORY) -->
+      <!-- Attention lists: Low Stock / Stock Summary / Out of Stock (data-driven from INVENTORY) -->
       <div class="row g-3 mb-4">
-        <div class="col-lg-6"><div class="card h-100"><div class="card-body">
+        <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
             <h2 class="panel-title"><i class="bi bi-exclamation-triangle me-2" style="color:var(--accent-dark)"></i>Low Stock Materials</h2>
             <span class="badge b-neutral" id="lowStockCount">0</span>
@@ -181,7 +186,22 @@
           <p class="panel-sub mb-2">Items at or below their reorder level.</p>
           <div class="stock-list" id="lowStockList"></div>
         </div></div></div>
-        <div class="col-lg-6"><div class="card h-100"><div class="card-body">
+        <!-- Stock Summary: total stock on hand + total value (qty x unit price).
+             Quantities are in different units, so they're broken down per unit
+             instead of being added into one misleading number. -->
+        <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
+          <div class="card-title-row">
+            <h2 class="panel-title"><i class="bi bi-calculator me-2" style="color:var(--primary)"></i>Stock Summary</h2>
+            <span class="badge b-neutral" id="sumItemCount">0 items</span>
+          </div>
+          <p class="panel-sub mb-2">Total stock on hand and its value.</p>
+          <div class="d-flex flex-wrap gap-2 column-gap-3 mb-2">
+            <div class="flex-fill"><div class="small text-muted-2">Total Stock Value</div><div class="fw-bold fs-5" style="color:var(--primary)" id="sumTotalValue">—</div></div>
+            <div class="flex-fill"><div class="small text-muted-2">Total Stock</div><div class="fw-bold fs-5" id="sumTotalQty">—</div></div>
+          </div>
+          <div class="stock-list" id="sumByUnit"></div>
+        </div></div></div>
+        <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
             <h2 class="panel-title"><i class="bi bi-x-octagon me-2" style="color:var(--primary)"></i>Out of Stock Materials</h2>
             <span class="badge b-neutral" id="outStockCount">0</span>
@@ -236,13 +256,15 @@
       <!-- Stock Movement Summary table -->
       <!-- Per-item aggregate: Total In (RECEIPT), Total Out (ISSUANCE),
            and Back Orders (RETURN — material that came back from a
-           customer). Net Stock = In + Back Orders - Out. -->
+           customer, logged for the record but NOT added to stock).
+           Net Stock = In - Out (Back Orders is shown for reference only,
+           it isn't part of this total). -->
       <div class="card mb-4">
         <div class="card-body">
           <div class="card-title-row mb-2">
             <h2 class="panel-title mb-0"><i class="bi bi-clipboard-data me-2" style="color:var(--primary)"></i>Stock Movement Summary</h2>
           </div>
-          <p class="panel-sub mb-3">Per-item totals across all recorded movements. Back Orders are units returned by customers and added back to stock.</p>
+          <p class="panel-sub mb-3">Per-item totals across all recorded movements. Back Orders are units returned by customers, logged for the record - they do not add to stock.</p>
           <div class="table-wrap"><table class="table" id="stockSummaryTable">
             <thead><tr>
               <th>Item Code</th><th>Item Name</th><th>Category</th>
@@ -308,11 +330,11 @@
           <div class="card-title-row mb-2">
             <h2 class="panel-title mb-0"><i class="bi bi-arrow-counterclockwise me-2" style="color:var(--primary)"></i>Back Orders (Returns from Customers)</h2>
           </div>
-          <p class="panel-sub mb-3">Materials returned from customers or projects — added back to inventory.</p>
+          <p class="panel-sub mb-3">Materials returned from customers or projects — logged for the record, not added back to on-hand stock.</p>
           <div class="table-wrap"><table class="table" id="returnsTable">
             <thead><tr>
               <th>Item</th><th>Category</th><th class="text-end">Qty Returned</th>
-              <th>Date</th><th>Remarks</th><th>Recorded By</th><th class="text-center">Actions</th>
+              <th>Date</th><th>Remarks</th><th>Back-Ordered By</th><th>Recorded By</th><th class="text-center">Actions</th>
             </tr></thead>
             <tbody id="returnsBody"></tbody>
           </table></div>
@@ -353,7 +375,11 @@
                module used. Always visible in the same place; nothing to
                click to reveal them. -->
           <div class="col-md-6"><label class="form-label">Category <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="cat"><option value="">Select…</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
-          <div class="col-md-6"><label class="form-label">Supplier <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="sup"><option value="">Select…</option><option>SteelAsia</option><option>Capitol Steel</option><option>Pag-asa Steel</option><option>Cathay Metal</option><option>Puyat Steel</option><option>Treasure Steelworks</option></select></div>
+          <div class="col-md-6 position-relative">
+            <label class="form-label">Supplier <span class="text-muted-2 fw-normal">(new item only)</span></label>
+            <input class="form-control" name="sup" id="stockInSupplier" placeholder="Search a supplier, or type a new one…" autocomplete="off">
+            <div class="item-search-results" id="stockInSupplierResults"></div>
+          </div>
           <div class="col-md-4"><label class="form-label">Unit <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="unit"><option>pcs</option><option>kg</option><option>sheets</option><option>length</option><option>roll</option><option>box</option></select></div>
           <div class="col-md-4"><label class="form-label">Unit Price (₱) <span class="text-muted-2 fw-normal">(new item only)</span></label><input type="number" class="form-control" name="price" value="0.00" step="0.01" min="0"></div>
           <div class="col-md-4"><label class="form-label">Reorder Level <span class="text-muted-2 fw-normal">(new item only)</span></label><input type="number" class="form-control" name="reorder" value="50" min="0"></div>
@@ -442,7 +468,7 @@
             <div class="small text-muted-2"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div>
             <div class="small text-muted-2">Date: <span class="fw-medium" id="returnDate">—</span></div>
           </div>
-          <div class="col-12"><div class="alert alert-soft-info small mb-0"><i class="bi bi-info-circle me-1"></i>The returned quantity is added back to stock and shown separately in the Back Orders table and the Stock Movement Summary.</div></div>
+          <div class="col-12"><div class="alert alert-soft-info small mb-0"><i class="bi bi-info-circle me-1"></i>This is logged in the Back Orders table and the Stock Movement Summary, but it does <strong>not</strong> change this item's on-hand stock count.</div></div>
           <div class="col-12 position-relative">
             <label class="form-label">Select Item</label>
             <input type="text" class="form-control" id="returnItemSearch" placeholder="Search item name or ID…" autocomplete="off" required>
@@ -451,7 +477,7 @@
             <div class="invalid-feedback">Search and select an item from the list.</div>
           </div>
           <div class="col-md-6"><label class="form-label">Quantity Returned</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
-          <div class="col-md-6"><label class="form-label">Customer / Project</label><input class="form-control" name="customer" placeholder="e.g. M. Santos or PRJ-301"></div>
+          <div class="col-md-6"><label class="form-label">Back-Ordered By</label><input class="form-control" name="customer" placeholder="e.g. M. Santos or PRJ-301"></div>
           <div class="col-12"><label class="form-label">Reason for Return</label><input class="form-control" name="remarks" placeholder="e.g. Wrong size delivered, item unused"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Return</button></div>
@@ -571,6 +597,52 @@
       wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', { allowUnmatched: true });
       wireItemSearch('stockOutCartItemSearch', 'stockOutCartItemId', 'stockOutCartItemResults');
       wireItemSearch('returnItemSearch',   'returnItemId',   'returnItemResults');
+
+      /* ---------- Stock In: Supplier search, same UX as Item Name above ----------
+       Same dropdown-while-typing pattern as wireItemSearch, but there's no
+       "pick from the list" requirement - typing a name that matches nothing
+       is a new supplier, not an error, exactly like a new item's name. The
+       suggestion list itself is the real Suppliers list (fetched once up
+       front); if that fetch fails (no permission, offline, etc.) the field
+       still works fine as a plain typed field, just with an empty dropdown. */
+      (function () {
+        const searchInput = document.getElementById('stockInSupplier');
+        const results = document.getElementById('stockInSupplierResults');
+        if (!searchInput || !results) return;
+        let suppliers = [];
+        fetch('/api/suppliers').then(r => r.ok ? r.json() : null).then(json => {
+          if (json && json.ok) suppliers = json.data.filter(s => s.status === 'Active');
+        }).catch(() => {});
+
+        function renderResults(query){
+          const q = query.trim().toLowerCase();
+          const matches = q
+            ? suppliers.filter(s => s.name.toLowerCase().includes(q)).slice(0, 8)
+            : suppliers.slice(0, 8);
+          results.innerHTML = matches.length
+            ? matches.map(s => `<div class="isr-item" data-name="${escapeHTML(s.name)}">
+                <div class="fw-medium">${escapeHTML(s.name)}</div>
+                <div class="small text-muted-2">${escapeHTML(s.category || 'Supplier')}</div>
+              </div>`).join('')
+            : `<div class="isr-empty">No matching suppliers${q ? ' - "' + escapeHTML(query.trim()) + '" will be used as typed' : ''}.</div>`;
+          results.classList.add('show');
+        }
+
+        searchInput.addEventListener('focus', () => renderResults(searchInput.value));
+        searchInput.addEventListener('input', () => renderResults(searchInput.value));
+        results.addEventListener('mousedown', (e) => {
+          const item = e.target.closest('.isr-item'); if (!item) return;
+          searchInput.value = item.dataset.name;
+          results.classList.remove('show');
+        });
+        searchInput.addEventListener('blur', () => {
+          setTimeout(() => results.classList.remove('show'), 150);
+        });
+        searchInput.closest('.modal')?.addEventListener('show.bs.modal', () => {
+          searchInput.value = '';
+          results.classList.remove('show');
+        });
+      })();
 
       /* ---------- Stock In: existing vs. new item, decided automatically ----------
        There's no mode switch to click - the "new item only" fields just sit
@@ -992,6 +1064,7 @@
           <div class="row small mb-3">
             <div class="col-6"><div class="text-muted-2">Material</div><div class="fw-medium">${escapeHTML(m.name)}</div><div>${m.id}</div></div>
             <div class="col-6 text-end"><div class="text-muted-2">Date</div><div class="fw-medium">${m.date}</div></div>
+            ${m.type === 'RETURN' ? `<div class="col-6 mt-2"><div class="text-muted-2">Back-Ordered By</div><div class="fw-medium">${escapeHTML(m.backOrderBy || '\u2014')}</div></div>` : ''}
           </div>
           <div class="table-responsive"><table class="table table-soft"><thead><tr><th>Category</th><th class="text-end">Quantity</th><th>Remarks</th></tr></thead>
           <tbody><tr><td>${escapeHTML(m.cat)}</td><td class="text-end">${NUM(m.qty)} ${m.unit}</td><td>${escapeHTML(m.remarks || '\u2014')}</td></tr></tbody></table></div>
@@ -999,26 +1072,32 @@
         moveSlipModal.show();
       }
 
-      function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun){
+      function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun, showBackOrderedBy){
         const totalPages = Math.max(1, Math.ceil(rows.length / MOVE_PAGE_SIZE));
         const clampedPage = Math.min(currentPage, totalPages);
         const start = (clampedPage - 1) * MOVE_PAGE_SIZE;
         const pageItems = rows.slice(start, start + MOVE_PAGE_SIZE);
+        const colCount = showBackOrderedBy ? 8 : 7;
 
         const tbody = document.getElementById(ids.tbody);
         tbody.innerHTML = '';
         if (pageItems.length === 0) {
           const reason = (moveSearchQuery || moveCategoryFilter || stockTableQuery) ? 'match your search or filter' : 'yet';
-          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" class="text-center text-muted-2 py-4">
+          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="${colCount}" class="text-center text-muted-2 py-4">
             No ${emptyNoun} records ${reason}.</td></tr>`);
         }
         pageItems.forEach(m => {
+          // Back Orders only: who initiated the return, shown as its own
+          // column rather than folded into Remarks.
+          const backOrderedByCell = showBackOrderedBy
+            ? `<td class="text-muted-2">${escapeHTML(m.backOrderBy || '\u2014')}</td>` : '';
           tbody.insertAdjacentHTML('beforeend', `<tr>
             <td><div class="fw-medium">${escapeHTML(m.name)}</div><div class="small text-muted-2">${m.id}</div></td>
             <td><span class="tag-chip">${escapeHTML(m.cat)}</span></td>
             <td class="text-end">${NUM(m.qty)} <span class="text-muted-2">${m.unit}</span></td>
             <td class="text-muted-2">${m.date}</td>
             <td class="text-muted-2">${escapeHTML(m.remarks || '\u2014')}</td>
+            ${backOrderedByCell}
             <td class="text-muted-2">${escapeHTML(m.recordedBy || '\u2014')}</td>
             <td class="text-center">${moveActionBtns(m)}</td></tr>`);
         });
@@ -1044,7 +1123,7 @@
           if (moveDateFrom && moveDate < moveDateFrom) return false;
           if (moveDateTo && moveDate > moveDateTo) return false;
           if (stockTableQuery) {
-            const rec = [m.id, m.name, m.cat, m.date, m.qty, m.unit, m.remarks, m.recordedBy]
+            const rec = [m.id, m.name, m.cat, m.date, m.qty, m.unit, m.remarks, m.recordedBy, m.backOrderBy]
               .map(v => v == null ? '' : String(v)).join(' ').toLowerCase();
             if (!rec.includes(stockTableQuery)) return false;
           }
@@ -1064,7 +1143,7 @@
 
         returnsPage = renderMoveSection(retRows, returnsPage,
           { tbody: 'returnsBody', count: 'returnsCount', nav: 'returnsPaginationNav', ul: 'returnsPagination' },
-          (p) => { returnsPage = p; renderMovements(); }, 'back-order');
+          (p) => { returnsPage = p; renderMovements(); }, 'back-order', true);
       }
       window.renderMovements = renderMovements;
 
@@ -1169,6 +1248,25 @@
         document.getElementById('outStockList').innerHTML = out.length
           ? out.map(i => row(i, 'var(--primary)', `0 ${i.unit}`)).join('')
           : '<div class="stock-empty">No out-of-stock materials.</div>';
+
+        // Stock Summary: total value (qty x unit price) + stock on hand per unit.
+        const totalValue = items.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+        const totalQty   = items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
+        const byUnit = {};
+        items.forEach(i => {
+          const u = byUnit[i.unit] || (byUnit[i.unit] = { qty: 0, value: 0, count: 0 });
+          u.qty += Number(i.qty) || 0; u.value += (Number(i.qty) || 0) * (Number(i.price) || 0); u.count++;
+        });
+        set('sumItemCount', `${items.length} item${items.length === 1 ? '' : 's'}`);
+        set('sumTotalValue', PESO(totalValue));
+        set('sumTotalQty', `${NUM(totalQty)} units`);
+        document.getElementById('sumByUnit').innerHTML = items.length
+          ? Object.entries(byUnit).sort((a, b) => b[1].value - a[1].value).map(([unit, u]) => `
+            <div class="sl-item">
+              <div><div class="sl-name">${NUM(u.qty)} ${escapeHTML(unit)}</div><div class="sl-sub">${u.count} item${u.count === 1 ? '' : 's'}</div></div>
+              <div class="sl-qty">${PESO(u.value)}</div>
+            </div>`).join('')
+          : '<div class="stock-empty">No inventory items yet.</div>';
 
         // Sidebar badge stays in sync with live data
         const oos = out.length;

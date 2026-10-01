@@ -141,7 +141,7 @@ def _bulk_insert(db_config, sql, rows, page_size=500):
 # empty (freshly schema.sql'd) database without violating any
 # reference. This is the reverse of schema.sql's own DROP TABLE list.
 BACKUP_TABLES = [
-    "users", "materials", "employees", "customers", "projects",
+    "users", "materials", "employees", "suppliers", "customers", "projects",
     "transactions", "stock_movements", "monthly_demand",
     "monthly_weather", "forecast_results", "model_metrics", "audit_logs",
 ]
@@ -209,6 +209,7 @@ RESTORE_PK_MAP = {
     "users": "user_id",
     "materials": "material_id",
     "customers": "customer_id",
+    "suppliers": "supplier_id",
     "projects": "project_id",
     "transactions": "transaction_id",
     "stock_movements": "movement_id",

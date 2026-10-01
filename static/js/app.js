@@ -522,6 +522,23 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (_) {}
     };
 
+    // Optional: expose a direct save-one-record function (not tied to the
+    // Add/Edit form) for pages that need to persist a change made outside
+    // that form - e.g. Suppliers' Deactivate/Reactivate button, which only
+    // flips `status` and shouldn't have to fake a form submit to do it.
+    if (cfg.saveFnName) {
+      window[cfg.saveFnName] = async (rec) => {
+        const res = await fetch(cfg.saveUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...rec, edit_id: rec.id }),
+        });
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error);
+        await refresh();
+        return json;
+      };
+    }
+
     const form = document.querySelector(cfg.formSelector);
     if (form) {
       form.addEventListener('submit', async (e) => {
@@ -568,6 +585,14 @@ document.addEventListener('DOMContentLoaded', () => {
     renderName: 'renderCustomers', formSelector: '[data-entity="customers"]',
     listUrl: '/api/customers', saveUrl: '/api/customers/save',
     deleteUrl: '/api/customers/delete', successMsg: 'Customer saved',
+  });
+
+  wireEntityPage({
+    anchorId: 'supBody', arrayName: 'SUPPLIERS', storeName: 'supplierStore',
+    renderName: 'renderSuppliers', formSelector: '[data-entity="suppliers"]',
+    listUrl: '/api/suppliers', saveUrl: '/api/suppliers/save',
+    deleteUrl: '/api/suppliers/delete', successMsg: 'Supplier saved',
+    saveFnName: 'saveSupplierRecord',   // used by the Deactivate/Reactivate button
   });
 
   wireEntityPage({

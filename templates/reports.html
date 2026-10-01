@@ -42,6 +42,7 @@
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
       {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
       {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
@@ -74,6 +75,10 @@
           <a href="/inventory" class="dp-item text-decoration-none">
             <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
             <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
+          </a>
+          <a href="/suppliers" class="dp-item text-decoration-none">
+            <div class="dp-ic b-neutral"><i class="bi bi-truck"></i></div>
+            <div><div class="dp-title text-dark">Search Suppliers</div><div class="dp-time">Open suppliers module</div></div>
           </a>
           <a href="/customers" class="dp-item text-decoration-none">
             <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
@@ -242,9 +247,10 @@
                   <button class="btn btn-primary btn-sm" data-gen="stock-out" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
-          <!-- Back Order = returns from customers/projects added back to stock
-               (inventory.html's #returnModal / "Record Return" flow), not a
-               supplier re-order. -->
+          <!-- Back Order = returns from customers/projects, logged for the
+               record (inventory.html's #returnModal / "Record Return" flow)
+               but NOT added back to on-hand stock, and not a supplier
+               re-order. -->
           <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
             <div class="d-flex align-items-start gap-3">
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-arrow-counterclockwise"></i></div>

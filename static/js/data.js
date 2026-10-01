@@ -110,9 +110,7 @@ const TRANSACTIONS = [
 
 /* ---------------------------------- Employees / staff directory ----------------------------------
  Used by staffName() below to resolve a staff id to a display name (e.g.
- Projects' "Assigned" column). Real per-employee commission figures now
- come exclusively from reports_export.compute_commissions() (server-side,
- via the Reports page's Commission Report export) - not from this array. */
+ Projects' "Assigned" column). */
 const EMPLOYEES = [
   { id:'EMP-01', name:'Engr. Juan Dela Cruz', role:'Senior Sales Engineer' },
   { id:'EMP-02', name:'Engr. Maria Santos',   role:'Sales Engineer' },

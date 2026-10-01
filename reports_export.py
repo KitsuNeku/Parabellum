@@ -1,8 +1,9 @@
 """
 Parabellum ISOS - Report Generation
 =================================================================
-Objective 2.3 / DFD 5.0: stock status, material movement, transaction,
-commission, and forecast reports.
+Objective 2.3 / DFD 5.0: stock status, material movement (stock in,
+stock out, back order/returns), customer, project, transaction, and
+forecast reports.
 
 Design: every report type has ONE function that queries the database and
 returns (title, subtitle, columns, rows) with values already formatted as
@@ -108,58 +109,73 @@ def build_transaction_report(db_config):
             ["Invoice", "Customer", "Material", "Qty", "Total", "Status", "Date"], out)
 
 
-def compute_commissions(db_config):
+def build_stock_in_report(db_config):
     """
-    Real commission computation (Objective - commission tracking tied to
-    completed projects).
-
-    Total Sales   = sum of budgets of an employee's COMPLETED projects,
-                     all-time (projects.staff links to employees.employee_code).
-    Commission    = Total Sales x commission_rate.
-    Monthly       = Commission divided by the number of distinct calendar
-                     months in which the employee completed a project - i.e.
-                     an average monthly earning rate, not literally "this
-                     calendar month." A brand-new demo database may have all
-                     its completions in the same handful of months, or none
-                     completed yet in the current month, so "this month"
-                     alone could misleadingly show ₱0 even for a productive
-                     employee. Averaging over their active months gives a
-                     stable, explainable figure instead.
+    Every RECEIPT movement (materials coming into the warehouse), newest
+    first. Same stock_movements table the Inventory page's Stock In table
+    reads - this is a formatted/exportable view of the identical rows.
     """
     rows = execute_query(db_config, """
-        SELECT e.employee_code, e.name, e.role, e.commission_rate,
-               COUNT(CASE WHEN p.status = 'Completed' THEN 1 END) AS completed,
-               COALESCE(SUM(CASE WHEN p.status = 'Completed' THEN p.budget END), 0) AS total_sales,
-               COUNT(DISTINCT CASE WHEN p.status = 'Completed'
-                     THEN date_trunc('month', p.end_date) END) AS active_months
-        FROM employees e
-        LEFT JOIN projects p ON p.staff = e.employee_code
-        WHERE e.status = 'Active'
-        GROUP BY e.employee_id, e.employee_code, e.name, e.role, e.commission_rate
-        ORDER BY e.name;
+        SELECT m.material_name, m.category, sm.quantity, m.unit,
+               sm.movement_date, sm.remarks, sm.recorded_by
+        FROM stock_movements sm
+        JOIN materials m ON m.material_id = sm.material_id
+        WHERE sm.movement_type = 'RECEIPT'
+        ORDER BY sm.movement_date DESC, sm.movement_id DESC;
     """, fetch=True)
-
-    out = []
-    for r in rows:
-        rate = float(r["commission_rate"])
-        total_sales = float(r["total_sales"])
-        commission = total_sales * rate / 100
-        active_months = int(r["active_months"]) or 1
-        out.append({
-            "code": r["employee_code"], "name": r["name"], "role": r["role"] or "\u2014",
-            "rate": rate, "completed": int(r["completed"]),
-            "total_sales": total_sales, "commission": commission,
-            "monthly": commission / active_months,
-        })
-    return out
+    out = [[r["material_name"], r["category"] or "\u2014",
+            f"{float(r['quantity']):g} {r['unit']}",
+            str(r["movement_date"]) if r["movement_date"] else "\u2014",
+            r["remarks"] or "\u2014", r["recorded_by"] or "\u2014"] for r in rows]
+    return ("Stock In Report", "Materials received into inventory",
+            ["Item", "Category", "Qty Received", "Date", "Remarks", "Recorded By"], out)
 
 
-def build_commission_report(db_config):
-    rows = compute_commissions(db_config)
-    out = [[e["name"], e["role"], str(e["completed"]), f"{e['rate']:g}%",
-            _peso(e["total_sales"]), _peso(e["monthly"])] for e in rows]
-    return ("Commission Report", "Per-employee summary \u2014 computed from completed projects",
-            ["Employee", "Role", "Completed", "Rate", "Sales", "Monthly Commission"], out)
+def build_stock_out_report(db_config):
+    """
+    Every ISSUANCE movement (materials issued out to a project/customer),
+    newest first. `remarks` holds the project/reference string entered at
+    issuance time (see _apply_movement in app.py - stock-out does not set
+    the stock_movements.project_id foreign key, only this free-text field).
+    """
+    rows = execute_query(db_config, """
+        SELECT m.material_name, m.category, sm.quantity, m.unit,
+               sm.movement_date, sm.remarks, sm.recorded_by
+        FROM stock_movements sm
+        JOIN materials m ON m.material_id = sm.material_id
+        WHERE sm.movement_type = 'ISSUANCE'
+        ORDER BY sm.movement_date DESC, sm.movement_id DESC;
+    """, fetch=True)
+    out = [[r["material_name"], r["category"] or "\u2014",
+            f"{float(r['quantity']):g} {r['unit']}",
+            str(r["movement_date"]) if r["movement_date"] else "\u2014",
+            r["remarks"] or "\u2014", r["recorded_by"] or "\u2014"] for r in rows]
+    return ("Stock Out Report", "Materials issued to projects/customers",
+            ["Item", "Category", "Qty Issued", "Date", "Project / Reference", "Recorded By"], out)
+
+
+def build_back_order_report(db_config):
+    """
+    Every RETURN movement - materials returned by a customer/project and
+    added back to stock (the Inventory page's "Back Orders (Returns from
+    Customers)" table). Not a supplier re-order; see the matching comment
+    on the inventory page's Record Return modal.
+    """
+    rows = execute_query(db_config, """
+        SELECT m.material_name, m.category, sm.quantity, m.unit,
+               sm.movement_date, sm.remarks, sm.recorded_by
+        FROM stock_movements sm
+        JOIN materials m ON m.material_id = sm.material_id
+        WHERE sm.movement_type = 'RETURN'
+        ORDER BY sm.movement_date DESC, sm.movement_id DESC;
+    """, fetch=True)
+    out = [[r["material_name"], r["category"] or "\u2014",
+            f"{float(r['quantity']):g} {r['unit']}",
+            str(r["movement_date"]) if r["movement_date"] else "\u2014",
+            r["remarks"] or "\u2014", r["recorded_by"] or "\u2014"] for r in rows]
+    return ("Back Order Report", "Materials returned from customers/projects",
+            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Recorded By"], out)
+
 
 
 def build_forecast_report(db_config):
@@ -198,7 +214,9 @@ REPORT_BUILDERS = {
     "customer":    build_customer_report,
     "project":     build_project_report,
     "transaction": build_transaction_report,
-    "commission":  build_commission_report,
+    "stock-in":    build_stock_in_report,
+    "stock-out":   build_stock_out_report,
+    "back-order":  build_back_order_report,
     "forecast":    build_forecast_report,
 }
 

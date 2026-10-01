@@ -29,6 +29,9 @@ Kept from the previous ISOS module (so app.py needs no changes):
       planning, MIN_TRAINING_ROWS guard.
 """
 
+import re
+from datetime import datetime, timezone
+
 import numpy as np
 import pandas as pd
 import psycopg2
@@ -126,6 +129,162 @@ def _bulk_insert(db_config, sql, rows, page_size=500):
         with conn.cursor() as cur:
             execute_values(cur, sql, rows, page_size=page_size)
         conn.commit()
+    finally:
+        conn.close()
+
+
+# =================================================================
+# Database backup (Settings > Backup & Restore > Create Backup)
+# =================================================================
+# Order matters: it must satisfy every FOREIGN KEY in schema.sql, so a
+# restore can replay these INSERT statements top-to-bottom into an
+# empty (freshly schema.sql'd) database without violating any
+# reference. This is the reverse of schema.sql's own DROP TABLE list.
+BACKUP_TABLES = [
+    "users", "materials", "employees", "customers", "projects",
+    "transactions", "stock_movements", "monthly_demand",
+    "monthly_weather", "forecast_results", "model_metrics", "audit_logs",
+]
+
+
+def generate_sql_backup(db_config):
+    """
+    Dump every row of every table above into plain INSERT statements,
+    using the live connection's own mogrify() so values are quoted and
+    escaped exactly the way the database would do it itself (no manual
+    string-building, so this can't be turned into a SQL-injection risk
+    by a stray apostrophe in, say, a customer's address).
+
+    Returns the full backup as one text string - the caller (an /api/
+    route) hands it to the browser however it wants (as an in-memory
+    file for the user to save into their own chosen local folder,
+    matching how the app's other exports work).
+    """
+    conn = connect_db(db_config)
+    try:
+        lines = [
+            "-- =================================================================",
+            "-- Parabellum ISOS -- Database Backup",
+            f"-- Generated: {datetime.now(timezone.utc).isoformat(timespec='seconds')}Z",
+            "-- ",
+            "-- RESTORE: run schema.sql on an EMPTY database first (it creates",
+            "-- the tables), then run this file to reload the data. Tables are",
+            "-- ordered here so foreign keys are always satisfied top-to-bottom.",
+            "-- =================================================================",
+            "",
+            "BEGIN;",
+            "",
+        ]
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            for table in BACKUP_TABLES:
+                cur.execute(f"SELECT * FROM {table} ORDER BY 1;")
+                rows = cur.fetchall()
+                lines.append(f"-- ---- {table} ({len(rows)} row{'s' if len(rows) != 1 else ''}) ----")
+                if not rows:
+                    lines.append("-- (no rows)")
+                    lines.append("")
+                    continue
+                columns = list(rows[0].keys())
+                col_list = ", ".join(columns)
+                for row in rows:
+                    values = tuple(row[c] for c in columns)
+                    stmt = cur.mogrify(
+                        f"INSERT INTO {table} ({col_list}) VALUES %s;", (values,)
+                    )
+                    lines.append(stmt.decode("utf-8"))
+                lines.append("")
+        lines.append("COMMIT;")
+        lines.append("")
+        return "\n".join(lines)
+    finally:
+        conn.close()
+
+
+# Every SERIAL primary key among BACKUP_TABLES, so a restore can re-align
+# each table's auto-increment counter after loading rows that carry their
+# own explicit IDs (otherwise the next NEW row created after a restore
+# could collide with a restored one). role_permissions has no SERIAL PK
+# and is intentionally not in BACKUP_TABLES at all -- see restore_sql_backup.
+RESTORE_PK_MAP = {
+    "users": "user_id",
+    "materials": "material_id",
+    "customers": "customer_id",
+    "projects": "project_id",
+    "transactions": "transaction_id",
+    "stock_movements": "movement_id",
+    "monthly_demand": "id",
+    "monthly_weather": "id",
+    "forecast_results": "forecast_id",
+    "model_metrics": "metric_id",
+    "employees": "employee_id",
+    "audit_logs": "log_id",
+}
+
+
+def restore_sql_backup(db_config, sql_text):
+    """
+    Loads a previously-generated backup (see generate_sql_backup above)
+    back into the database, replacing whatever is currently in
+    BACKUP_TABLES.
+
+    Safety behavior:
+      - Runs as ONE transaction. If anything fails partway through
+        (a malformed file, a constraint violation, a lost connection),
+        everything is rolled back and the database is left exactly as
+        it was before this was called -- nothing is left half-restored.
+      - Only touches the tables this app actually manages (BACKUP_TABLES).
+        role_permissions (an admin configuration table, not day-to-day
+        business data) is deliberately left alone, so restoring an older
+        backup never silently undoes a later Roles & Permissions edit.
+      - Re-aligns every table's SERIAL counter after loading rows that
+        carry their own explicit IDs (RESTORE_PK_MAP above), so the next
+        new row created after the restore can't collide with one that
+        was just restored.
+
+    Raises ValueError if the file plainly isn't a Parabellum backup, or
+    re-raises whatever database error occurred otherwise -- either way,
+    the caller (the /api/settings/restore route) is expected to catch it
+    and report it; nothing is committed unless the whole restore succeeds.
+    """
+    if not sql_text or "INSERT INTO" not in sql_text.upper():
+        raise ValueError("This file doesn't look like a Parabellum backup -- no data was found inside it.")
+
+    # This function manages its own transaction, so drop any standalone
+    # BEGIN;/COMMIT; lines the backup file wrapped itself in (generate_sql_
+    # backup above always adds them) rather than letting them interfere.
+    cleaned = re.sub(r"(?im)^\s*(BEGIN|COMMIT)\s*;\s*$", "", sql_text)
+
+    conn = connect_db(db_config)
+    try:
+        with conn.cursor() as cur:
+            # CASCADE handles the foreign-key ordering between these tables
+            # automatically, so they don't need to be listed in a precise
+            # dependency order here.
+            table_list = ", ".join(BACKUP_TABLES)
+            cur.execute(f"TRUNCATE TABLE {table_list} CASCADE;")
+
+            # The cleaned backup is just a sequence of INSERT statements
+            # (one per row, already safely quoted/escaped by generate_sql_
+            # backup's own mogrify() call when it was created) plus plain
+            # SQL comments, which Postgres ignores. No user-supplied values
+            # are interpolated here -- this executes the file's SQL as-is.
+            cur.execute(cleaned)
+
+            for table in BACKUP_TABLES:
+                pk = RESTORE_PK_MAP.get(table)
+                if not pk:
+                    continue
+                cur.execute(f"""
+                    SELECT setval(
+                        pg_get_serial_sequence('{table}', '{pk}'),
+                        COALESCE((SELECT MAX({pk}) FROM {table}), 1),
+                        (SELECT MAX({pk}) FROM {table}) IS NOT NULL
+                    );
+                """)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 

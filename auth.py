@@ -91,10 +91,12 @@ def hash_password(plain_password):
     validate_password_strength(plain_password)
     return generate_password_hash(plain_password)
 
-# Mirrors ROLE_PERMISSIONS in static/js/data.js. The frontend list only
-# controls what a user SEES; this dict controls what the backend actually
-# ALLOWS. They must be kept in sync - the frontend list without this
-# backend check would just be a locked door with the key taped to it.
+# Mirrors ROLE_PERMISSIONS in static/js/data.js. These are now only the
+# FALLBACK defaults - the live, editable source of truth is the
+# role_permissions DB table (Settings > Roles & Permissions), read by
+# get_role_permissions() below. This dict is used only if that table is
+# ever empty or unreachable, so the app degrades to its original
+# hardcoded behavior instead of locking everyone out.
 ROLE_PERMISSIONS = {
     "System Administrator": {"dashboard", "inventory", "customers", "projects",
                               "transactions", "forecasting",
@@ -104,6 +106,80 @@ ROLE_PERMISSIONS = {
     "Management/Owner":     {"dashboard", "projects", "transactions",
                               "forecasting", "reports", "profile"},
 }
+
+# The only valid role names. Permissions per role are now editable (see
+# role_permissions table), but the set of ROLES themselves is still fixed
+# here and in schema.sql's CHECK constraint on users.role.
+ROLE_NAMES = set(ROLE_PERMISSIONS.keys())
+
+# Every valid page-permission key. Used to sanitize `custom_permissions` so
+# a corrupted DB row or a stray value from the Settings UI can't accidentally
+# grant access to something that isn't a real page.
+ALL_PERMISSIONS = {"dashboard", "inventory", "customers", "projects",
+                   "transactions", "forecasting", "reports", "settings",
+                   "profile"}
+
+# The "settings" key is special: only System Administrators can ever have it
+# (they need it to manage everyone else's access). Even if an override tries
+# to grant "settings" to a non-admin, it's stripped out at resolve time -
+# otherwise a non-admin could grant themselves back their own access.
+_ADMIN_ONLY_PERMISSIONS = {"settings"}
+
+
+def get_role_permissions(db_config):
+    """
+    Live role-default permissions from the role_permissions table
+    (Settings > Roles & Permissions), as {role: set(page_keys)}. Falls
+    back to the hardcoded ROLE_PERMISSIONS above if the table is empty
+    or the query fails for any reason (e.g. a database that hasn't run
+    the add_role_permissions_table.sql migration yet) - so this is
+    never the thing that locks everyone out.
+    """
+    try:
+        rows = execute_query(db_config, "SELECT role, permissions FROM role_permissions;", fetch=True)
+    except Exception:
+        return {role: set(perms) for role, perms in ROLE_PERMISSIONS.items()}
+    if not rows:
+        return {role: set(perms) for role, perms in ROLE_PERMISSIONS.items()}
+    live = {}
+    for r in rows:
+        parsed = {p.strip() for p in (r["permissions"] or "").split(",") if p.strip()}
+        parsed &= ALL_PERMISSIONS
+        if r["role"] != "System Administrator":
+            parsed -= _ADMIN_ONLY_PERMISSIONS
+        live[r["role"]] = parsed
+    # Any role missing a row (shouldn't normally happen) still falls back
+    # to its hardcoded default rather than getting zero pages.
+    for role, perms in ROLE_PERMISSIONS.items():
+        live.setdefault(role, set(perms))
+    return live
+
+
+def resolve_permissions(role, custom_permissions_csv, role_permissions=None):
+    """
+    Return the effective set of allowed pages for one user, given their
+    role and their per-user `custom_permissions` column (Settings > Users >
+    Access). NULL / empty override = the role's current defaults (from
+    `role_permissions`, or the hardcoded ROLE_PERMISSIONS if the caller
+    doesn't pass one - pass get_role_permissions(db_config) wherever a DB
+    connection is available so role-level edits take effect). Any value
+    in the override REPLACES the role's defaults for that one user,
+    restricted to keys in ALL_PERMISSIONS. "settings" is always kept
+    admin-only, even in an override, so a compromised or fat-fingered
+    custom_permissions value can never quietly hand another role the
+    keys to the kingdom.
+    """
+    if role_permissions is None:
+        role_permissions = ROLE_PERMISSIONS
+    role_defaults = role_permissions.get(role, set())
+    csv = (custom_permissions_csv or "").strip()
+    if not csv:
+        return set(role_defaults)
+    parsed = {p.strip() for p in csv.split(",") if p.strip()}
+    parsed &= ALL_PERMISSIONS
+    if role != "System Administrator":
+        parsed -= _ADMIN_ONLY_PERMISSIONS
+    return parsed
 
 # Which permission-key each API endpoint falls under.
 API_PERMISSION = {
@@ -134,7 +210,7 @@ def verify_login(db_config, username, plain_password):
     rows = execute_query(
         db_config,
         """SELECT user_id, username, password_hash, full_name, role,
-                  is_active, failed_attempts, locked_until
+                  is_active, failed_attempts, locked_until, custom_permissions
            FROM users WHERE username = %s;""",
         (username,),
         fetch=True,
@@ -205,6 +281,18 @@ def verify_login(db_config, username, plain_password):
         "username": user["username"],
         "name": user["full_name"] or user["username"],
         "role": user["role"],
+        # Resolved once at login and stashed in the session so per-request
+        # permission checks don't need another SELECT. The resolved set
+        # honors any per-user custom_permissions override configured in
+        # Settings > Users > Access, and the role's CURRENT defaults from
+        # Settings > Roles & Permissions, otherwise falls back to the
+        # hardcoded ROLE_PERMISSIONS. Because this is resolved at login,
+        # a role-permission edit takes effect for that role's users the
+        # next time they sign in - matching how a per-user Access edit
+        # already behaves.
+        "allowed_pages": sorted(resolve_permissions(
+            user["role"], user.get("custom_permissions"),
+            get_role_permissions(db_config))),
     }, None
 
 
@@ -238,7 +326,11 @@ def permission_required(key):
                 return redirect(url_for("login"))
 
             role = session["user"]["role"]
-            allowed = ROLE_PERMISSIONS.get(role, set())
+            # Prefer the per-user resolved set stored at login time (honors
+            # any Settings > Users > Access override), fall back to role
+            # defaults for sessions established before that field existed.
+            session_allowed = session["user"].get("allowed_pages")
+            allowed = set(session_allowed) if session_allowed else ROLE_PERMISSIONS.get(role, set())
             if key not in allowed:
                 if request.path.startswith("/api/"):
                     return jsonify({"ok": False, "error": "Your role does not have access to this."}), 403

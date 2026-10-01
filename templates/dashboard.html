@@ -179,7 +179,9 @@
           <div class="stat-value" id="dashKpiItems">16</div>
           <div class="stat-desc">Active materials in catalog</div>
         </div></div>
-        <div class="col-md-6 col-xl-3"><div class="stat-card is-gold">
+        <!-- Clickable: opens #dashLowStockModal listing the low-stock items. -->
+        <div class="col-md-6 col-xl-3"><div class="stat-card is-gold" role="button" tabindex="0" style="cursor:pointer"
+             data-bs-toggle="modal" data-bs-target="#dashLowStockModal" aria-label="View low stock materials" title="View low stock materials">
           <div class="stat-ic"><i class="bi bi-exclamation-triangle"></i></div>
           <div class="stat-label">Low Stock Materials</div>
           <div class="stat-value" id="dashKpiLow">3</div>
@@ -238,6 +240,18 @@
         </div></div></div>
       </div>
 
+      <!-- Low Stock Materials modal (opened from the KPI card above) -->
+      <div class="modal fade" id="dashLowStockModal" tabindex="-1" aria-labelledby="dashLowStockTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="dashLowStockTitle"><i class="bi bi-exclamation-triangle me-2" style="color:var(--accent-dark)"></i>Low Stock Materials</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body">
+          <p class="panel-sub mb-2">Items at or below their reorder level.</p>
+          <div class="stock-list" id="dashLowStockList"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+        {% if 'inventory' in allowed_pages %}<a href="/inventory" class="btn btn-primary"><i class="bi bi-box-seam me-1"></i>Go to Inventory</a>{% endif %}</div>
+      </div></div></div>
+
     </main>
       <footer class="app-footer">
         <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
@@ -265,7 +279,18 @@
       set('dashKpiProjects', PROJECTS.filter(p=>p.status==='In Progress').length);
       set('dashKpiTxns', TRANSACTIONS.length);
       set('dashKpiItems', INVENTORY.length);
-      set('dashKpiLow', INVENTORY.filter(i=>i.status==='Low Stock').length);
+      const low = INVENTORY.filter(i=>i.status==='Low Stock');
+      set('dashKpiLow', low.length);
+
+      // Low Stock modal list — same row pattern as inventory.html's #lowStockList.
+      const lowList = document.getElementById('dashLowStockList');
+      if (lowList) lowList.innerHTML = low.length
+        ? low.map(i => `
+          <div class="sl-item">
+            <div><div class="sl-name">${escapeHTML(i.name)}</div><div class="sl-sub">${i.loc} · Reorder at ${NUM(i.reorder)} ${i.unit}</div></div>
+            <div class="sl-qty" style="color:var(--accent-dark)">${NUM(i.qty)} ${i.unit}</div>
+          </div>`).join('')
+        : '<div class="stock-empty">No low-stock materials.</div>';
 
       const tb = document.getElementById('dashTxnBody');
       if (!tb) return;
@@ -286,6 +311,14 @@
     window.renderDashboard = renderDashboard;
 
     document.addEventListener('DOMContentLoaded', renderDashboard);
+
+    // Keyboard access for the clickable Low Stock card: Enter/Space opens the modal.
+    document.addEventListener('keydown', (e) => {
+      const card = e.target.closest?.('.stat-card[data-bs-target="#dashLowStockModal"]');
+      if (!card || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      bootstrap.Modal.getOrCreateInstance('#dashLowStockModal').show();
+    });
   </script>
 </body>
 </html>

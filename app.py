@@ -25,23 +25,30 @@ from datetime import datetime, timezone
 import os
 
 from config import DB_CONFIG, SECRET_KEY, DEBUG, AUTO_RETRAIN_ENABLED, AUTO_RETRAIN_HOUR, AUTO_AGGREGATE_BEFORE_RETRAIN
-from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history
+from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history, generate_sql_backup, restore_sql_backup
 import weather_api
 import requests
 import scheduler as retrain_scheduler
-from auth import verify_login, login_required, permission_required, ROLE_PERMISSIONS, hash_password
+from auth import (verify_login, login_required, permission_required,
+                  ROLE_PERMISSIONS, ROLE_NAMES, ALL_PERMISSIONS, resolve_permissions,
+                  get_role_permissions, hash_password)
 from security import apply_security
 
 
 def _user_context():
-    """Signed-in user + role-filtered nav, rendered server-side to avoid an identity flash."""
+    """Signed-in user + resolved page access, rendered server-side to avoid an identity flash."""
     u = session.get("user") or {}
     name = u.get("name", "")
     initials = "".join(w[0] for w in name.split()).upper()[:2] if name else "?"
+    # Prefer the per-user resolved set stored at login time (honors any
+    # Settings > Users > Access override); fall back to role defaults for
+    # sessions established before that field existed.
+    session_allowed = u.get("allowed_pages")
+    allowed = set(session_allowed) if session_allowed else ROLE_PERMISSIONS.get(u.get("role"), set())
     return {
         "current_user": u,
         "current_user_initials": initials,
-        "allowed_pages": ROLE_PERMISSIONS.get(u.get("role"), set()),
+        "allowed_pages": allowed,
     }
 
 app = Flask(__name__)
@@ -388,15 +395,22 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
     """
     Record a stock movement and adjust the balance.
 
-    kind = 'RECEIPT' (stock in, increases) or 'ISSUANCE' (stock out, decreases).
+    kind = 'RECEIPT'  (stock in from supplier, increases balance),
+           'ISSUANCE' (stock out to project/customer, decreases balance), or
+           'RETURN'   (back-order: material returned by a customer; increases
+                       balance like a RECEIPT, but tracked separately so the
+                       Stock Summary can show what came back vs. what was
+                       newly received).
+
     For issuances this ENFORCES the non-negative-stock rule required by
     Objective 1.1 and test Table 2 - an over-issuance is rejected outright,
     not silently clamped to zero.
 
     recorded_by: display name of the logged-in user performing this action,
-    stored alongside the movement so the Stock In / Stock Out tables can
-    show who did it - independent of `remarks`, which describes the
-    movement itself (a delivery note, a project reference), not the person.
+    stored alongside the movement so the Stock In / Stock Out / Back Orders
+    tables can show who did it - independent of `remarks`, which describes
+    the movement itself (a delivery note, a project reference), not the
+    person.
     """
     rows = execute_query(DB_CONFIG,
         "SELECT material_id, material_name, unit, current_stock FROM materials WHERE material_code=%s;",
@@ -414,7 +428,8 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
         raise ValueError(
             f"Cannot issue {quantity:g} {m['unit']} — only {balance:g} in stock.")
 
-    new_balance = balance + quantity if kind == "RECEIPT" else balance - quantity
+    # RECEIPT and RETURN both add stock; ISSUANCE subtracts.
+    new_balance = (balance - quantity) if kind == "ISSUANCE" else (balance + quantity)
 
     execute_query(DB_CONFIG, """
         INSERT INTO stock_movements
@@ -461,6 +476,83 @@ def api_stock_out():
     except ValueError as e:
         # This is where the negative-stock guard reports back to the user.
         return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/inventory/return", methods=["POST"])
+@permission_required("inventory")
+def api_inventory_return():
+    """
+    Record a back-order return: material coming back from a customer or
+    project. Stock is added back to the balance (same effect as a RECEIPT)
+    but tracked with movement_type = 'RETURN' so the Stock Movement
+    Summary can distinguish returns from newly-received stock.
+    """
+    d = request.get_json(silent=True) or {}
+    try:
+        remarks = d.get("remarks") or ""
+        customer = (d.get("customer") or "").strip()
+        # Prefix the remarks with the customer/reference so the Back Orders
+        # table can show at a glance who returned it, without needing a
+        # separate DB column.
+        if customer:
+            remarks = f"Returned by {customer}" + (f" — {remarks}" if remarks else "")
+        elif not remarks:
+            remarks = "Returned by customer"
+        name, bal = _apply_movement(d.get("itemId"), d.get("qty"), "RETURN",
+                                    remarks,
+                                    recorded_by=session["user"]["name"])
+        log_audit(DB_CONFIG, "STOCK_RETURN",
+                  f"+{d.get('qty')} back to {name} (now {bal:g}).",
+                  session["user"]["username"])
+        return jsonify({"ok": True})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/inventory/summary")
+@permission_required("inventory")
+def api_inventory_summary():
+    """
+    Per-material aggregated totals across the entire stock_movements
+    history: Total In (RECEIPT), Total Out (ISSUANCE), and Back Orders
+    (RETURN — material that came back from a customer).
+
+    Net Stock = In + Back Orders - Out, which for any material with no
+    manual adjustments equals the current on-hand quantity in
+    materials.current_stock — surfacing the same number two ways is a
+    quick reconciliation check for the person managing inventory.
+    """
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT m.material_code, m.material_name, m.category, m.unit,
+                   m.current_stock,
+                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RECEIPT'  THEN sm.quantity ELSE 0 END), 0) AS total_in,
+                   COALESCE(SUM(CASE WHEN sm.movement_type = 'ISSUANCE' THEN sm.quantity ELSE 0 END), 0) AS total_out,
+                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN'   THEN sm.quantity ELSE 0 END), 0) AS total_return
+              FROM materials m
+              LEFT JOIN stock_movements sm ON sm.material_id = m.material_id
+             GROUP BY m.material_id, m.material_code, m.material_name,
+                      m.category, m.unit, m.current_stock
+             ORDER BY m.material_code;
+        """, fetch=True)
+        data = [{
+            "id":         r["material_code"],
+            "name":       r["material_name"],
+            "cat":        r["category"] or "Uncategorized",
+            "unit":       r["unit"],
+            "totalIn":    float(r["total_in"]),
+            "totalOut":   float(r["total_out"]),
+            "backOrder":  float(r["total_return"]),
+            "netStock":   float(r["total_in"]) + float(r["total_return"]) - float(r["total_out"]),
+            "onHand":     float(r["current_stock"]),
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -521,6 +613,47 @@ def api_inventory_movements():
             "recordedBy": r["recorded_by"] or "\u2014",
         } for r in rows]
         return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# Scoped list of projects + their client details, for the Stock Out Request
+# modal on the Inventory page. Gated to "inventory" permission (NOT
+# "projects"/"customers") so an Inventory Personnel role - who legitimately
+# needs to issue stock against a project but isn't allowed to browse the
+# projects or customers modules - can still populate the Project dropdown.
+# Only the minimal fields the modal actually uses are returned.
+@app.route("/api/inventory/projects-for-stockout")
+@permission_required("inventory")
+def api_inventory_projects_for_stockout():
+    try:
+        proj_rows = execute_query(DB_CONFIG, """
+            SELECT p.project_code, p.project_name, p.status,
+                   c.customer_code
+              FROM projects p
+              LEFT JOIN customers c ON c.customer_id = p.customer_id
+             WHERE p.project_code IS NOT NULL
+             ORDER BY p.start_date DESC;
+        """, fetch=True)
+        cust_rows = execute_query(DB_CONFIG, """
+            SELECT c.customer_code, c.name, c.contact_person, c.phone, c.address
+              FROM customers c
+             ORDER BY c.name;
+        """, fetch=True)
+        status_map = {"Ongoing": "In Progress", "Completed": "Completed"}
+        projects = [{
+            "id": r["project_code"], "name": r["project_name"],
+            "custId": r["customer_code"] or "",
+            "status": status_map.get(r["status"], r["status"]),
+        } for r in proj_rows]
+        customers = [{
+            "id": r["customer_code"], "name": r["name"],
+            "contact": r["contact_person"] or "",
+            "phone": r["phone"] or "",
+            "addr": r["address"] or "",
+        } for r in cust_rows]
+        return jsonify({"ok": True, "projects": projects, "customers": customers})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -837,16 +970,201 @@ def api_transactions_save():
 def api_users():
     try:
         rows = execute_query(DB_CONFIG, """
-            SELECT user_id, username, full_name, role, email, department, is_active
+            SELECT user_id, username, full_name, role, email, department,
+                   is_active, custom_permissions
             FROM users ORDER BY full_name;
         """, fetch=True)
-        data = [{
-            "id": f"USR-{r['user_id']:02d}", "username": r["username"],
-            "name": r["full_name"] or "", "role": r["role"],
-            "email": r["email"] or "", "dept": r["department"] or "",
-            "status": "Active" if r["is_active"] else "Suspended",
-        } for r in rows]
+        live_role_perms = get_role_permissions(DB_CONFIG)
+        data = []
+        for r in rows:
+            role_defaults = sorted(live_role_perms.get(r["role"], set()))
+            resolved = sorted(resolve_permissions(r["role"], r["custom_permissions"], live_role_perms))
+            data.append({
+                "id":       f"USR-{r['user_id']:02d}",
+                "username": r["username"],
+                "name":     r["full_name"] or "",
+                "role":     r["role"],
+                "email":    r["email"] or "",
+                "dept":     r["department"] or "",
+                "status":   "Active" if r["is_active"] else "Suspended",
+                # Access-override extras: the raw custom_permissions field
+                # (NULL = not overridden), the effective permissions the
+                # user actually sees, and the role's defaults for comparison.
+                "customPermissions": r["custom_permissions"] or "",
+                "hasOverride":       bool((r["custom_permissions"] or "").strip()),
+                "effectivePermissions": resolved,
+                "rolePermissions":      role_defaults,
+            })
         return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/users/permissions", methods=["POST"])
+@permission_required("settings")
+def api_users_permissions():
+    """
+    Set (or clear) a per-user access override. Body:
+      { "id": "USR-02", "permissions": ["dashboard","inventory","profile"] }
+        → sets custom_permissions to the given comma-joined list
+      { "id": "USR-02", "reset": true }
+        → clears custom_permissions (NULL) so role defaults apply again
+
+    Safeguards:
+    - The permission set is intersected with ALL_PERMISSIONS so a bad
+      value can't grant something invalid.
+    - Non-admins can never be given the "settings" key by an override.
+    - An admin cannot remove their OWN settings access here — that would
+      lock them out of this very page. Change the role first if the
+      intent is really to demote themselves.
+    """
+    d = request.get_json(silent=True) or {}
+    edit_id = d.get("id") or ""
+    reset = bool(d.get("reset"))
+    perms = d.get("permissions") or []
+    if not edit_id.startswith("USR-"):
+        return jsonify({"ok": False, "error": "Invalid user id."}), 400
+    try:
+        user_id = int(edit_id.split("-")[1])
+    except (ValueError, IndexError):
+        return jsonify({"ok": False, "error": "Invalid user id."}), 400
+
+    try:
+        rows = execute_query(
+            DB_CONFIG,
+            "SELECT username, role FROM users WHERE user_id = %s;",
+            (user_id,), fetch=True,
+        )
+        if not rows:
+            return jsonify({"ok": False, "error": "User not found."}), 404
+        target = rows[0]
+
+        if reset:
+            new_value = None
+            log_detail = f"Cleared custom permissions for {target['username']} — role defaults now apply."
+        else:
+            cleaned = {str(p).strip() for p in perms if isinstance(p, str) and p.strip()}
+            cleaned &= ALL_PERMISSIONS
+            if target["role"] != "System Administrator":
+                cleaned.discard("settings")
+
+            # Self-lockout guard: an admin editing their own record must
+            # keep the "settings" key, otherwise they can't come back here
+            # to fix it.
+            me = session["user"]
+            if me.get("user_id") == user_id and "settings" not in cleaned:
+                return jsonify({
+                    "ok": False,
+                    "error": "You can't take away your own Settings access — you would be locked out of this page.",
+                }), 400
+
+            # Order the CSV for stable, human-readable rows in the DB.
+            _order = ["dashboard", "inventory", "customers", "projects",
+                      "transactions", "forecasting", "reports", "settings",
+                      "profile"]
+            new_value = ",".join(p for p in _order if p in cleaned)
+            log_detail = (f"Set custom permissions for {target['username']} "
+                          f"to [{new_value or '(none)'}].")
+
+        execute_query(
+            DB_CONFIG,
+            "UPDATE users SET custom_permissions = %s WHERE user_id = %s;",
+            (new_value, user_id),
+        )
+        log_audit(DB_CONFIG, "USER_PERMISSIONS_CHANGED", log_detail,
+                  session["user"]["username"])
+
+        # If the admin just edited THEIR OWN record, refresh their session
+        # so the sidebar and permission checks reflect the new set on the
+        # next click, instead of waiting until they sign out and back in.
+        if session["user"].get("user_id") == user_id:
+            session["user"]["allowed_pages"] = sorted(
+                resolve_permissions(target["role"], new_value, get_role_permissions(DB_CONFIG))
+            )
+            session.modified = True
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Role default permissions API (Settings > Roles & Permissions) ----------------
+@app.route("/api/roles/permissions")
+@permission_required("settings")
+def api_roles_permissions():
+    """Current role-default matrix, for rendering the clickable grid."""
+    try:
+        live = get_role_permissions(DB_CONFIG)
+        data = {role: sorted(perms) for role, perms in live.items()}
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/roles/permissions/toggle", methods=["POST"])
+@permission_required("settings")
+def api_roles_permissions_toggle():
+    """
+    Flip one cell of the Roles & Permissions matrix. Body:
+      { "role": "Inventory Personnel", "module": "customers", "enabled": true }
+
+    Safeguards (mirror the per-user Access override's rules):
+    - "settings" can only ever belong to System Administrator - granting
+      it to any other role is rejected, and it can never be removed FROM
+      System Administrator (that would mean no one could ever reach this
+      page again to fix it).
+    - A role can't be left with zero modules - that would silently lock
+      out everyone currently on that role.
+    - Users already signed in keep their current session's access until
+      they next log in (same as a per-user Access edit), so this never
+      kicks anyone out mid-session.
+    """
+    d = request.get_json(silent=True) or {}
+    role = d.get("role") or ""
+    module = d.get("module") or ""
+    enabled = bool(d.get("enabled"))
+
+    if role not in ROLE_NAMES:
+        return jsonify({"ok": False, "error": "Invalid role."}), 400
+    if module not in ALL_PERMISSIONS:
+        return jsonify({"ok": False, "error": "Invalid module."}), 400
+    if module == "settings" and enabled and role != "System Administrator":
+        return jsonify({"ok": False, "error": "Only System Administrator can have Settings access."}), 400
+    if module == "settings" and not enabled and role == "System Administrator":
+        return jsonify({"ok": False, "error": "Settings access can't be removed from System Administrator — that would lock everyone out of this page."}), 400
+
+    try:
+        rows = execute_query(
+            DB_CONFIG, "SELECT permissions FROM role_permissions WHERE role = %s;",
+            (role,), fetch=True,
+        )
+        current = {p.strip() for p in (rows[0]["permissions"] or "").split(",") if p.strip()} if rows else set()
+
+        if enabled:
+            current.add(module)
+        else:
+            current.discard(module)
+
+        if not current:
+            return jsonify({"ok": False, "error": f"{role} can't be left with zero modules."}), 400
+
+        _order = ["dashboard", "inventory", "customers", "projects",
+                  "transactions", "forecasting", "reports", "settings", "profile"]
+        new_value = ",".join(p for p in _order if p in current)
+
+        execute_query(DB_CONFIG, """
+            INSERT INTO role_permissions (role, permissions) VALUES (%s, %s)
+            ON CONFLICT (role) DO UPDATE SET permissions = EXCLUDED.permissions;
+        """, (role, new_value))
+
+        log_audit(DB_CONFIG, "ROLE_PERMISSIONS_CHANGED",
+                  f"{'Granted' if enabled else 'Revoked'} '{module}' {'to' if enabled else 'from'} "
+                  f"{role} (now: [{new_value}]).", session["user"]["username"])
+
+        return jsonify({"ok": True, "data": sorted(current)})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -862,7 +1180,7 @@ def api_users_save():
     email = (d.get("email") or "").strip()
     if not name or not username:
         return jsonify({"ok": False, "error": "Name and username are required."}), 400
-    if role not in ROLE_PERMISSIONS:
+    if role not in ROLE_NAMES:
         return jsonify({"ok": False, "error": "Invalid role."}), 400
 
     edit_id = d.get("edit_id")  # e.g. "USR-02"
@@ -935,6 +1253,78 @@ def api_users_deactivate():
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Backup API (Settings > Backup & Restore) ----------------
+@app.route("/api/settings/backup")
+@permission_required("settings")
+def api_settings_backup():
+    """
+    Returns the full database backup as plain-text SQL in the JSON body
+    (base64-free - it's plain SQL text, safe as JSON string). The
+    frontend does NOT navigate to this URL or use an <a download> link -
+    that would just drop the file in the browser's Downloads folder.
+    Instead it fetches this, then uses the File System Access API to
+    let the person pick a real folder on their computer and writes the
+    file there themselves, which is the actual "local backup" this
+    button promises.
+    """
+    try:
+        sql_text = generate_sql_backup(DB_CONFIG)
+        filename = f"parabellum_backup_{datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M%S')}.sql"
+        log_audit(DB_CONFIG, "BACKUP_CREATED", f"Generated backup file {filename}.",
+                  session["user"]["username"])
+        return jsonify({"ok": True, "filename": filename, "sql": sql_text})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/settings/restore", methods=["POST"])
+@permission_required("settings")
+def api_settings_restore():
+    """
+    Loads an uploaded .sql backup file (the same format /api/settings/backup
+    generates) back into the database, replacing the current data in every
+    table that backup covers. This is destructive and cannot be undone from
+    inside the app, so on top of needing "settings" access it's restricted
+    to the System Administrator role specifically -- the frontend also
+    makes the person confirm through a dedicated dialog before this is ever
+    called, but that's a UI convenience, not the real guard.
+    """
+    if session["user"]["role"] != "System Administrator":
+        return jsonify({"ok": False, "error": "Only a System Administrator can restore a backup."}), 403
+
+    data = request.get_json(silent=True) or {}
+    sql_text = (data.get("sql") or "").strip()
+    filename = data.get("filename") or "uploaded backup"
+
+    if not sql_text:
+        return jsonify({"ok": False, "error": "No file content was received. Please choose a .sql backup file and try again."}), 400
+
+    try:
+        restore_sql_backup(DB_CONFIG, sql_text)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "Restore failed partway through, so the database was left unchanged. Please check that this is a genuine Parabellum backup file and try again, or contact your administrator."}), 500
+
+    # audit_logs itself was just truncated and reloaded as part of the
+    # restore, so this is the first row logged into the restored table --
+    # recording it now (not before) is what makes it survive.
+    try:
+        log_audit(DB_CONFIG, "DATABASE_RESTORED", f"Restored database from {filename}.",
+                  session["user"]["username"])
+    except Exception:
+        pass
+
+    # The restored data may not even include the account that's currently
+    # signed in (or may have different users/roles entirely), so the
+    # session this request was made with can no longer be trusted. Clear it
+    # and send everyone back to the login screen.
+    session.clear()
+    return jsonify({"ok": True})
 
 
 # ---------------- System Logs / Audit Trail API (Settings > Logs) ----------------
@@ -1051,7 +1441,8 @@ from reports_export import REPORT_BUILDERS, generate_pdf, generate_excel
 REPORT_FILE_SLUGS = {
     "inventory": "Inventory_Report", "customer": "Customer_Report",
     "project": "Project_Report", "transaction": "Transaction_Report",
-    "commission": "Commission_Report", "forecast": "Forecast_Report",
+    "stock-in": "Stock_In_Report", "stock-out": "Stock_Out_Report",
+    "back-order": "Back_Order_Report", "forecast": "Forecast_Report",
 }
 
 

@@ -55,7 +55,11 @@ from flask_limiter.util import get_remote_address
 
 
 # Reasonable ceilings. Adjust in one place if needed.
-MAX_JSON_BYTES          = 4 * 1024 * 1024   # 4 MB - covers JSON bodies AND avatar uploads
+MAX_JSON_BYTES          = 25 * 1024 * 1024  # 25 MB - covers JSON bodies, avatar uploads, AND a
+                                             # restored database backup file (Settings > Backup &
+                                             # Restore), which is plain SQL text sent as one JSON
+                                             # body and can be the largest payload this app ever
+                                             # receives as the material/transaction history grows.
 MAX_USERNAME_LEN       = 60
 MAX_PASSWORD_LEN       = 256
 MAX_STRING_FIELD_LEN   = 500
@@ -165,6 +169,12 @@ def apply_security(app):
             limit = (MAX_PASSWORD_LEN if key == "password"
                      else MAX_USERNAME_LEN if key == "username"
                      else MAX_TEXT_FIELD_LEN if key in ("remarks", "description", "notes", "address")
+                     # "sql" is the full backup file's text, posted whole by
+                     # Settings > Backup & Restore -- it's a dump of the
+                     # entire database, so it needs the same ceiling as the
+                     # request body itself (MAX_JSON_BYTES), not the normal
+                     # short-field limit.
+                     else MAX_JSON_BYTES if key == "sql"
                      else MAX_STRING_FIELD_LEN)
             if len(value) > limit:
                 return jsonify({

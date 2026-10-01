@@ -28,6 +28,13 @@ CREATE TABLE users (
     is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
     failed_attempts INT          NOT NULL DEFAULT 0,
     locked_until    TIMESTAMPTZ,
+    -- Per-user access override (Settings > Users > Access). Comma-separated
+    -- list of page keys drawn from ROLE_PERMISSIONS (dashboard, inventory,
+    -- customers, projects, transactions, forecasting, reports, settings,
+    -- profile). NULL = use the role's defaults; any value REPLACES them for
+    -- this one user only. Kept as TEXT (not JSON/array) so it's readable and
+    -- editable with plain SQL when needed.
+    custom_permissions TEXT,
     created_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -98,7 +105,7 @@ CREATE TABLE stock_movements (
     movement_id   SERIAL PRIMARY KEY,
     material_id   INT NOT NULL REFERENCES materials(material_id),
     movement_type VARCHAR(10) NOT NULL
-                  CHECK (movement_type IN ('RECEIPT', 'ISSUANCE')),
+                  CHECK (movement_type IN ('RECEIPT', 'ISSUANCE', 'RETURN')),
     quantity      NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
     movement_date DATE NOT NULL,
     project_id    INT REFERENCES projects(project_id),
@@ -178,3 +185,24 @@ CREATE TABLE audit_logs (
     details   TEXT,
     logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ---- Role default permissions (Settings > Roles & Permissions) ---
+-- Lets an admin edit which modules each ROLE gets by default, from the
+-- UI, instead of that being frozen in Python code. A per-user override
+-- (users.custom_permissions above) still wins over whatever is here for
+-- that one user. One row per role; `permissions` is the same
+-- comma-separated page-key format as custom_permissions. Seeded with the
+-- same defaults auth.py shipped with, so behavior doesn't change until
+-- someone actually edits a cell in the matrix.
+CREATE TABLE role_permissions (
+    role        VARCHAR(30) PRIMARY KEY
+                CHECK (role IN ('System Administrator', 'Inventory Personnel',
+                                'Operations Personnel', 'Management/Owner')),
+    permissions TEXT NOT NULL
+);
+
+INSERT INTO role_permissions (role, permissions) VALUES
+    ('System Administrator', 'dashboard,inventory,customers,projects,transactions,forecasting,reports,settings,profile'),
+    ('Inventory Personnel',  'dashboard,inventory,profile'),
+    ('Operations Personnel', 'dashboard,projects,transactions,profile'),
+    ('Management/Owner',     'dashboard,projects,transactions,forecasting,reports,profile');

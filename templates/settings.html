@@ -198,7 +198,7 @@
               <thead id="rolesMatrixHead"></thead>
               <tbody id="rolesMatrixBody"></tbody>
             </table></div>
-            <p class="small text-muted-2 mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>This matrix reflects the same role permissions the sidebar navigation enforces (per the capstone's User Roles and Responsibilities).</p>
+            <p class="small text-muted-2 mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>Click a cell to grant or revoke a module for that role. Changes apply the next time a user on that role signs in. A per-user Access override (User Management tab) still takes priority over these defaults for that one user.</p>
           </div></div></div>
 
           <!-- Theme -->
@@ -238,11 +238,53 @@
           <!-- Backup -->
           <div class="tab-pane fade" id="tab-backup"><div class="card"><div class="card-body">
             <h3 class="panel-title mb-1">Backup &amp; Restore</h3><p class="panel-sub mb-3">Keep your system data safe.</p>
-            <div class="alert alert-soft-success"><i class="bi bi-check-circle me-1"></i>Last backup: <strong>June 25, 2026 — 11:45 PM</strong> (auto)</div>
-            <div class="d-flex gap-2 flex-wrap"><button class="btn btn-primary" data-backend-action="Create Backup"><i class="bi bi-cloud-arrow-up me-1"></i>Create Backup</button>
-            <button class="btn btn-light-2" data-backend-action="Restore Backup"><i class="bi bi-cloud-arrow-down me-1"></i>Restore</button>
-            <button class="btn btn-light-2" data-export="backup file"><i class="bi bi-download me-1"></i>Download</button></div>
-            <div class="form-check form-switch mt-3"><input class="form-check-input" type="checkbox" checked><label class="form-check-label">Enable automatic daily backups</label></div>
+            <div class="alert alert-soft-success" id="backupStatusAlert"><i class="bi bi-check-circle me-1"></i>No backup created yet this session.</div>
+            <div class="d-flex gap-2 flex-wrap"><button class="btn btn-primary" id="createBackupBtn"><i class="bi bi-folder-plus me-1"></i>Create Backup</button></div>
+            <p class="text-muted-2 small mt-2 mb-0" id="backupHelpText">Create Backup opens a folder picker on this computer so you choose exactly where the backup file (.sql) is saved. Nothing is downloaded through the browser.</p>
+
+            <hr class="my-4">
+
+            <h5 class="mb-1">Restore from Backup File</h5>
+            <p class="text-muted-2 small mb-2">
+              Load a previously saved <code>.sql</code> backup file from this computer back into the database.
+              This <strong>replaces every row currently in the system</strong> with what's in the file — it is
+              not merged with existing data. Use this to recover from a backup, or to load a known dataset
+              (e.g. for a defense demo).
+            </p>
+            <div class="alert alert-soft-warning small" id="restoreFileNote" style="display:none">
+              <i class="bi bi-file-earmark-text me-1"></i>Selected: <strong id="restoreFileName">—</strong>
+              <span id="restoreFileSize" class="text-muted-2"></span>
+            </div>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+              <input type="file" accept=".sql" class="d-none" id="restoreFileInput">
+              <button class="btn btn-light-2" id="restoreChooseBtn"><i class="bi bi-file-earmark-arrow-up me-1"></i>Choose .sql File</button>
+              <button class="btn btn-primary" id="restoreRunBtn" disabled><i class="bi bi-arrow-repeat me-1"></i>Restore Database</button>
+            </div>
+            <p class="text-muted-2 small mt-2 mb-0" id="restoreHelpText">Only System Administrators can restore. The restore runs in a single database transaction — if anything in the file fails, nothing is changed.</p>
+
+            <hr class="my-4">
+
+            <h5 class="mb-1">Automatic Daily Backup</h5>
+            <p class="text-muted-2 small mb-2">
+              When enabled, Parabellum writes a fresh backup file into a folder you choose on this computer
+              once every 24 hours, whenever an administrator opens Settings. Nothing is ever downloaded through
+              the browser and nothing is sent to the internet.
+            </p>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="autoBackupToggle">
+              <label class="form-check-label" for="autoBackupToggle">Enable automatic daily backups</label>
+            </div>
+            <div id="autoBackupInfo" class="alert alert-soft-info mt-3" style="display:none">
+              <div class="mb-1"><i class="bi bi-folder me-1"></i>Backup folder: <strong id="autoBackupFolderName">—</strong></div>
+              <div class="mb-2"><i class="bi bi-clock-history me-1"></i>Last automatic backup: <strong id="autoBackupLastRun">Never</strong></div>
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-light-2 btn-sm" id="autoBackupChangeFolderBtn"><i class="bi bi-folder2-open me-1"></i>Change Folder</button>
+                <button class="btn btn-light-2 btn-sm" id="autoBackupRunNowBtn"><i class="bi bi-play-fill me-1"></i>Run Now</button>
+              </div>
+              <div id="autoBackupPermWarn" class="small text-warning mt-2" style="display:none">
+                <i class="bi bi-exclamation-triangle me-1"></i>The browser lost permission for that folder. Click <em>Change Folder</em> (or <em>Run Now</em>) to grant it again.
+              </div>
+            </div>
           </div></div></div>
 
           <!-- Logs / Audit Trail -->
@@ -277,6 +319,49 @@
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="userModalSubmit">Save User</button></div>
         </form>
+      </div></div></div>
+
+      <!-- Per-user Access modal (Settings > Users > shield icon) -->
+      <div class="modal fade" id="accessModal" tabindex="-1" aria-labelledby="accessModalTitle"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="accessModalTitle"><i class="bi bi-shield-lock me-2" style="color:var(--primary)"></i>Access Control</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <form id="accessForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <div class="fw-medium" id="accessUserName">—</div>
+            <div class="small text-muted-2"><span id="accessUserRole">—</span> · <span id="accessUserUsername">—</span></div>
+          </div>
+          <div class="alert alert-soft-info small mb-3" id="accessRoleDefaultNote">
+            <i class="bi bi-info-circle me-1"></i>By default this role grants: <strong id="accessRoleDefaultList">—</strong>. Tick or untick pages below to override that for this one user.
+          </div>
+          <div id="accessCheckboxes" class="row g-2"></div>
+          <div class="small text-muted-2 mt-3" id="accessAdminSelfHint" style="display:none">
+            <i class="bi bi-exclamation-triangle me-1"></i>You can't remove your own Settings access — that would lock you out of this page. Change your role instead if you really need to demote yourself.
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <button type="button" class="btn btn-light-2" id="accessResetBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Role Defaults</button>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Save Access</button>
+          </div>
+        </div>
+        </form>
+      </div></div></div>
+
+      <!-- Restore confirmation modal (Settings > Backup & Restore) -->
+      <div class="modal fade" id="restoreConfirmModal" tabindex="-1" aria-labelledby="restoreConfirmTitle"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="restoreConfirmTitle"><i class="bi bi-exclamation-triangle me-2" style="color:var(--primary)"></i>Restore Database</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body">
+          <p class="mb-2">This will <strong>permanently replace every row</strong> currently in the database with the contents of:</p>
+          <p class="mb-3"><code id="restoreConfirmFileName">—</code></p>
+          <div class="alert alert-soft-danger small mb-0"><i class="bi bi-exclamation-octagon me-1"></i>This cannot be undone. Make sure you have a current backup of today's data before continuing, if you want to keep it.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="restoreConfirmBtn" style="background:var(--primary)"><i class="bi bi-arrow-repeat me-1"></i>Restore Database</button>
+        </div>
       </div></div></div>
 
     </main>
@@ -316,12 +401,16 @@
           usersCache = json.data;
           tb.innerHTML = '';
           usersCache.forEach(u => {
+            const accessTag = u.hasOverride
+              ? `<span class="badge b-warning ms-1" title="This user's access is customized — not the role default">Custom access</span>`
+              : '';
             tb.insertAdjacentHTML('beforeend', `<tr>
               <td><div class="fw-medium">${escapeHTML(u.name)}</div><div class="small text-muted-2">${escapeHTML(u.email)}</div></td>
-              <td>${roleBadge(u.role)}</td><td>${escapeHTML(u.dept)}</td>
+              <td>${roleBadge(u.role)}${accessTag}</td><td>${escapeHTML(u.dept)}</td>
               <td><span class="badge ${u.status==='Active'?'b-success':'b-warning'}">${u.status}</span></td>
               <td class="text-center">
                 <button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${u.id}"><i class="bi bi-pencil"></i></button>
+                <button class="act-btn" data-bs-toggle="tooltip" title="Access" data-act="access" data-id="${u.id}"><i class="bi bi-shield-lock"></i></button>
                 <button class="act-btn danger" data-bs-toggle="tooltip" title="Deactivate" data-act="deactivate" data-id="${u.id}"><i class="bi bi-person-x"></i></button>
               </td></tr>`);
           });
@@ -364,6 +453,120 @@
             showToast(err.message, 'error', 'bi-exclamation-triangle');
           }
         }
+        const accessBtn = e.target.closest('[data-act="access"]');
+        if (accessBtn) {
+          const u = usersCache.find(x => x.id === accessBtn.dataset.id); if (!u) return;
+          openAccessModal(u);
+        }
+      });
+
+      /* ---------- Per-user Access modal (Settings > Users > shield) ----------
+       Renders one checkbox per module. Ticked boxes = pages this user can
+       reach. Saves a comma-separated custom_permissions value on the users
+       row (or NULL when Reset is used). The server intersects with the
+       full permission list, always keeps "settings" admin-only, and
+       refuses to let the current admin remove their own Settings access. */
+      const ACCESS_MODULES = [
+        ['dashboard',    'Dashboard'],
+        ['inventory',    'Inventory'],
+        ['customers',    'Customers'],
+        ['projects',     'Projects'],
+        ['transactions', 'Client Transactions'],
+        ['forecasting', 'Forecasting'],
+        ['reports',      'Reports'],
+        ['settings',     'Settings'],
+        ['profile',      'Profile'],
+      ];
+      const accessModal = new bootstrap.Modal('#accessModal');
+      const accessForm  = document.getElementById('accessForm');
+      let currentAccessUser = null;
+
+      function openAccessModal(u){
+        currentAccessUser = u;
+        document.getElementById('accessUserName').textContent = u.name;
+        document.getElementById('accessUserRole').textContent = u.role;
+        document.getElementById('accessUserUsername').textContent = u.username;
+
+        const roleDefaults = new Set(u.rolePermissions || []);
+        document.getElementById('accessRoleDefaultList').textContent =
+          [...roleDefaults].map(k => ACCESS_MODULES.find(m=>m[0]===k)?.[1] || k).join(', ') || '(nothing)';
+
+        // Build checkboxes. Effective (currently allowed) pages come pre-ticked.
+        const effective = new Set(u.effectivePermissions || []);
+        const container = document.getElementById('accessCheckboxes');
+        const isSelf = CURRENT_USER && CURRENT_USER.user_id === parseInt(u.id.split('-')[1], 10);
+        const isAdmin = u.role === 'System Administrator';
+        container.innerHTML = ACCESS_MODULES.map(([key, label]) => {
+          const checked  = effective.has(key) ? 'checked' : '';
+          // "settings" is admin-only server-side. Reflect that in the UI so
+          // non-admin rows disable it (it can't ever be granted).
+          const disabled = (key === 'settings' && !isAdmin) ? 'disabled' : '';
+          const settingsAdminSelfLock = (key === 'settings' && isSelf && isAdmin);
+          const lockedNote = disabled ? '<div class="small text-muted-2">Only System Administrators can hold this.</div>' : '';
+          const selfLockAttr = settingsAdminSelfLock ? 'data-self-locked="1"' : '';
+          return `<div class="col-md-6">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="acc-${key}" data-perm="${key}" ${checked} ${disabled} ${selfLockAttr}>
+              <label class="form-check-label" for="acc-${key}"><strong>${escapeHTML(label)}</strong></label>
+              ${lockedNote}
+            </div>
+          </div>`;
+        }).join('');
+
+        document.getElementById('accessAdminSelfHint').style.display =
+          (isSelf && isAdmin) ? '' : 'none';
+
+        accessModal.show();
+      }
+
+      // Guard: prevent the current admin from unticking their own Settings
+      // access in the UI (server also refuses, but catching it here avoids a
+      // wasted request and a scary error toast).
+      document.getElementById('accessCheckboxes')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-perm="settings"][data-self-locked="1"]');
+        if (!cb) return;
+        if (!cb.checked) {
+          cb.checked = true;
+          showToast('You can’t take away your own Settings access.', 'error', 'bi-exclamation-triangle');
+        }
+      });
+
+      accessForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentAccessUser) return;
+        const perms = [...document.querySelectorAll('#accessCheckboxes input[type="checkbox"]:checked')]
+          .map(cb => cb.dataset.perm);
+        try {
+          const res = await fetch('/api/users/permissions', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ id: currentAccessUser.id, permissions: perms }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          showToast('Access updated', 'success', 'bi-check-circle-fill');
+          accessModal.hide();
+          loadUsers();
+        } catch (err) {
+          showToast(err.message, 'error', 'bi-exclamation-triangle');
+        }
+      });
+
+      document.getElementById('accessResetBtn').addEventListener('click', async () => {
+        if (!currentAccessUser) return;
+        if (!confirm(`Reset ${currentAccessUser.name}'s access back to the role defaults for ${currentAccessUser.role}?`)) return;
+        try {
+          const res = await fetch('/api/users/permissions', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ id: currentAccessUser.id, reset: true }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          showToast('Access reset to role defaults', 'success', 'bi-check-circle-fill');
+          accessModal.hide();
+          loadUsers();
+        } catch (err) {
+          showToast(err.message, 'error', 'bi-exclamation-triangle');
+        }
       });
 
       document.getElementById('userModal').addEventListener('hidden.bs.modal', () => {
@@ -402,21 +605,77 @@
         }
       }, true);
 
-      /* ---------- Roles & Permissions matrix - generated from ROLE_PERMISSIONS ----------
- Single source of truth: the same map that hides sidebar links renders this table. */
+      /* ---------- Roles & Permissions matrix - live, clickable, backed by the
+       role_permissions DB table via /api/roles/permissions(/toggle) ----------
+       Each cell is a button, not static markup, so an admin can grant or
+       revoke a module for an entire role straight from this screen. The
+       server enforces the same safeguards as the per-user Access override
+       (Settings can't leave System Administrator, can't be granted to
+       anyone else, and no role can be left with zero modules) - this page
+       just reflects those rules and reverts a cell if the server rejects it. */
       const MODULES = [
         ['dashboard','Dashboard'], ['inventory','Inventory'], ['customers','Customers'],
         ['projects','Projects'], ['transactions','Client Transactions'],
         ['forecasting','Forecasting'], ['reports','Reports'], ['settings','Settings'],
       ];
-      const roles = Object.keys(ROLE_PERMISSIONS);
-      document.getElementById('rolesMatrixHead').innerHTML =
-        `<tr><th>Module</th>${roles.map(r => `<th class="text-center">${r}</th>`).join('')}</tr>`;
-      document.getElementById('rolesMatrixBody').innerHTML = MODULES.map(([key,label]) =>
-        `<tr><td class="fw-medium">${label}</td>${roles.map(r =>
-          `<td class="text-center">${ROLE_PERMISSIONS[r].includes(key)
-            ? '<i class="bi bi-check-circle-fill" style="color:var(--success)"></i>'
-            : '<i class="bi bi-dash-circle text-muted-2"></i>'}</td>`).join('')}</tr>`).join('');
+      let roleMatrixData = {};   // { role: [permKey, ...] }, from the server
+
+      function cellHTML(role, key, has){
+        return `<button type="button" class="role-cell-btn" data-role="${escapeHTML(role)}" data-module="${key}"
+            aria-pressed="${has}" aria-label="${escapeHTML(role)} — ${key}"
+            style="background:none;border:0;padding:4px;cursor:pointer;line-height:1">
+          ${has
+            ? '<i class="bi bi-check-circle-fill" style="color:var(--success);font-size:1.1rem"></i>'
+            : '<i class="bi bi-dash-circle text-muted-2" style="font-size:1.1rem"></i>'}
+        </button>`;
+      }
+
+      function renderRolesMatrix(){
+        const roles = Object.keys(roleMatrixData);
+        document.getElementById('rolesMatrixHead').innerHTML =
+          `<tr><th>Module</th>${roles.map(r => `<th class="text-center">${escapeHTML(r)}</th>`).join('')}</tr>`;
+        document.getElementById('rolesMatrixBody').innerHTML = MODULES.map(([key,label]) =>
+          `<tr><td class="fw-medium">${label}</td>${roles.map(r =>
+            `<td class="text-center">${cellHTML(r, key, (roleMatrixData[r] || []).includes(key))}</td>`).join('')}</tr>`).join('');
+      }
+
+      async function loadRolesMatrix(){
+        try {
+          const res = await fetch('/api/roles/permissions');
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          roleMatrixData = json.data;
+          renderRolesMatrix();
+        } catch (err) {
+          document.getElementById('rolesMatrixBody').innerHTML =
+            `<tr><td colspan="99" class="text-center text-danger py-3">${escapeHTML(err.message)}</td></tr>`;
+        }
+      }
+
+      // Delegated click: toggle one cell, optimistic UI, revert on error.
+      document.getElementById('rolesMatrixBody').addEventListener('click', async (e) => {
+        const btn = e.target.closest('.role-cell-btn'); if (!btn) return;
+        const role = btn.dataset.role, module = btn.dataset.module;
+        const current = (roleMatrixData[role] || []).includes(module);
+        const enabled = !current;
+        btn.disabled = true;
+        try {
+          const res = await fetch('/api/roles/permissions/toggle', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, module, enabled }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          roleMatrixData[role] = json.data;
+          renderRolesMatrix();
+          showToast(`${enabled ? 'Granted' : 'Revoked'} ${module} ${enabled ? 'to' : 'from'} ${role}`, 'success');
+        } catch (err) {
+          showToast(err.message, 'error', 'bi-exclamation-triangle');
+          btn.disabled = false;   // cell stays as it was - no optimistic change was applied yet
+        }
+      });
+
+      loadRolesMatrix();
 
       /* ---------- System Logs: real audit_logs table (D7) ---------- */
       async function loadLogs(){
@@ -438,6 +697,319 @@
           lb.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHTML(err.message)}</td></tr>`;
         }
       }
+
+      /* ---------- Backup & Restore: real DB dump, saved to a local folder ----------
+         Both the manual "Create Backup" button and the "Enable automatic daily
+         backups" toggle write into a folder the person chose on this computer,
+         using the File System Access API's showDirectoryPicker. Nothing is ever
+         downloaded through the browser and nothing goes over the internet.
+
+         The auto-backup folder handle is persisted in IndexedDB so it survives
+         reloads and browser restarts; the last-run timestamp is kept in
+         localStorage. Once every 24 hours, opening Settings silently writes a
+         fresh .sql file into that folder. If the browser lost permission on
+         the folder (which can happen after a full browser restart), we surface
+         a small warning so the person can re-grant it with one click. */
+
+      // -------- Small IndexedDB kv store for the auto-backup dir handle --------
+      const IDB_DB = 'parabellum-backup', IDB_STORE = 'kv', IDB_KEY = 'autoBackupDir';
+      function idbOpen(){
+        return new Promise((res, rej) => {
+          const req = indexedDB.open(IDB_DB, 1);
+          req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+          req.onsuccess = () => res(req.result);
+          req.onerror   = () => rej(req.error);
+        });
+      }
+      async function idbGet(key){
+        const db = await idbOpen();
+        return new Promise((res, rej) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const rq = tx.objectStore(IDB_STORE).get(key);
+          rq.onsuccess = () => res(rq.result);
+          rq.onerror   = () => rej(rq.error);
+        });
+      }
+      async function idbSet(key, val){
+        const db = await idbOpen();
+        return new Promise((res, rej) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.objectStore(IDB_STORE).put(val, key);
+          tx.oncomplete = () => res();
+          tx.onerror    = () => rej(tx.error);
+        });
+      }
+      async function idbDel(key){
+        const db = await idbOpen();
+        return new Promise((res, rej) => {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.objectStore(IDB_STORE).delete(key);
+          tx.oncomplete = () => res();
+          tx.onerror    = () => rej(tx.error);
+        });
+      }
+
+      async function verifyPermission(handle, requestIfMissing){
+        if (!handle || typeof handle.queryPermission !== 'function') return false;
+        const opts = { mode: 'readwrite' };
+        if ((await handle.queryPermission(opts)) === 'granted') return true;
+        if (!requestIfMissing) return false;
+        return (await handle.requestPermission(opts)) === 'granted';
+      }
+
+      // Fetches the SQL dump and writes it into `dirHandle`. Returns filename.
+      async function writeBackupInto(dirHandle){
+        const res = await fetch('/api/settings/backup');
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || 'Could not generate the backup.');
+        const fileHandle = await dirHandle.getFileHandle(json.filename, { create: true });
+        const writable   = await fileHandle.createWritable();
+        await writable.write(json.sql);
+        await writable.close();
+        return json.filename;
+      }
+
+      // -------- Manual "Create Backup" (unchanged behavior: pick + save) --------
+      const backupBtn   = document.getElementById('createBackupBtn');
+      const backupAlert = document.getElementById('backupStatusAlert');
+
+      function setBackupStatus(html){
+        if (backupAlert) backupAlert.innerHTML = `<i class="bi bi-check-circle me-1"></i>${html}`;
+      }
+
+      backupBtn?.addEventListener('click', async () => {
+        if (typeof window.showDirectoryPicker !== 'function') {
+          showToast('Saving to a local folder needs a Chromium browser (Chrome or Edge) - this browser does not support it.', 'error', 'bi-exclamation-triangle');
+          return;
+        }
+        backupBtn.disabled = true;
+        const originalHtml = backupBtn.innerHTML;
+        backupBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparing backup…';
+        try {
+          let dirHandle;
+          try {
+            dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          } catch (pickErr) {
+            if (pickErr && pickErr.name === 'AbortError') return; // user cancelled
+            throw pickErr;
+          }
+          const filename = await writeBackupInto(dirHandle);
+          const now = new Date();
+          setBackupStatus(`Last backup: <strong>${now.toLocaleString()}</strong> — saved as <code>${escapeHTML(filename)}</code> in <strong>${escapeHTML(dirHandle.name)}</strong>`);
+          showToast(`Backup saved to "${dirHandle.name}"`, 'success', 'bi-check-circle-fill');
+        } catch (err) {
+          showToast(err.message || 'Could not create the backup.', 'error', 'bi-exclamation-triangle');
+        } finally {
+          backupBtn.innerHTML = originalHtml;
+          backupBtn.disabled = false;
+        }
+      });
+
+      // -------- Restore from Backup File --------
+      // Plain <input type="file"> rather than the File System Access API
+      // (used above for backups), because a restore just needs to READ one
+      // local file the person picks - no folder/writable handle needed,
+      // and <input type="file"> works in every browser, not just Chromium.
+      const restoreFileInput  = document.getElementById('restoreFileInput');
+      const restoreChooseBtn  = document.getElementById('restoreChooseBtn');
+      const restoreRunBtn     = document.getElementById('restoreRunBtn');
+      const restoreFileNote   = document.getElementById('restoreFileNote');
+      const restoreFileName   = document.getElementById('restoreFileName');
+      const restoreFileSize   = document.getElementById('restoreFileSize');
+      const restoreConfirmModalEl = document.getElementById('restoreConfirmModal');
+      const restoreConfirmModal   = restoreConfirmModalEl ? new bootstrap.Modal(restoreConfirmModalEl) : null;
+      let restoreSelectedFile = null;
+
+      const fmtBytes = (n) => n < 1024 ? `${n} B` : n < 1024*1024 ? `${(n/1024).toFixed(1)} KB` : `${(n/1024/1024).toFixed(1)} MB`;
+
+      restoreChooseBtn?.addEventListener('click', () => restoreFileInput.click());
+      restoreFileInput?.addEventListener('change', () => {
+        const file = restoreFileInput.files && restoreFileInput.files[0];
+        restoreSelectedFile = file || null;
+        if (!file) {
+          restoreFileNote.style.display = 'none';
+          restoreRunBtn.disabled = true;
+          return;
+        }
+        restoreFileName.textContent = file.name;
+        restoreFileSize.textContent = `(${fmtBytes(file.size)})`;
+        restoreFileNote.style.display = '';
+        restoreRunBtn.disabled = false;
+      });
+
+      restoreRunBtn?.addEventListener('click', () => {
+        if (!restoreSelectedFile || !restoreConfirmModal) return;
+        document.getElementById('restoreConfirmFileName').textContent = restoreSelectedFile.name;
+        restoreConfirmModal.show();
+      });
+
+      document.getElementById('restoreConfirmBtn')?.addEventListener('click', async () => {
+        if (!restoreSelectedFile) return;
+        const confirmBtn = document.getElementById('restoreConfirmBtn');
+        const originalHtml = confirmBtn.innerHTML;
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Restoring…';
+        restoreRunBtn.disabled = true;
+        try {
+          const text = await restoreSelectedFile.text();
+          const res = await fetch('/api/settings/restore', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sql: text, filename: restoreSelectedFile.name }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error || 'Restore failed.');
+
+          restoreConfirmModal.hide();
+          showToast(`Database restored from "${restoreSelectedFile.name}". Signing you back in…`, 'success', 'bi-check-circle-fill');
+          // The restored data may not include the current session's user
+          // row (or may have changed its role/permissions), so the
+          // session is no longer trustworthy. The server already cleared
+          // it; send everyone to login to re-establish a clean session.
+          setTimeout(() => { window.location.href = '/login'; }, 1500);
+        } catch (err) {
+          showToast(err.message || 'Could not restore the database.', 'error', 'bi-exclamation-triangle');
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = originalHtml;
+          restoreRunBtn.disabled = false;
+        }
+      });
+
+      // -------- Automatic Daily Backup --------
+      const autoToggle      = document.getElementById('autoBackupToggle');
+      const autoInfo        = document.getElementById('autoBackupInfo');
+      const autoFolderName  = document.getElementById('autoBackupFolderName');
+      const autoLastRun     = document.getElementById('autoBackupLastRun');
+      const autoChangeBtn   = document.getElementById('autoBackupChangeFolderBtn');
+      const autoRunNowBtn   = document.getElementById('autoBackupRunNowBtn');
+      const autoPermWarn    = document.getElementById('autoBackupPermWarn');
+
+      const LS_ENABLED  = 'parabellum.autoBackup.enabled';
+      const LS_LAST_RUN = 'parabellum.autoBackup.lastRun';
+      const ONE_DAY_MS  = 24 * 60 * 60 * 1000;
+
+      function autoRefreshUI(handle){
+        const enabled = localStorage.getItem(LS_ENABLED) === '1';
+        autoToggle.checked = enabled;
+        autoInfo.style.display = enabled ? '' : 'none';
+        if (handle) {
+          autoFolderName.textContent = handle.name;
+        } else {
+          autoFolderName.textContent = '—';
+        }
+        const last = localStorage.getItem(LS_LAST_RUN);
+        autoLastRun.textContent = last ? new Date(last).toLocaleString() : 'Never';
+      }
+
+      async function autoSetFolder(){
+        if (typeof window.showDirectoryPicker !== 'function') {
+          showToast('Saving to a local folder needs a Chromium browser (Chrome or Edge) - this browser does not support it.', 'error', 'bi-exclamation-triangle');
+          return null;
+        }
+        let handle;
+        try {
+          handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'parabellum-auto-backup' });
+        } catch (err) {
+          if (err && err.name === 'AbortError') return null;
+          throw err;
+        }
+        await idbSet(IDB_KEY, handle);
+        return handle;
+      }
+
+      async function autoRunBackup(handle, {silent = false} = {}){
+        if (!handle) return false;
+        const ok = await verifyPermission(handle, /*requestIfMissing*/ !silent);
+        if (!ok) {
+          autoPermWarn.style.display = '';
+          return false;
+        }
+        autoPermWarn.style.display = 'none';
+        try {
+          const filename = await writeBackupInto(handle);
+          const now = new Date();
+          localStorage.setItem(LS_LAST_RUN, now.toISOString());
+          autoLastRun.textContent = now.toLocaleString();
+          if (!silent) {
+            showToast(`Auto-backup saved to "${handle.name}"`, 'success', 'bi-check-circle-fill');
+          }
+          return true;
+        } catch (err) {
+          if (!silent) showToast(err.message || 'Automatic backup failed.', 'error', 'bi-exclamation-triangle');
+          return false;
+        }
+      }
+
+      autoToggle?.addEventListener('change', async () => {
+        if (autoToggle.checked) {
+          // Turning ON: pick a folder and store it. Bail out cleanly if the
+          // person closed the picker without choosing anything.
+          try {
+            const handle = await autoSetFolder();
+            if (!handle) {
+              autoToggle.checked = false;
+              return;
+            }
+            localStorage.setItem(LS_ENABLED, '1');
+            autoRefreshUI(handle);
+            // Run one immediately so the person sees it works.
+            await autoRunBackup(handle);
+          } catch (err) {
+            autoToggle.checked = false;
+            showToast(err.message || 'Could not enable automatic backup.', 'error', 'bi-exclamation-triangle');
+          }
+        } else {
+          // Turning OFF: forget the folder handle and last-run time.
+          localStorage.removeItem(LS_ENABLED);
+          localStorage.removeItem(LS_LAST_RUN);
+          try { await idbDel(IDB_KEY); } catch (_) {}
+          autoRefreshUI(null);
+          showToast('Automatic daily backup disabled.', 'info', 'bi-info-circle-fill');
+        }
+      });
+
+      autoChangeBtn?.addEventListener('click', async () => {
+        try {
+          const handle = await autoSetFolder();
+          if (!handle) return;
+          autoRefreshUI(handle);
+          await autoRunBackup(handle);
+        } catch (err) {
+          showToast(err.message || 'Could not change folder.', 'error', 'bi-exclamation-triangle');
+        }
+      });
+
+      autoRunNowBtn?.addEventListener('click', async () => {
+        const handle = await idbGet(IDB_KEY);
+        if (!handle) {
+          showToast('Pick a backup folder first.', 'error', 'bi-exclamation-triangle');
+          return;
+        }
+        await autoRunBackup(handle);
+      });
+
+      // On page load: restore the toggle + folder name + last-run time, and
+      // if 24 hours have passed since the last automatic backup, quietly run
+      // one now. queryPermission() does not need a user gesture, so a silent
+      // run is possible; if permission was lost, we just surface the warning.
+      (async () => {
+        try {
+          const enabled = localStorage.getItem(LS_ENABLED) === '1';
+          const handle  = enabled ? await idbGet(IDB_KEY) : null;
+          autoRefreshUI(handle);
+          if (!enabled || !handle) return;
+          const last = parseInt(localStorage.getItem(LS_LAST_RUN)
+            ? new Date(localStorage.getItem(LS_LAST_RUN)).getTime()
+            : 0, 10);
+          if (Date.now() - last >= ONE_DAY_MS) {
+            await autoRunBackup(handle, {silent: true});
+          } else {
+            // Still verify permission silently so we can show the warning
+            // proactively if it was lost.
+            const ok = await verifyPermission(handle, false);
+            if (!ok) autoPermWarn.style.display = '';
+          }
+        } catch (_) { /* best-effort: never break the settings page */ }
+      })();
 
       loadUsers();
       loadLogs();

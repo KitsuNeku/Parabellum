@@ -327,21 +327,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refreshInventory = async () => {
       try {
-        const [invRes, moveRes] = await Promise.all([
+        const [invRes, moveRes, sumRes] = await Promise.all([
           fetch('/api/inventory'),
           fetch('/api/inventory/movements'),
+          fetch('/api/inventory/summary'),
         ]);
-        const invJson = await invRes.json();
+        const invJson  = await invRes.json();
         const moveJson = await moveRes.json();
-        if (!invJson.ok || !moveJson.ok) {
+        const sumJson  = await sumRes.json();
+        if (!invJson.ok || !moveJson.ok || !sumJson.ok) {
           console.error('Failed to load real inventory from the server:',
-                        invJson.error || moveJson.error || invRes.status);
+                        invJson.error || moveJson.error || sumJson.error || invRes.status);
           showToast('Could not load inventory from the database — showing may be outdated', 'error', 'bi-exclamation-triangle');
           return;
         }
         INVENTORY.length = 0;               // clear sample rows, keep the array reference
         invJson.data.forEach(r => INVENTORY.push(r));
-        window.ALL_MOVEMENTS = moveJson.data;   // Stock In / Stock Out tables read this
+        window.ALL_MOVEMENTS = moveJson.data;   // Stock In / Stock Out / Back Orders tables read this
+        window.STOCK_SUMMARY = sumJson.data;    // per-item In/Out/Back Order aggregate table
         if (typeof window.renderInventory === 'function') window.renderInventory();
       } catch (err) {
         console.error('refreshInventory failed:', err);
@@ -392,9 +395,70 @@ document.addEventListener('DOMContentLoaded', () => {
       itemId: d.itemId, qty: d.qty, remarks: d.remarks,
     }), { successMsg: 'Stock added to inventory' });
 
-    wire('#stockOutModal form', '/api/inventory/stock-out', (d) => ({
-      itemId: d.itemId, qty: d.qty, ref: d.ref,
-    }), { successMsg: 'Stock deducted from inventory' });
+    /* Stock Out is now a multi-item request (cart-style). inventory.html
+     builds the cart and calls this on "Confirm Stock Out". The server
+     endpoint is unchanged (one item per POST, negative-stock guard on the
+     server), so rows are sent one at a time, in order. If a row fails, we
+     STOP there: rows already issued stay issued (reported back, never
+     resent) and the failed row + everything after it come back as
+     `remaining`. Inventory is re-fetched once at the end if anything was
+     issued so the on-hand numbers stay honest.
+       rows: [{ itemId, requestedQty, ... }], ref: project id (e.g. "PRJ-301")
+       returns { issued: [...], failed: { row, error } | null, remaining: [...] } */
+    window.submitStockOutRequest = async (rows, ref, onProgress) => {
+      const issued = [];
+      for (let k = 0; k < rows.length; k++) {
+        const row = rows[k];
+        if (onProgress) onProgress(k + 1, rows.length, row);
+        try {
+          const res = await fetch('/api/inventory/stock-out', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemId: row.itemId, qty: String(row.requestedQty), ref }),
+          });
+          let json;
+          try { json = await res.json(); }
+          catch (_) { throw new Error(`The server returned an unexpected response (HTTP ${res.status}).`); }
+          if (!json.ok) throw new Error(json.error || `Request failed (HTTP ${res.status}).`);
+          issued.push(row);
+        } catch (err) {
+          const error = err instanceof TypeError ? 'Could not connect to the server.' : err.message;
+          if (issued.length) await refreshInventory();
+          return { issued, failed: { row, error }, remaining: rows.slice(k) };
+        }
+      }
+      await refreshInventory();
+      return { issued, failed: null, remaining: [] };
+    };
+    window.refreshInventory = refreshInventory;
+
+    wire('#returnModal form', '/api/inventory/return', (d) => ({
+      itemId: d.itemId, qty: d.qty, customer: d.customer, remarks: d.remarks,
+    }), { successMsg: 'Back-order return recorded' });
+
+    // The Stock Out Request modal's Project dropdown needs CUSTOMERS +
+    // PROJECTS loaded on the Inventory page (they're not otherwise loaded
+    // here). We use a scoped endpoint (/api/inventory/projects-for-stockout)
+    // that returns only the fields the modal needs and is gated to
+    // "inventory" - so Inventory Personnel, who don't have "customers" or
+    // "projects" permission, can still pick a project when issuing stock.
+    (async () => {
+      try {
+        const res  = await fetch('/api/inventory/projects-for-stockout');
+        const json = await res.json();
+        if (!json.ok) return;
+        if (typeof CUSTOMERS !== 'undefined') {
+          CUSTOMERS.length = 0;
+          json.customers.forEach(r => CUSTOMERS.push(r));
+        }
+        if (typeof PROJECTS !== 'undefined') {
+          PROJECTS.length = 0;
+          json.projects.forEach(r => PROJECTS.push(r));
+        }
+        if (typeof window.renderStockOutProjects === 'function') {
+          window.renderStockOutProjects();
+        }
+      } catch (_) { /* connection issues already surfaced by refreshInventory() */ }
+    })();
 
     // Persist deletes: the page calls inventoryStore.remove(id) then re-renders.
     // Wrap remove() so it also tells the server.

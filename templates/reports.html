@@ -209,22 +209,50 @@
             </div></div></div></div>
           <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
             <div class="d-flex align-items-start gap-3">
-              <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-cash-coin"></i></div>
-              <div class="flex-grow-1"><div class="fw-medium">Commission Report</div><div class="small text-muted-2 mb-2">Employee payouts and rates</div>
-                <div class="d-flex gap-1">
-                  <button class="btn btn-soft btn-sm" data-export="Commission Report (PDF)" data-report="commission" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
-                  <button class="btn btn-soft btn-sm" data-export="Commission Report (Excel)" data-report="commission" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
-                  <button class="btn btn-primary btn-sm" data-gen="commission" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
-                </div></div>
-            </div></div></div></div>
-          <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
-            <div class="d-flex align-items-start gap-3">
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-graph-up-arrow"></i></div>
               <div class="flex-grow-1"><div class="fw-medium">Forecast Report</div><div class="small text-muted-2 mb-2">Demand prediction and accuracy</div>
                 <div class="d-flex gap-1">
                   <button class="btn btn-soft btn-sm" data-export="Forecast Report (PDF)" data-report="forecast" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
                   <button class="btn btn-soft btn-sm" data-export="Forecast Report (Excel)" data-report="forecast" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
                   <button class="btn btn-primary btn-sm" data-gen="forecast" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
+                </div></div>
+            </div></div></div></div>
+          <!-- Stock movement reports. Like the cards above, preview / PDF / Excel all come
+               from /api/reports/<key>/data|pdf|excel in app.py, backed by
+               build_stock_in_report / build_stock_out_report / build_back_order_report
+               in reports_export.py (reads the same stock_movements rows the
+               Inventory page's Stock In / Stock Out / Back Orders tables show). -->
+          <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
+            <div class="d-flex align-items-start gap-3">
+              <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-box-arrow-in-down"></i></div>
+              <div class="flex-grow-1"><div class="fw-medium">Stock In Report</div><div class="small text-muted-2 mb-2">Materials received, remarks, totals</div>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-soft btn-sm" data-export="Stock In Report (PDF)" data-report="stock-in" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Stock In Report (Excel)" data-report="stock-in" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-primary btn-sm" data-gen="stock-in" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
+                </div></div>
+            </div></div></div></div>
+          <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
+            <div class="d-flex align-items-start gap-3">
+              <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-box-arrow-up"></i></div>
+              <div class="flex-grow-1"><div class="fw-medium">Stock Out Report</div><div class="small text-muted-2 mb-2">Materials issued, projects/references, totals</div>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-soft btn-sm" data-export="Stock Out Report (PDF)" data-report="stock-out" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Stock Out Report (Excel)" data-report="stock-out" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-primary btn-sm" data-gen="stock-out" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
+                </div></div>
+            </div></div></div></div>
+          <!-- Back Order = returns from customers/projects added back to stock
+               (inventory.html's #returnModal / "Record Return" flow), not a
+               supplier re-order. -->
+          <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
+            <div class="d-flex align-items-start gap-3">
+              <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-arrow-counterclockwise"></i></div>
+              <div class="flex-grow-1"><div class="fw-medium">Back Order Report</div><div class="small text-muted-2 mb-2">Returns from customers/projects, reasons, totals</div>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-soft btn-sm" data-export="Back Order Report (PDF)" data-report="back-order" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
+                  <button class="btn btn-soft btn-sm" data-export="Back Order Report (Excel)" data-report="back-order" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
+                  <button class="btn btn-primary btn-sm" data-gen="back-order" data-bs-toggle="tooltip" title="Generate preview"><i class="bi bi-arrow-right"></i></button>
                 </div></div>
             </div></div></div></div>
         </div>
@@ -252,7 +280,7 @@
             <tr><td class="fw-id">RPT-0124</td><td>Inventory Summary</td><td>Admin User</td><td class="text-muted-2">2026-06-24</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="inventory" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
             <tr><td class="fw-id">RPT-0123</td><td>Sales &amp; Transactions</td><td>M. Santos</td><td class="text-muted-2">2026-06-22</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="transaction" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
             <tr><td class="fw-id">RPT-0122</td><td>Forecast Report</td><td>Admin User</td><td class="text-muted-2">2026-06-20</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="forecast" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0121</td><td>Commission Report</td><td>P. Reyes</td><td class="text-muted-2">2026-06-18</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="commission" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+            <tr><td class="fw-id">RPT-0121</td><td>Stock Out Report</td><td>P. Reyes</td><td class="text-muted-2">2026-06-18</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="stock-out" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
             <tr><td class="fw-id">RPT-0120</td><td>Project Status</td><td>C. Mendoza</td><td class="text-muted-2">2026-06-15</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="project" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
           </tbody>
         </table></div>

@@ -1,0 +1,45 @@
+-- =============================================================
+-- Parabellum ISOS — Per-user access overrides
+-- =============================================================
+-- Adds a `custom_permissions` column to the users table so an
+-- administrator can grant or take away individual page access on
+-- a specific user WITHOUT changing that user's role or affecting
+-- every other user of the same role.
+--
+-- Format: comma-separated page keys, e.g.
+--   'dashboard,inventory,profile'
+--   'dashboard,inventory,customers,profile'
+--
+-- Valid keys (must exactly match ROLE_PERMISSIONS in auth.py):
+--   dashboard, inventory, customers, projects, transactions,
+--   forecasting, reports, settings, profile
+--
+-- Behavior:
+--   NULL (or empty) → use the role's default permissions
+--   any value       → REPLACES the role defaults for that one user
+--
+-- Example: give inventory clerk 'jramos' a peek at Customers on top
+-- of his usual inventory access:
+--   UPDATE users SET custom_permissions =
+--     'dashboard,inventory,customers,profile'
+--   WHERE username = 'jramos';
+--
+-- Or take Customers away from a manager who normally has it:
+--   UPDATE users SET custom_permissions =
+--     'dashboard,projects,transactions,forecasting,reports,profile'
+--   WHERE username = 'manager1';
+--
+-- Existing rows: all get NULL so nothing changes for anyone until an
+-- admin explicitly customizes their permissions in Settings > Users.
+--
+-- SAFE TO RE-RUN: IF NOT EXISTS makes running this twice a no-op.
+--
+-- HOW TO USE:
+--   1. Open Supabase → SQL Editor → New Query.
+--   2. Paste this entire file and click Run.
+--   3. Reload Settings > Users — a new shield icon (Access) appears
+--      next to each user's Edit and Deactivate buttons.
+-- =============================================================
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS custom_permissions TEXT;

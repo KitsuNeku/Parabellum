@@ -412,6 +412,17 @@ a { text-decoration: none; }
 .modal-body { padding: 22px; }
 .modal-footer { border-top: 1px solid var(--border-soft); padding: 16px 22px; }
 
+/* Scrollable modals (modal-dialog-scrollable): pin the footer so the
+   Confirm button is always reachable, and let only the body scroll.
+   Needed for the Stock Out Request modal, whose body (project pick + add
+   form + request table + info rows) can get taller than the viewport. */
+.modal-dialog-scrollable { height: calc(100% - 1rem); }
+.modal-dialog-scrollable .modal-content { max-height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.modal-dialog-scrollable .modal-content > form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+.modal-dialog-scrollable .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.modal-dialog-scrollable .modal-footer { flex-shrink: 0; }
+.modal-dialog-scrollable.modal-dialog-centered { max-height: calc(100% - 1rem); }
+
 /* ----------------------------- Alerts / banners ----------------------------- */
 .alert { border: 0; border-radius: 12px; border-left: 4px solid transparent; font-size: .86rem; }
 .alert-soft-danger { background: var(--primary-soft); color: #8a1214; border-left-color: var(--primary); }
@@ -613,6 +624,11 @@ a { text-decoration: none; }
   /* Modals: full-width edges look much better than centered on small screens */
   .modal-dialog { margin: 0; min-height: 100vh; }
   .modal-content { border-radius: 0; min-height: 100vh; }
+  /* …except scrollable modals (Stock Out Request): clamp to viewport so
+     the pinned footer with the Confirm button stays reachable instead of
+     being pushed off the bottom when the body overflows. */
+  .modal-dialog-scrollable { height: 100vh; min-height: 100vh; max-height: 100vh; }
+  .modal-dialog-scrollable .modal-content { min-height: 0; height: 100vh; max-height: 100vh; }
 
   /* Tables in table-responsive still show scroll hints, but tighten padding */
   .table-responsive .table th,

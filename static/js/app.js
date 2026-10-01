@@ -201,8 +201,14 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ---------------- Tooltips ---------------- */
   document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
-  /* ---------------- Toast helper ---------------- */
-  window.showToast = function (msg, tone = 'primary', icon = 'bi-check-circle-fill') {
+  /* ---------------- Toast helper ----------------
+   action (optional): { label, onClick } — renders a small button in the
+   toast, bottom-right of the screen (the toast host is already
+   position-fixed bottom-0 end-0), e.g. "View Back Order" after recording
+   a return, which scrolls the page down to that record. Clicking it also
+   dismisses the toast. A toast with an action stays up a little longer
+   so there's time to click it. */
+  window.showToast = function (msg, tone = 'primary', icon = 'bi-check-circle-fill', action = null) {
     let host = document.getElementById('toastHost');
     if (!host) {
       host = document.createElement('div');
@@ -215,15 +221,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.createElement('div');
     el.className = 'toast align-items-center border-0 show';
     el.style.cssText = `background:#fff;border-left:4px solid ${colors[tone]||colors.primary};box-shadow:0 8px 24px rgba(0,0,0,.14);border-radius:10px;min-width:280px;`;
+    const actionBtnHtml = action
+      ? `<button type="button" class="btn btn-sm btn-primary ms-3" id="toastActionBtn">${esc(action.label)}</button>` : '';
     el.innerHTML = `<div class="d-flex">
         <div class="toast-body d-flex align-items-center gap-2" style="color:#1f2329;font-weight:500;">
-          <i class="bi ${icon}" style="color:${colors[tone]||colors.primary};font-size:1.1rem;"></i> ${msg}
+          <i class="bi ${icon}" style="color:${colors[tone]||colors.primary};font-size:1.1rem;"></i> ${msg}${actionBtnHtml}
         </div>
         <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
       </div>`;
     host.appendChild(el);
-    const t = new bootstrap.Toast(el, { delay: 3200 });
+    const t = new bootstrap.Toast(el, { delay: action ? 6000 : 3200 });
     t.show();
+    if (action) {
+      el.querySelector('#toastActionBtn')?.addEventListener('click', () => {
+        action.onClick();
+        t.hide();
+      });
+    }
     el.addEventListener('hidden.bs.toast', () => el.remove());
   };
 
@@ -382,7 +396,10 @@ document.addEventListener('DOMContentLoaded', () => {
           form.reset(); form.classList.remove('was-validated');
           form.removeAttribute('data-edit-id');
           const msg = typeof opts.successMsg === 'function' ? opts.successMsg(data, form) : (opts.successMsg || 'Saved');
-          showToast(msg, 'success');
+          // opts.successAction: optional (data, form) => { label, onClick } for
+          // a button on the success toast (e.g. "View Back Order").
+          const action = typeof opts.successAction === 'function' ? opts.successAction(data, form) : null;
+          showToast(msg, 'success', undefined, action);
         } catch (err) {
           // e.g. "Cannot issue 500 pcs - only 120 in stock." Keep the modal open.
           showToast(err.message, 'error', 'bi-exclamation-triangle');
@@ -448,7 +465,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     wire('#returnModal form', '/api/inventory/return', (d) => ({
       itemId: d.itemId, qty: d.qty, customer: d.customer, remarks: d.remarks,
-    }), { successMsg: 'Back-order return recorded' });
+    }), {
+      successMsg: 'Back-order return recorded',
+      // "View Back Order" button on the success toast (bottom-right) -
+      // scrolls the page down to where the record now lives, in the
+      // Back Orders table, and briefly highlights that card so it's
+      // obvious where to look.
+      successAction: () => ({
+        label: 'View Back Order',
+        onClick: () => {
+          const table = document.getElementById('returnsTable');
+          const card = table?.closest('.card');
+          if (!card) return;
+          card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          card.classList.add('highlight-flash');
+          setTimeout(() => card.classList.remove('highlight-flash'), 1800);
+        },
+      }),
+    });
 
     // The Stock Out Request modal's Project dropdown needs CUSTOMERS +
     // PROJECTS loaded on the Inventory page (they're not otherwise loaded

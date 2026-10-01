@@ -186,20 +186,22 @@
           <p class="panel-sub mb-2">Items at or below their reorder level.</p>
           <div class="stock-list" id="lowStockList"></div>
         </div></div></div>
-        <!-- Stock Summary: total stock on hand + total value (qty x unit price).
-             Quantities are in different units, so they're broken down per unit
-             instead of being added into one misleading number. -->
+        <!-- Stock Summary: total stock on hand + total value (qty x unit price),
+             then a per-item breakdown. Figures come straight from each item's
+             current_stock, which (per the Back Order redesign) never includes
+             returned/back-ordered quantities - so this is on-hand stock only,
+             back orders excluded by construction, not filtered out here. -->
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
             <h2 class="panel-title"><i class="bi bi-calculator me-2" style="color:var(--primary)"></i>Stock Summary</h2>
             <span class="badge b-neutral" id="sumItemCount">0 items</span>
           </div>
-          <p class="panel-sub mb-2">Total stock on hand and its value.</p>
+          <p class="panel-sub mb-2">On-hand stock per item and its value. Back-ordered quantities are not included.</p>
           <div class="d-flex flex-wrap gap-2 column-gap-3 mb-2">
             <div class="flex-fill"><div class="small text-muted-2">Total Stock Value</div><div class="fw-bold fs-5" style="color:var(--primary)" id="sumTotalValue">—</div></div>
             <div class="flex-fill"><div class="small text-muted-2">Total Stock</div><div class="fw-bold fs-5" id="sumTotalQty">—</div></div>
           </div>
-          <div class="stock-list" id="sumByUnit"></div>
+          <div class="stock-list" id="sumByItem"></div>
         </div></div></div>
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
@@ -1249,22 +1251,22 @@
           ? out.map(i => row(i, 'var(--primary)', `0 ${i.unit}`)).join('')
           : '<div class="stock-empty">No out-of-stock materials.</div>';
 
-        // Stock Summary: total value (qty x unit price) + stock on hand per unit.
+        // Stock Summary: total value (qty x unit price) + on-hand stock,
+        // broken down per item (not per unit). i.qty is each item's
+        // current_stock, which never includes back-ordered/returned
+        // quantities (a RETURN movement never adds to current_stock - see
+        // the Record Return flow), so back orders are already excluded
+        // here by construction rather than filtered out in this script.
         const totalValue = items.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
         const totalQty   = items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
-        const byUnit = {};
-        items.forEach(i => {
-          const u = byUnit[i.unit] || (byUnit[i.unit] = { qty: 0, value: 0, count: 0 });
-          u.qty += Number(i.qty) || 0; u.value += (Number(i.qty) || 0) * (Number(i.price) || 0); u.count++;
-        });
         set('sumItemCount', `${items.length} item${items.length === 1 ? '' : 's'}`);
         set('sumTotalValue', PESO(totalValue));
         set('sumTotalQty', `${NUM(totalQty)} units`);
-        document.getElementById('sumByUnit').innerHTML = items.length
-          ? Object.entries(byUnit).sort((a, b) => b[1].value - a[1].value).map(([unit, u]) => `
+        document.getElementById('sumByItem').innerHTML = items.length
+          ? items.slice().sort((a, b) => (Number(b.qty)||0)*(Number(b.price)||0) - (Number(a.qty)||0)*(Number(a.price)||0)).map(i => `
             <div class="sl-item">
-              <div><div class="sl-name">${NUM(u.qty)} ${escapeHTML(unit)}</div><div class="sl-sub">${u.count} item${u.count === 1 ? '' : 's'}</div></div>
-              <div class="sl-qty">${PESO(u.value)}</div>
+              <div><div class="sl-name">${escapeHTML(i.name)}</div><div class="sl-sub">${escapeHTML(i.id)} · ${NUM(i.qty)} ${escapeHTML(i.unit)}</div></div>
+              <div class="sl-qty">${PESO((Number(i.qty)||0) * (Number(i.price)||0))}</div>
             </div>`).join('')
           : '<div class="stock-empty">No inventory items yet.</div>';
 

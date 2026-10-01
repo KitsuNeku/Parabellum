@@ -324,20 +324,42 @@
       </div>
 
       <!-- Stock In Modal -->
+      <!-- Also doubles as "Add Item": the old, separate Add Item module's
+           job (register a brand-new material) is folded directly into this
+           one form - no mode switch to click first. Search for an existing
+           item, or just type a name that isn't in the list yet and fill in
+           its details below; which happens is decided automatically at
+           submit time by whether an existing item was actually selected
+           (see wire('#stockInModal form', …) in app.js), not by a toggle. -->
       <div class="modal fade" id="stockInModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-arrow-in-down me-2 text-success"></i>Stock In</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate data-reset data-entity="stock-in" data-success-msg="Stock added to inventory">
         <div class="modal-body"><div class="row g-3">
-          <div class="col-12"><div class="small text-muted-2 mb-1"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div></div>
+          <div class="col-12 d-flex flex-wrap justify-content-between align-items-center">
+            <div class="small text-muted-2"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div>
+            <div class="small text-muted-2">Date: <span class="fw-medium" id="stockInDate">—</span></div>
+          </div>
+
           <div class="col-12 position-relative">
-            <label class="form-label">Select Item</label>
-            <input type="text" class="form-control" id="stockInItemSearch" placeholder="Search item name or ID…" autocomplete="off" required>
+            <label class="form-label">Item Name</label>
+            <input type="text" class="form-control" id="stockInItemSearch" name="name" placeholder="Search an existing item, or type a new item's name…" autocomplete="off" required>
             <input type="hidden" name="itemId" id="stockInItemId">
             <div class="item-search-results" id="stockInItemResults"></div>
-            <div class="invalid-feedback">Search and select an item from the list.</div>
+            <div class="form-text">Pick a match from the list to stock an existing item, or leave it unmatched and fill in the details below to add it as a new item.</div>
           </div>
-          <div class="col-md-6"><label class="form-label">Quantity In</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
-          <div class="col-md-6"><label class="form-label">Date</label><div class="form-control-plaintext fw-medium" id="stockInDate">—</div></div>
+
+          <!-- Only used when the name above doesn't match an existing item
+               (itemId stays empty) - same fields the old, separate Add Item
+               module used. Always visible in the same place; nothing to
+               click to reveal them. -->
+          <div class="col-md-6"><label class="form-label">Category <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="cat"><option value="">Select…</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
+          <div class="col-md-6"><label class="form-label">Supplier <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="sup"><option value="">Select…</option><option>SteelAsia</option><option>Capitol Steel</option><option>Pag-asa Steel</option><option>Cathay Metal</option><option>Puyat Steel</option><option>Treasure Steelworks</option></select></div>
+          <div class="col-md-4"><label class="form-label">Unit <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="unit"><option>pcs</option><option>kg</option><option>sheets</option><option>length</option><option>roll</option><option>box</option></select></div>
+          <div class="col-md-4"><label class="form-label">Unit Price (₱) <span class="text-muted-2 fw-normal">(new item only)</span></label><input type="number" class="form-control" name="price" value="0.00" step="0.01" min="0"></div>
+          <div class="col-md-4"><label class="form-label">Reorder Level <span class="text-muted-2 fw-normal">(new item only)</span></label><input type="number" class="form-control" name="reorder" value="50" min="0"></div>
+          <div class="col-12"><label class="form-label">Location <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="loc"><option>Warehouse A</option><option>Warehouse B</option><option>Yard 1</option><option>Yard 2</option></select></div>
+
+          <div class="col-12"><label class="form-label">Quantity In</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
           <div class="col-12"><label class="form-label">Remarks</label><input class="form-control" name="remarks" placeholder="e.g. Delivery from SteelAsia"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Stock In</button></div>
@@ -353,7 +375,10 @@
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-arrow-up me-2 text-danger"></i>Stock Out Request</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form id="stockOutForm" novalidate>
         <div class="modal-body"><div class="row g-3">
-          <div class="col-12"><div class="small text-muted-2 mb-1"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div></div>
+          <div class="col-12 d-flex flex-wrap justify-content-between align-items-center">
+            <div class="small text-muted-2"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div>
+            <div class="small text-muted-2">Date: <span class="fw-medium" id="stockOutDate">—</span></div>
+          </div>
 
           <!-- a) Client / Project - picked first -->
           <div class="col-12"><div class="section-label text-muted-2 small fw-semibold">1 · Client / Project</div></div>
@@ -413,7 +438,10 @@
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2" style="color:var(--primary)"></i>Record Return (Back Order)</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate data-reset data-entity="return" data-success-msg="Back-order return recorded">
         <div class="modal-body"><div class="row g-3">
-          <div class="col-12"><div class="small text-muted-2 mb-1"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div></div>
+          <div class="col-12 d-flex flex-wrap justify-content-between align-items-center">
+            <div class="small text-muted-2"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div>
+            <div class="small text-muted-2">Date: <span class="fw-medium" id="returnDate">—</span></div>
+          </div>
           <div class="col-12"><div class="alert alert-soft-info small mb-0"><i class="bi bi-info-circle me-1"></i>The returned quantity is added back to stock and shown separately in the Back Orders table and the Stock Movement Summary.</div></div>
           <div class="col-12 position-relative">
             <label class="form-label">Select Item</label>
@@ -422,9 +450,8 @@
             <div class="item-search-results" id="returnItemResults"></div>
             <div class="invalid-feedback">Search and select an item from the list.</div>
           </div>
-          <div class="col-md-4"><label class="form-label">Quantity Returned</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
-          <div class="col-md-4"><label class="form-label">Date</label><div class="form-control-plaintext fw-medium" id="returnDate">—</div></div>
-          <div class="col-md-4"><label class="form-label">Customer / Project</label><input class="form-control" name="customer" placeholder="e.g. M. Santos or PRJ-301"></div>
+          <div class="col-md-6"><label class="form-label">Quantity Returned</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
+          <div class="col-md-6"><label class="form-label">Customer / Project</label><input class="form-control" name="customer" placeholder="e.g. M. Santos or PRJ-301"></div>
           <div class="col-12"><label class="form-label">Reason for Return</label><input class="form-control" name="remarks" placeholder="e.g. Wrong size delivered, item unused"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Return</button></div>
@@ -484,11 +511,16 @@
        that filters the live materials list as you type. Selecting a result
        fills a hidden input with the material's real id/code, which is what
        actually gets submitted - the visible box just shows the chosen name. */
-      function wireItemSearch(searchId, hiddenId, resultsId){
+      function wireItemSearch(searchId, hiddenId, resultsId, opts = {}){
         const searchInput = document.getElementById(searchId);
         const hiddenInput = document.getElementById(hiddenId);
         const results = document.getElementById(resultsId);
         if (!searchInput || !hiddenInput || !results) return;
+        // Stock In also accepts a name that matches nothing (that's a new
+        // item, not an error), so it skips the "must pick from the list"
+        // validation message the other two item pickers still enforce.
+        const allowUnmatched = !!opts.allowUnmatched;
+        const unmatchedMsg = allowUnmatched ? '' : 'Search and select an item from the list.';
 
         function renderResults(query){
           const items = inventoryStore.all();
@@ -511,7 +543,7 @@
           // fresh pick from the list rather than submitting a stale id
           // that no longer matches the displayed text.
           hiddenInput.value = '';
-          searchInput.setCustomValidity('Search and select an item from the list.');
+          searchInput.setCustomValidity(unmatchedMsg);
           renderResults(searchInput.value);
         });
         results.addEventListener('mousedown', (e) => {
@@ -532,30 +564,41 @@
         searchInput.closest('.modal')?.addEventListener('show.bs.modal', () => {
           searchInput.value = '';
           hiddenInput.value = '';
-          searchInput.setCustomValidity('Search and select an item from the list.');
+          searchInput.setCustomValidity(unmatchedMsg);
           results.classList.remove('show');
         });
       }
-      wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults');
+      wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', { allowUnmatched: true });
       wireItemSearch('stockOutCartItemSearch', 'stockOutCartItemId', 'stockOutCartItemResults');
       wireItemSearch('returnItemSearch',   'returnItemId',   'returnItemResults');
 
-      /* ---------- Live date/time display (Stock In / Return modals) ----------
+      /* ---------- Stock In: existing vs. new item, decided automatically ----------
+       There's no mode switch to click - the "new item only" fields just sit
+       in the form at all times. wireItemSearch('stockInItemSearch', …) above
+       already clears #stockInItemId whenever the typed text changes, so at
+       submit time the hidden itemId tells wire('#stockInModal form', …) in
+       app.js which case this is: set → stock an existing item; empty → the
+       typed name plus whatever's in the fields below register a new one. */
+
+      /* ---------- Live date display (Stock In / Stock Out / Return modals) ----------
        The server always stamps the movement with its own real current date
        regardless of what's shown here (see _apply_movement in app.py) - so
-       this is a static, non-editable, genuinely live clock rather than an
-       editable field that would misleadingly suggest the date can be
-       backdated or changed. The Stock Out modal is now a request/cart flow
-       and doesn't show a date field. */
+       this is a static, non-editable display rather than an editable field
+       that would misleadingly suggest the date can be backdated or changed.
+       Date only (no time-of-day) - a movement is dated, not timestamped,
+       throughout the app (Stock In / Stock Out / Back Order tables and
+       reports all show a plain date), so showing a running clock here was
+       inconsistent with that and with what's actually recorded. */
       function tickMoveDates(){
-        const now = new Date();
-        const text = now.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
-          + ' \u2014 ' + now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const text = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
         const a = document.getElementById('stockInDate');  if (a) a.textContent = text;
+        const b = document.getElementById('stockOutDate'); if (b) b.textContent = text;
         const c = document.getElementById('returnDate');   if (c) c.textContent = text;
       }
       tickMoveDates();
-      setInterval(tickMoveDates, 1000);
+      // Just a midnight-rollover safeguard now that this shows a date, not a
+      // clock - a date doesn't need per-second updates.
+      setInterval(tickMoveDates, 60000);
 
       /* ---------- Stock Out Request (cart-style) ----------
        stockOutCart is an in-memory "reserved" list only. Adding, editing or
@@ -1148,11 +1191,14 @@
       }
 
       /* ---------- Entity submits: Stock In, Stock Out, Return ----------
-       Item creation/editing was removed from this page per the decision
-       to only ever change inventory through a recorded movement (Stock
-       In / Stock Out / Return), never by directly typing a new starting
-       quantity. Items are now added/edited only via seed_data.py /
-       direct SQL, kept in sync with the database as always. */
+       This listener is effectively unreachable dead code: app.js's wire()
+       intercepts all three forms in the capture phase and calls
+       stopImmediatePropagation(), so its own server-backed submit always
+       runs instead of this one. Left in place only as a harmless fallback
+       for local-only testing without app.js loaded. A brand-new item (with
+       its first stock) is registered through the Stock In modal's "New
+       Item" mode, which posts straight to /api/inventory/save via wire() -
+       not through this local-store path. */
       document.addEventListener('entity:submit', (e) => {
         const { entity, data } = e.detail;
         if (entity === 'stock-in' || entity === 'stock-out' || entity === 'return') {

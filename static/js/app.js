@@ -364,8 +364,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const data = Object.fromEntries(new FormData(form));
         const body = buildBody(data, form);
+        // `url` can be a fixed string, or a function(data, form) => string for
+        // a form that posts to different endpoints depending on its own state
+        // (e.g. the Stock In modal's "Existing Item" vs "New Item" toggle).
+        const targetUrl = typeof url === 'function' ? url(data, form) : url;
         try {
-          const res = await fetch(url, {
+          const res = await fetch(targetUrl, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           });
@@ -377,7 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
           form.reset(); form.classList.remove('was-validated');
           form.removeAttribute('data-edit-id');
-          showToast(opts.successMsg || 'Saved', 'success');
+          const msg = typeof opts.successMsg === 'function' ? opts.successMsg(data, form) : (opts.successMsg || 'Saved');
+          showToast(msg, 'success');
         } catch (err) {
           // e.g. "Cannot issue 500 pcs - only 120 in stock." Keep the modal open.
           showToast(err.message, 'error', 'bi-exclamation-triangle');
@@ -385,15 +390,25 @@ document.addEventListener('DOMContentLoaded', () => {
       }, true);  // <-- capture phase
     };
 
-    wire('#invForm', '/api/inventory/save', (d, form) => ({
-      name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty,
-      price: d.price, reorder: d.reorder, loc: d.loc,
-      edit_id: form.getAttribute('data-edit-id') || null,
-    }), { successMsg: 'Inventory item saved' });
-
-    wire('#stockInModal form', '/api/inventory/stock-in', (d) => ({
-      itemId: d.itemId, qty: d.qty, remarks: d.remarks,
-    }), { successMsg: 'Stock added to inventory' });
+    /* Stock In doubles as "register a brand-new item + its first delivery"
+     (the old, separate Add Item module's job, folded directly into this
+     one form - no mode toggle to click first). inventory.html's item-name
+     box clears #stockInItemId the moment the typed text no longer matches
+     a selected item (see wireItemSearch), so itemId being empty at submit
+     time IS the signal that this is a new item, not an existing one:
+       itemId set   -> existing item -> /api/inventory/stock-in
+       itemId empty -> new item      -> /api/inventory/save, which creates
+                                         the material AND - since this is
+                                         its first stock - logs that
+                                         quantity as a RECEIPT so it shows
+                                         up in the Stock In table/report
+                                         like any other delivery. */
+    wire('#stockInModal form',
+      (d) => d.itemId ? '/api/inventory/stock-in' : '/api/inventory/save',
+      (d) => (d.itemId
+        ? { itemId: d.itemId, qty: d.qty, remarks: d.remarks }
+        : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: d.reorder, loc: d.loc }),
+      { successMsg: (d) => d.itemId ? 'Stock added to inventory' : 'New item added to inventory and stocked' });
 
     /* Stock Out is now a multi-item request (cart-style). inventory.html
      builds the cart and calls this on "Confirm Stock Out". The server

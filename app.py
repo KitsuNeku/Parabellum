@@ -376,16 +376,34 @@ def api_inventory_save():
             row = execute_query(DB_CONFIG,
                 "SELECT COALESCE(MAX(material_id), 0) + 1 AS n FROM materials;", fetch=True)
             code = f"MAT-{row[0]['n']:04d}"
-            execute_query(DB_CONFIG, """
+            new_row = execute_query(DB_CONFIG, """
                 INSERT INTO materials
                     (material_code, material_name, category, supplier, unit,
                      unit_cost, reorder_level, location, current_stock, added_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE);
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                RETURNING material_id;
             """, (code, name, d.get("cat"), d.get("sup"), d.get("unit") or "pcs",
-                  price, reorder, d.get("loc"), qty))
+                  price, reorder, d.get("loc"), qty), fetch=True)
             log_audit(DB_CONFIG, "MATERIAL_ADDED", f"Added material {code} ({name}).",
                       session["user"]["username"])
-        return jsonify({"ok": True})
+
+            # A new item registered with stock on hand (e.g. from the Stock In
+            # modal's "New Item" option) is itself a stock receipt, so it
+            # needs its own RECEIPT row - otherwise this quantity would be
+            # sitting in current_stock without ever appearing in the Stock In
+            # table, the Stock Movement Summary, or the Stock In report. The
+            # material's current_stock was already set to `qty` above, so
+            # this only records the movement - it must NOT also add qty
+            # again (that's what _apply_movement would do).
+            if qty > 0 and new_row:
+                execute_query(DB_CONFIG, """
+                    INSERT INTO stock_movements
+                        (material_id, movement_type, quantity, movement_date, remarks, recorded_by)
+                    VALUES (%s, 'RECEIPT', %s, CURRENT_DATE, %s, %s);
+                """, (new_row[0]["material_id"], qty, "Initial stock (new item)",
+                      session["user"]["name"]))
+
+        return jsonify({"ok": True, "code": edit_id or code})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500

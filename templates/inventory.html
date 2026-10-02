@@ -338,7 +338,7 @@
           <div class="table-wrap"><table class="table" id="returnsTable">
             <thead><tr>
               <th>Item</th><th>Category</th><th class="text-end">Qty Returned</th>
-              <th>Date</th><th>Remarks</th><th>Back-Ordered By</th><th>Recorded By</th><th class="text-center">Actions</th>
+              <th>Date</th><th>Remarks</th><th>Received By</th><th>Recorded By</th><th class="text-center">Actions</th>
             </tr></thead>
             <tbody id="returnsBody"></tbody>
           </table></div>
@@ -367,32 +367,98 @@
           </div>
 
           <div class="col-12 position-relative">
-            <label class="form-label">Item Name</label>
+            <div class="d-flex justify-content-between align-items-end">
+              <label class="form-label mb-0">Item Name</label>
+              <button type="button" class="btn btn-link btn-sm p-0 mb-1" data-bs-toggle="modal" data-bs-target="#addItemModal" data-bs-dismiss="modal"><i class="bi bi-plus-lg me-1"></i>Add Item</button>
+            </div>
             <input type="text" class="form-control" id="stockInItemSearch" name="name" placeholder="Search an existing item, or type a new item's name…" autocomplete="off" required>
             <input type="hidden" name="itemId" id="stockInItemId">
             <div class="item-search-results" id="stockInItemResults"></div>
-            <div class="form-text">Pick a match from the list to stock an existing item, or leave it unmatched and fill in the details below to add it as a new item.</div>
+            <div class="form-text">Pick a match from the list to stock an existing item, leave it unmatched and fill in the details below to add it as a new item, or use <strong>Add Item</strong> above to register one with a supplier picked from the list.</div>
           </div>
 
           <!-- Only used when the name above doesn't match an existing item
                (itemId stays empty) - same fields the old, separate Add Item
                module used. Always visible in the same place; nothing to
-               click to reveal them. -->
+               click to reveal them. When an EXISTING item is picked instead,
+               Supplier and Unit Price switch to read-only and auto-fill from
+               that item's own record (see wireItemSearch's onSelect/onClear
+               below) - purely informational, since stocking an existing item
+               never touches those fields on the server either way. -->
           <div class="col-md-6"><label class="form-label">Category <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="cat"><option value="">Select…</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
           <div class="col-md-6 position-relative">
-            <label class="form-label">Supplier <span class="text-muted-2 fw-normal">(new item only)</span></label>
+            <div class="d-flex justify-content-between align-items-end">
+              <label class="form-label mb-0">Supplier</label>
+              <button type="button" class="btn btn-link btn-sm p-0 mb-1" data-bs-toggle="modal" data-bs-target="#addSupplierModal" data-bs-dismiss="modal"><i class="bi bi-plus-lg me-1"></i>Add Supplier</button>
+            </div>
             <input class="form-control" name="sup" id="stockInSupplier" placeholder="Search a supplier, or type a new one…" autocomplete="off">
             <div class="item-search-results" id="stockInSupplierResults"></div>
+            <div class="form-text" id="stockInSupplierHint">New item only - search an existing supplier, type a new one, or use <strong>Add Supplier</strong> above to fill out its full details.</div>
           </div>
-          <div class="col-md-4"><label class="form-label">Unit <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="unit"><option>pcs</option><option>kg</option><option>sheets</option><option>length</option><option>roll</option><option>box</option></select></div>
-          <div class="col-md-4"><label class="form-label">Unit Price (₱) <span class="text-muted-2 fw-normal">(new item only)</span></label><input type="number" class="form-control" name="price" value="0.00" step="0.01" min="0"></div>
-          <div class="col-md-4"><label class="form-label">Reorder Level <span class="text-muted-2 fw-normal">(new item only)</span></label><input type="number" class="form-control" name="reorder" value="50" min="0"></div>
+          <div class="col-md-6"><label class="form-label">Unit <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="unit"><option>pcs</option><option>kg</option><option>sheets</option><option>length</option><option>roll</option><option>box</option></select></div>
+          <div class="col-md-6"><label class="form-label">Unit Price (₱)</label><input type="number" class="form-control" id="stockInPrice" name="price" value="0.00" step="0.01" min="0"></div>
           <div class="col-12"><label class="form-label">Location <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="loc"><option>Warehouse A</option><option>Warehouse B</option><option>Yard 1</option><option>Yard 2</option></select></div>
 
           <div class="col-12"><label class="form-label">Quantity In</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
           <div class="col-12"><label class="form-label">Remarks</label><input class="form-control" name="remarks" placeholder="e.g. Delivery from SteelAsia"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Stock In</button></div>
+        </form>
+      </div></div></div>
+
+      <!-- Add Item Modal - registers a brand-new material against an existing
+           supplier, with no stock movement implied (Initial Stock defaults to
+           0). This is a standalone counterpart to Stock In's own "type a new
+           item name" path - that one still works and is for "I'm receiving a
+           delivery of something not yet in the catalog", this one is for
+           "just register the item". Both end up at the same /api/inventory/save
+           endpoint, the only difference is this form's Supplier is a required
+           picker from the real Suppliers list, not a free-text/typed field. -->
+      <div class="modal fade" id="addItemModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-lg me-2" style="color:var(--primary)"></i>Add Item</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form class="needs-validation" novalidate id="addItemForm">
+        <div class="modal-body"><div class="row g-3">
+          <div class="col-12"><label class="form-label">Item Name</label>
+            <input class="form-control" name="name" required>
+            <div class="invalid-feedback">Item name is required.</div></div>
+          <div class="col-md-6"><label class="form-label">Category</label>
+            <select class="form-select" name="cat"><option value="">Select…</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
+          <div class="col-md-6"><label class="form-label">Supplier</label>
+            <select class="form-select" name="sup" id="addItemSupplier" required><option value="">Select a supplier…</option></select>
+            <div class="invalid-feedback">Choose the supplier for this item.</div>
+            <div class="form-text" id="addItemNoSuppliersHint" style="display:none">No suppliers yet - <a href="#" data-bs-toggle="modal" data-bs-target="#addSupplierModal" data-bs-dismiss="modal">add one first</a>.</div></div>
+          <div class="col-md-4"><label class="form-label">Unit</label>
+            <select class="form-select" name="unit"><option>pcs</option><option>kg</option><option>sheets</option><option>length</option><option>roll</option><option>box</option></select></div>
+          <div class="col-md-4"><label class="form-label">Unit Price (₱)</label><input type="number" class="form-control" name="price" value="0.00" step="0.01" min="0"></div>
+          <div class="col-md-4"><label class="form-label">Reorder Level</label><input type="number" class="form-control" name="reorder" value="50" min="0"></div>
+          <div class="col-md-6"><label class="form-label">Location</label>
+            <select class="form-select" name="loc"><option>Warehouse A</option><option>Warehouse B</option><option>Yard 1</option><option>Yard 2</option></select></div>
+          <div class="col-md-6"><label class="form-label">Initial Stock <span class="text-muted-2 fw-normal">(optional)</span></label><input type="number" class="form-control" name="qty" value="0" min="0"></div>
+        </div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Add Item</button></div>
+        </form>
+      </div></div></div>
+
+      <!-- Add Supplier Modal - same fields/endpoint as the Suppliers page's
+           own Add Supplier form (/api/suppliers/save), offered here too so a
+           supplier can be registered without leaving Inventory mid-task
+           (e.g. right before using it in Add Item or Stock In above). -->
+      <div class="modal fade" id="addSupplierModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-truck me-2" style="color:var(--primary)"></i>Add Supplier</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form class="needs-validation" novalidate id="addSupplierForm">
+        <div class="modal-body"><div class="row g-3">
+          <div class="col-12"><label class="form-label">Company Name</label>
+            <input class="form-control" name="name" required autocomplete="off">
+            <div class="invalid-feedback">Company name is required.</div></div>
+          <div class="col-md-6"><label class="form-label">Contact Person</label><input class="form-control" name="contact" placeholder="Full name" required><div class="invalid-feedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label">Phone Number</label><input class="form-control" name="phone" placeholder="0917-000-0000" required><div class="invalid-feedback">Required.</div></div>
+          <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" name="email" placeholder="name@company.com"><div class="invalid-feedback">Enter a valid email address.</div></div>
+          <div class="col-md-6"><label class="form-label">Business Address</label><input class="form-control" name="addr" placeholder="Street, City, Province"></div>
+          <div class="col-md-6"><label class="form-label">Supplier Category / Type</label><select class="form-select" name="category" id="addSupplierCategory" required></select></div>
+          <div class="col-md-6"><label class="form-label">Payment Terms</label><select class="form-select" name="terms" id="addSupplierTerms"></select></div>
+          <div class="col-12"><label class="form-label">Remarks</label><textarea class="form-control" name="remarks" rows="2" placeholder="Notes about this supplier (optional)"></textarea></div>
+        </div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Supplier</button></div>
         </form>
       </div></div></div>
 
@@ -463,10 +529,18 @@
         </form>
       </div></div></div>
 
-      <!-- Return (Back Order) Modal -->
-      <div class="modal fade" id="returnModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <!-- Return (Back Order) Modal - built around the Stock Out Reference
+           Code rather than a bare item picker: pick the reference used when
+           the materials were stocked out (the same "Purpose / Reference"
+           shown on the Stock Out receipt), and every item issued under it
+           appears in an editable table below - set a Qty to Return on
+           whichever rows are actually coming back. Confirm posts one
+           /api/inventory/return call per row with a quantity, the same
+           one-row-at-a-time pattern Stock Out's own cart uses (see
+           window.submitStockOutRequest in app.js). -->
+      <div class="modal fade" id="returnModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2" style="color:var(--primary)"></i>Record Return (Back Order)</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
-        <form class="needs-validation" novalidate data-reset data-entity="return" data-success-msg="Back-order return recorded">
+        <form id="returnForm" novalidate>
         <div class="modal-body"><div class="row g-3">
           <div class="col-12 d-flex flex-wrap justify-content-between align-items-center">
             <div class="small text-muted-2"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div>
@@ -474,18 +548,32 @@
           </div>
           <div class="col-12"><div class="alert alert-soft-info small mb-0"><i class="bi bi-info-circle me-1"></i>This logs the return in the Back Orders table. It does <strong>not</strong> change on-hand stock yet — only marking it "Replaced" there adds it back.</div></div>
           <div class="col-12 position-relative">
-            <label class="form-label">Select Item</label>
-            <input type="text" class="form-control" id="returnItemSearch" placeholder="Search item name or ID…" autocomplete="off" required>
-            <input type="hidden" name="itemId" id="returnItemId">
-            <div class="item-search-results" id="returnItemResults"></div>
-            <div class="invalid-feedback">Search and select an item from the list.</div>
+            <label class="form-label">Project Code</label>
+            <input type="text" class="form-control" id="returnRefSearch" placeholder="Search a project (e.g. PRJ-301)…" autocomplete="off" required>
+            <div class="item-search-results" id="returnRefResults"></div>
+            <div class="form-text">The project these materials were stocked out to.</div>
           </div>
-          <div class="col-md-6"><label class="form-label">Quantity Returned</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
-          <div class="col-md-6"><label class="form-label">Back-Ordered By</label><input class="form-control" name="customer" placeholder="e.g. M. Santos or PRJ-301"></div>
-          <div class="col-md-6"><label class="form-label">Original Stock Out Ref. <span class="text-muted-2 fw-normal">(if known)</span></label><input class="form-control" name="stockOutRef" placeholder="e.g. MOV-0102 or PRJ-301"></div>
-          <div class="col-12"><label class="form-label">Reason for Return</label><input class="form-control" name="remarks" placeholder="e.g. Wrong size delivered, item unused"></div>
+          <div class="col-12" id="returnItemsWrap" style="display:none">
+            <label class="form-label mb-1">Stocked-Out Items</label>
+            <div class="table-wrap"><table class="table table-sm mb-0">
+              <thead><tr><th>Item</th><th class="text-end">Stocked Out</th><th style="width:150px" class="text-end">Qty to Return</th></tr></thead>
+              <tbody id="returnItemsBody"></tbody>
+            </table></div>
+            <div class="small text-muted-2 mt-1">Leave an item's Qty to Return at 0 to leave it out of this return.</div>
+          </div>
+          <!-- Who processed/received this return, not who sent it back - the
+               project above already identifies the client/project side, so
+               this is simply the logged-in account handling it, same as
+               "Recorded by" at the top of this form. Read-only for that
+               reason (it's not information to type in). -->
+          <div class="col-md-6"><label class="form-label">Received By</label><input class="form-control bg-light" name="customer" value="{{ current_user.name }}" readonly></div>
+          <div class="col-md-6"><label class="form-label">Reason for Return</label><input class="form-control" name="remarks" placeholder="e.g. Wrong size delivered, item unused"></div>
         </div></div>
-        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Return</button></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-link me-auto ps-0" id="returnViewBackOrdersBtn"><i class="bi bi-table me-1"></i>View Back Order</button>
+          <button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="returnSubmitBtn">Confirm Return</button>
+        </div>
         </form>
       </div></div></div>
 
@@ -539,6 +627,21 @@
       const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
       let currentDetailId = null;
 
+      // Shared by every .item-search-results dropdown below (item pickers,
+      // supplier pickers, the Back Order reference picker). The dropdown is
+      // position:absolute, so a long result list doesn't add any scrollable
+      // height to the modal itself - if it runs past the bottom of the
+      // screen there is nothing to scroll to reveal the rest of it. Clamping
+      // its max-height to whatever room is actually left below the input
+      // (floor 100px, same 220px ceiling as the CSS default) means the
+      // dropdown always fits on screen and scrolls internally instead -
+      // it already has overflow-y:auto for that.
+      function fitSearchResults(input, results){
+        const rect = input.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom - 16;
+        results.style.maxHeight = Math.max(100, Math.min(220, spaceBelow)) + 'px';
+      }
+
       /* ---------- Searchable item picker (Stock In / Stock Out modals) ----------
        Replaces the old plain "Choose item…" dropdown with a text search box
        that filters the live materials list as you type. Selecting a result
@@ -555,6 +658,13 @@
         const allowUnmatched = !!opts.allowUnmatched;
         const unmatchedMsg = allowUnmatched ? '' : 'Search and select an item from the list.';
 
+        // Stock Out only: there's nothing to issue from an out-of-stock item
+        // (addToStockOutCart already refuses it), so flag it red in the
+        // dropdown itself rather than letting someone pick it and only then
+        // find out. Stock In / Return don't set this - 0 on hand is a normal,
+        // pickable state there (that's the whole point of Stock In).
+        const flagOutOfStock = !!opts.flagOutOfStock;
+
         function renderResults(query){
           const items = inventoryStore.all();
           const q = query.trim().toLowerCase();
@@ -562,12 +672,16 @@
             ? items.filter(i => i.name.toLowerCase().includes(q) || i.id.toLowerCase().includes(q)).slice(0, 8)
             : items.slice(0, 8);
           results.innerHTML = matches.length
-            ? matches.map(i => `<div class="isr-item" data-id="${i.id}">
+            ? matches.map(i => {
+                const outOfStock = flagOutOfStock && Number(i.qty) <= 0;
+                return `<div class="isr-item${outOfStock ? ' isr-item--out' : ''}" data-id="${i.id}">
                 <div class="fw-medium">${escapeHTML(i.name)}</div>
-                <div class="small text-muted-2">${i.id} \u2022 ${NUM(i.qty)} ${i.unit} on hand</div>
-              </div>`).join('')
+                <div class="small ${outOfStock ? '' : 'text-muted-2'}">${i.id} \u2022 ${outOfStock ? 'Out of stock' : `${NUM(i.qty)} ${i.unit} on hand`}</div>
+              </div>`;
+              }).join('')
             : `<div class="isr-empty">No matching items.</div>`;
           results.classList.add('show');
+          fitSearchResults(searchInput, results);
         }
 
         searchInput.addEventListener('focus', () => renderResults(searchInput.value));
@@ -575,9 +689,15 @@
           // Typing invalidates whatever was previously selected - force a
           // fresh pick from the list rather than submitting a stale id
           // that no longer matches the displayed text.
+          const wasSelected = !!hiddenInput.value;
           hiddenInput.value = '';
           searchInput.setCustomValidity(unmatchedMsg);
           renderResults(searchInput.value);
+          // Only fire onClear when actually LEAVING a selected item (not on
+          // every keystroke while already typing a new item's name) - see
+          // Stock In's onSelect/onClear below, which auto-fill/lock Supplier
+          // and Unit Price from the picked item's own record.
+          if (wasSelected && typeof opts.onClear === 'function') opts.onClear();
         });
         results.addEventListener('mousedown', (e) => {
           // mousedown (not click) fires before the input's blur, so the
@@ -588,6 +708,7 @@
           searchInput.value = material.name;
           searchInput.setCustomValidity('');
           results.classList.remove('show');
+          if (typeof opts.onSelect === 'function') opts.onSelect(material);
         });
         searchInput.addEventListener('blur', () => {
           setTimeout(() => results.classList.remove('show'), 150);
@@ -599,33 +720,79 @@
           hiddenInput.value = '';
           searchInput.setCustomValidity(unmatchedMsg);
           results.classList.remove('show');
+          if (typeof opts.onClear === 'function') opts.onClear();
         });
       }
-      wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', { allowUnmatched: true });
-      wireItemSearch('stockOutCartItemSearch', 'stockOutCartItemId', 'stockOutCartItemResults');
-      wireItemSearch('returnItemSearch',   'returnItemId',   'returnItemResults');
+      // Stock In: existing item picked -> Supplier and Unit Price are no
+      // longer meaningful to type (they're ignored by /api/inventory/stock-in
+      // anyway, see app.py), so auto-fill them from the item's own record
+      // and lock them read-only - that way they always show the real
+      // supplier/price instead of sitting blank or stale. Typing a
+      // different, unmatched name (back to "new item" mode) clears and
+      // unlocks them again.
+      wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', {
+        allowUnmatched: true,
+        onSelect: (material) => {
+          const sup = document.getElementById('stockInSupplier');
+          const price = document.getElementById('stockInPrice');
+          const hint = document.getElementById('stockInSupplierHint');
+          if (sup)   { sup.value = material.sup || ''; sup.readOnly = true; }
+          if (price) { price.value = material.price != null ? Number(material.price).toFixed(2) : '0.00'; price.readOnly = true; }
+          if (hint)  hint.textContent = 'Filled in automatically from this item’s record.';
+        },
+        onClear: () => {
+          const sup = document.getElementById('stockInSupplier');
+          const price = document.getElementById('stockInPrice');
+          const hint = document.getElementById('stockInSupplierHint');
+          if (sup)   { sup.readOnly = false; sup.value = ''; }
+          if (price) { price.readOnly = false; price.value = '0.00'; }
+          if (hint)  hint.textContent = 'New item only - search an existing supplier, type a new one, or use Add Supplier above to fill out its full details.';
+        },
+      });
+      wireItemSearch('stockOutCartItemSearch', 'stockOutCartItemId', 'stockOutCartItemResults', { flagOutOfStock: true });
+
+      /* ---------- Suppliers list: shared by Stock In's supplier search, the
+       Add Item modal's supplier picker, and refreshed after Add Supplier
+       saves a new one. Fetched once up front; if it fails (no permission,
+       offline, etc.) Stock In's field still works fine as a plain typed
+       field, just with an empty dropdown, and Add Item's picker is left
+       with nothing to pick until the next successful load. ---------- */
+      let SUPPLIERS_CACHE = [];
+      function loadSuppliers(){
+        return fetch('/api/suppliers').then(r => r.ok ? r.json() : null).then(json => {
+          if (json && json.ok) SUPPLIERS_CACHE = json.data.filter(s => s.status === 'Active');
+          renderAddItemSupplierOptions();
+          return SUPPLIERS_CACHE;
+        }).catch(() => SUPPLIERS_CACHE);
+      }
+      function renderAddItemSupplierOptions(){
+        const sel = document.getElementById('addItemSupplier');
+        const hint = document.getElementById('addItemNoSuppliersHint');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">Select a supplier…</option>' +
+          SUPPLIERS_CACHE.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
+        if (current && SUPPLIERS_CACHE.some(s => s.name === current)) sel.value = current;
+        if (hint) hint.style.display = SUPPLIERS_CACHE.length ? 'none' : '';
+      }
+      loadSuppliers();
 
       /* ---------- Stock In: Supplier search, same UX as Item Name above ----------
        Same dropdown-while-typing pattern as wireItemSearch, but there's no
        "pick from the list" requirement - typing a name that matches nothing
-       is a new supplier, not an error, exactly like a new item's name. The
-       suggestion list itself is the real Suppliers list (fetched once up
-       front); if that fetch fails (no permission, offline, etc.) the field
-       still works fine as a plain typed field, just with an empty dropdown. */
+       is a new supplier, not an error, exactly like a new item's name.
+       Disabled while an existing item is selected (see onSelect/onClear
+       above) since the field itself is read-only then. */
       (function () {
         const searchInput = document.getElementById('stockInSupplier');
         const results = document.getElementById('stockInSupplierResults');
         if (!searchInput || !results) return;
-        let suppliers = [];
-        fetch('/api/suppliers').then(r => r.ok ? r.json() : null).then(json => {
-          if (json && json.ok) suppliers = json.data.filter(s => s.status === 'Active');
-        }).catch(() => {});
 
         function renderResults(query){
           const q = query.trim().toLowerCase();
           const matches = q
-            ? suppliers.filter(s => s.name.toLowerCase().includes(q)).slice(0, 8)
-            : suppliers.slice(0, 8);
+            ? SUPPLIERS_CACHE.filter(s => s.name.toLowerCase().includes(q)).slice(0, 8)
+            : SUPPLIERS_CACHE.slice(0, 8);
           results.innerHTML = matches.length
             ? matches.map(s => `<div class="isr-item" data-name="${escapeHTML(s.name)}">
                 <div class="fw-medium">${escapeHTML(s.name)}</div>
@@ -633,9 +800,10 @@
               </div>`).join('')
             : `<div class="isr-empty">No matching suppliers${q ? ' - "' + escapeHTML(query.trim()) + '" will be used as typed' : ''}.</div>`;
           results.classList.add('show');
+          fitSearchResults(searchInput, results);
         }
 
-        searchInput.addEventListener('focus', () => renderResults(searchInput.value));
+        searchInput.addEventListener('focus', () => { if (!searchInput.readOnly) renderResults(searchInput.value); });
         searchInput.addEventListener('input', () => renderResults(searchInput.value));
         results.addEventListener('mousedown', (e) => {
           const item = e.target.closest('.isr-item'); if (!item) return;
@@ -646,10 +814,94 @@
           setTimeout(() => results.classList.remove('show'), 150);
         });
         searchInput.closest('.modal')?.addEventListener('show.bs.modal', () => {
-          searchInput.value = '';
           results.classList.remove('show');
         });
       })();
+
+      /* ---------- Add Item modal: register a new material against an
+       existing supplier, no stock movement unless Initial Stock > 0.
+       Reuses /api/inventory/save (the same endpoint Stock In's own "type a
+       new item" path uses) - the only real difference is Supplier here is
+       a required picker instead of a free-text/typed field. ---------- */
+      (function () {
+        const form = document.getElementById('addItemForm');
+        if (!form) return;
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!form.checkValidity()) { e.stopPropagation(); form.classList.add('was-validated'); return; }
+          const d = Object.fromEntries(new FormData(form));
+          try {
+            const res = await fetch('/api/inventory/save', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: d.name, cat: d.cat, sup: d.sup, unit: d.unit,
+                                      price: d.price, reorder: d.reorder, loc: d.loc, qty: d.qty }),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.error);
+            await refreshInventory();
+            bootstrap.Modal.getInstance(form.closest('.modal'))?.hide();
+            form.reset(); form.classList.remove('was-validated');
+            showToast('Item added to inventory', 'success');
+          } catch (err) {
+            showToast(err.message, 'error', 'bi-exclamation-triangle');
+          }
+        });
+        form.closest('.modal')?.addEventListener('show.bs.modal', () => {
+          form.reset(); form.classList.remove('was-validated');
+        });
+      })();
+
+      /* ---------- Add Supplier modal: same endpoint as the Suppliers
+       page's own Add Supplier form (/api/suppliers/save). On success,
+       reloads SUPPLIERS_CACHE so the new supplier immediately shows up in
+       Stock In's supplier search and Add Item's supplier picker. ---------- */
+      (function () {
+        const form = document.getElementById('addSupplierForm');
+        if (!form) return;
+        const catSel = document.getElementById('addSupplierCategory');
+        const termsSel = document.getElementById('addSupplierTerms');
+        if (catSel) catSel.innerHTML = '<option value="">Select…</option>' +
+          SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
+        if (termsSel) termsSel.innerHTML =
+          SUPPLIER_TERMS.map(t => `<option ${t === 'Net 30' ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('');
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!form.checkValidity()) { e.stopPropagation(); form.classList.add('was-validated'); return; }
+          const d = Object.fromEntries(new FormData(form));
+          try {
+            const res = await fetch('/api/suppliers/save', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: d.name, contact: d.contact, phone: d.phone, email: d.email,
+                                      addr: d.addr, category: d.category, terms: d.terms, remarks: d.remarks,
+                                      status: 'Active' }),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.error);
+            await loadSuppliers();
+            bootstrap.Modal.getInstance(form.closest('.modal'))?.hide();
+            form.reset(); form.classList.remove('was-validated');
+            showToast('Supplier saved', 'success');
+          } catch (err) {
+            showToast(err.message, 'error', 'bi-exclamation-triangle');
+          }
+        });
+        form.closest('.modal')?.addEventListener('show.bs.modal', () => {
+          form.reset(); form.classList.remove('was-validated');
+        });
+      })();
+
+      // Add Item and Add Supplier are only ever reached from inside Stock In
+      // (it dismisses Stock In before opening either one - see the buttons
+      // above), so whichever way they close - Cancel, the X, backdrop click,
+      // or a successful save - bring Stock In back up rather than just
+      // dropping back to the bare page. "hidden.bs.modal" (not "hide") so
+      // this only fires once Bootstrap has actually finished closing it.
+      ['addItemModal', 'addSupplierModal'].forEach(id => {
+        document.getElementById(id)?.addEventListener('hidden.bs.modal', () => {
+          bootstrap.Modal.getOrCreateInstance('#stockInModal').show();
+        });
+      });
 
       /* ---------- Stock In: existing vs. new item, decided automatically ----------
        There's no mode switch to click - the "new item only" fields just sit
@@ -717,16 +969,21 @@
 
       // a) Project dropdown - label "Project \u2014 Client", value = project id.
       //    Exposed so app.js can re-run it after loading the real project list.
+      //    Completed projects are left out entirely - once a project is done
+      //    there's nothing further to issue materials against, so only
+      //    projects still underway (In Progress / On Hold / etc.) show up
+      //    here at all, not just grouped separately.
       function renderStockOutProjects(){
         if (!so.project || typeof PROJECTS === 'undefined') return;
         const keep = so.project.value;
         const opt = p => `<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)} \u2014 ${escapeHTML(custName(p.custId))}${p.status && p.status !== 'In Progress' ? ` (${escapeHTML(p.status)})` : ''}</option>`;
-        const active = PROJECTS.filter(p => p.status === 'In Progress');
-        const other  = PROJECTS.filter(p => p.status !== 'In Progress');
+        const eligible = PROJECTS.filter(p => p.status !== 'Completed');
+        const active = eligible.filter(p => p.status === 'In Progress');
+        const other  = eligible.filter(p => p.status !== 'In Progress');
         so.project.innerHTML = '<option value="">Select a project\u2026</option>'
           + (active.length ? `<optgroup label="Active projects">${active.map(opt).join('')}</optgroup>` : '')
           + (other.length  ? `<optgroup label="Other projects">${other.map(opt).join('')}</optgroup>` : '');
-        so.project.value = PROJECTS.some(p => p.id === keep) ? keep : '';
+        so.project.value = eligible.some(p => p.id === keep) ? keep : '';
         onStockOutProjectChange();
       }
       window.renderStockOutProjects = renderStockOutProjects;
@@ -749,9 +1006,17 @@
       // b) Mini add-form. Shows the picked item's available stock as a hint.
       function showCartAvail(){
         const i = so.itemId.value ? inventoryStore.find(so.itemId.value) : null;
-        if (!i) { so.avail.textContent = so.project.value ? 'Pick an item to see its available stock.' : 'Choose a project first.'; return; }
+        if (!i) {
+          so.avail.classList.remove('text-danger', 'fw-medium');
+          so.avail.textContent = so.project.value ? 'Pick an item to see its available stock.' : 'Choose a project first.';
+          return;
+        }
         const inCart = stockOutCart.find(r => r.itemId === i.id);
-        so.avail.textContent = `Available: ${NUM(i.qty)} ${i.unit}` + (inCart ? ` \u00b7 ${NUM(inCart.requestedQty)} already in this request` : '');
+        const outOfStock = Number(i.qty) <= 0;
+        so.avail.classList.toggle('text-danger', outOfStock);
+        so.avail.classList.toggle('fw-medium', outOfStock);
+        so.avail.textContent = (outOfStock ? `Out of stock \u2014 0 ${i.unit} available` : `Available: ${NUM(i.qty)} ${i.unit}`)
+          + (inCart ? ` \u00b7 ${NUM(inCart.requestedQty)} already in this request` : '');
       }
       so.results?.addEventListener('mousedown', () => { showCartAvail(); setCartError(''); });
       so.search?.addEventListener('input', () => { showCartAvail(); setCartError(''); });
@@ -956,6 +1221,258 @@
       renderStockOutProjects();
       renderStockOutCart();
 
+      /* ---------- Record Return (Back Order): reference-code driven ----------
+       Pick the Stock Out reference (what Stock Out's own cart calls
+       "Purpose / Reference", stored as each ISSUANCE movement's `remarks`)
+       and every item ever stocked out under it - aggregated by material -
+       appears below with an editable Qty to Return. Confirm posts one
+       /api/inventory/return call per row with a quantity > 0, the same
+       one-row-at-a-time pattern Stock Out's own cart uses (see
+       window.submitStockOutRequest in app.js), including the same
+       partial-failure handling: rows already recorded are zeroed out so a
+       retry after a mid-request error doesn't double-record them. */
+      const ret = {
+        modal:  document.getElementById('returnModal'),
+        form:   document.getElementById('returnForm'),
+        search: document.getElementById('returnRefSearch'),
+        results: document.getElementById('returnRefResults'),
+        wrap:   document.getElementById('returnItemsWrap'),
+        body:   document.getElementById('returnItemsBody'),
+        submitBtn: document.getElementById('returnSubmitBtn'),
+        viewBackOrdersBtn: document.getElementById('returnViewBackOrdersBtn'),
+      };
+      let returnSelectedRef = '';   // '' until a real project has been picked
+      let returnRows = [];          // [{ itemId, name, unit, stockedOut }] for the selected project
+      let returnIssued = [];        // rows the server actually recorded, for the receipt
+      let returnLastInfo = null;
+      let returnBusy = false;
+
+      // Real projects (PROJECTS, the same list Stock Out's own Project
+      // dropdown uses - see renderStockOutProjects below), not a scan of
+      // whatever text happened to be typed into Stock Out's old free-text
+      // reference field. Stock Out always records each issuance's project
+      // id as that movement's `remarks` (see window.submitStockOutRequest /
+      // /api/inventory/stock-out), so a project's id is exactly what
+      // itemsForStockOutRef() below matches against.
+      // Only projects that actually have something stocked out under them -
+      // a project nothing was ever issued to has nothing a return could be
+      // against, so it's left out rather than shown as a dead end.
+      function allBackOrderProjects(){
+        return (typeof PROJECTS !== 'undefined' ? PROJECTS : [])
+          .map(p => ({ ref: p.id, label: p.name, stocked: itemsForStockOutRef(p.id) }))
+          .filter(p => p.stocked.length);
+      }
+
+      // Items stocked out under one project, aggregated by material (an
+      // item issued more than once under the same reference becomes a
+      // single row with the combined quantity).
+      function itemsForStockOutRef(ref){
+        const byItem = new Map();
+        (window.ALL_MOVEMENTS || []).filter(m => m.type === 'ISSUANCE' && m.remarks === ref).forEach(m => {
+          if (!byItem.has(m.id)) byItem.set(m.id, { itemId: m.id, name: m.name, unit: m.unit, stockedOut: 0 });
+          byItem.get(m.id).stockedOut += Number(m.qty) || 0;
+        });
+        return [...byItem.values()];
+      }
+
+      function renderReturnItems(){
+        if (!ret.body) return;
+        ret.body.innerHTML = returnRows.map(r => `
+          <tr data-item-id="${escapeHTML(r.itemId)}">
+            <td><div class="fw-medium">${escapeHTML(r.name)}</div><div class="small text-muted-2">${escapeHTML(r.itemId)}</div></td>
+            <td class="text-end">${NUM(r.stockedOut)} ${escapeHTML(r.unit)}</td>
+            <td><input type="number" class="form-control form-control-sm text-end return-qty-input" min="0" max="${r.stockedOut}" step="any" value="0"></td>
+          </tr>`).join('');
+      }
+
+      function resetReturnPicker(){
+        returnSelectedRef = '';
+        returnRows = [];
+        if (ret.search) { ret.search.value = ''; ret.search.setCustomValidity('Search and select a project from the list.'); }
+        if (ret.wrap) ret.wrap.style.display = 'none';
+        if (ret.body) ret.body.innerHTML = '';
+        ret.results?.classList.remove('show');
+      }
+
+      function renderReturnRefResults(query){
+        if (!ret.results) return;
+        const q = query.trim().toLowerCase();
+        const projects = allBackOrderProjects();
+        const matches = q
+          ? projects.filter(p => p.ref.toLowerCase().includes(q) || p.label.toLowerCase().includes(q))
+          : projects;
+        ret.results.innerHTML = matches.length
+          ? matches.slice(0, 8).map(p => {
+              const qty = p.stocked.reduce((s, r) => s + r.stockedOut, 0);
+              return `<div class="isr-item" data-ref="${escapeHTML(p.ref)}">
+                  <div class="fw-medium">${escapeHTML(p.ref)} — ${escapeHTML(p.label)}</div>
+                  <div class="small text-muted-2">${plural(p.stocked.length, 'item')} stocked out • ${NUM(qty)} total</div>
+                </div>`;
+            }).join('')
+          : `<div class="isr-empty">No matching project${projects.length ? '' : ' - nothing has been stocked out yet'}.</div>`;
+        ret.results.classList.add('show');
+        fitSearchResults(ret.search, ret.results);
+      }
+
+      if (ret.search && ret.results) {
+        ret.search.addEventListener('focus', () => renderReturnRefResults(ret.search.value));
+        ret.search.addEventListener('input', () => {
+          returnSelectedRef = '';
+          ret.search.setCustomValidity('Search and select a project from the list.');
+          if (ret.wrap) ret.wrap.style.display = 'none';
+          renderReturnRefResults(ret.search.value);
+        });
+        ret.results.addEventListener('mousedown', (e) => {
+          const item = e.target.closest('.isr-item'); if (!item) return;
+          const ref = item.dataset.ref;
+          returnSelectedRef = ref;
+          ret.search.value = ref;
+          ret.search.setCustomValidity('');
+          ret.results.classList.remove('show');
+          returnRows = itemsForStockOutRef(ref);
+          renderReturnItems();
+          if (ret.wrap) ret.wrap.style.display = returnRows.length ? '' : 'none';
+        });
+        ret.search.addEventListener('blur', () => { setTimeout(() => ret.results.classList.remove('show'), 150); });
+        ret.modal?.addEventListener('show.bs.modal', resetReturnPicker);
+      }
+
+      function setReturnBusy(busy, label){
+        returnBusy = busy;
+        ret.form?.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
+        if (ret.submitBtn) {
+          ret.submitBtn.disabled = busy;
+          ret.submitBtn.innerHTML = busy
+            ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${label || 'Recording…'}`
+            : 'Confirm Return';
+        }
+      }
+
+      function showReturnReceipt(){
+        if (!returnIssued.length || !returnLastInfo) return;
+        const info = returnLastInfo;
+        const items = returnIssued.map(r => {
+          const i = inventoryStore.find(r.itemId) || {};
+          return { movementId: r.backOrderId, id: r.itemId, name: r.name, cat: i.cat, qty: r.qty, unit: r.unit, price: Number(i.price) || 0 };
+        });
+        window.showTransactionReceipt('RETURN', items, {
+          when: info.when,
+          fields: [['Project Code', info.ref], ['Received By', info.customer],
+                   ['Reason for Return', info.remarks],
+                   ['Disposition', 'Pending (mark Reimbursed / Replaced in the Back Orders table)'],
+                   ['Recorded / Inspected by', info.user]],
+          recordedBy: info.user, counterparty: info.customer || '',
+          note: 'Back orders are logged for the record and do not change on-hand stock.',
+        });
+      }
+
+      // Scrolls the page down to the Back Orders table and flashes it, so the
+      // record(s) just added (or about to be looked up) are easy to spot.
+      // Shared by the "View Back Order" footer button and the success toast.
+      function scrollToBackOrdersTable(){
+        const table = document.getElementById('returnsTable');
+        const card = table?.closest('.card');
+        if (!card) return;
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        card.classList.add('highlight-flash');
+        setTimeout(() => card.classList.remove('highlight-flash'), 1800);
+      }
+
+      ret.viewBackOrdersBtn?.addEventListener('click', () => {
+        if (ret.modal.classList.contains('show')) {
+          // Wait for the modal to actually finish closing (and for its own
+          // hidden.bs.modal handler below to run) before scrolling, so we're
+          // not scrolling a page that still has the modal/backdrop over it.
+          ret.modal.addEventListener('hidden.bs.modal', scrollToBackOrdersTable, { once: true });
+          bootstrap.Modal.getInstance(ret.modal)?.hide();
+        } else {
+          scrollToBackOrdersTable();
+        }
+      });
+
+      ret.modal?.addEventListener('hidden.bs.modal', () => {
+        if (returnBusy) return;
+        showReturnReceipt();
+        returnIssued = []; returnLastInfo = null;
+        resetReturnPicker();
+        ret.form?.reset();
+      });
+      ret.modal?.addEventListener('hide.bs.modal', (e) => { if (returnBusy) e.preventDefault(); });
+
+      ret.form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (returnBusy) return;
+        if (!returnSelectedRef) {
+          ret.search.setCustomValidity('Search and select a project from the list.');
+          ret.search.reportValidity();
+          return;
+        }
+        const rows = [...ret.body.querySelectorAll('tr')].map(tr => ({
+          itemId: tr.dataset.itemId,
+          qty: Number(tr.querySelector('.return-qty-input')?.value) || 0,
+        })).filter(r => r.qty > 0);
+        if (!rows.length) {
+          showToast('Set a Qty to Return greater than 0 for at least one item.', 'error', 'bi-exclamation-triangle');
+          return;
+        }
+
+        const d = Object.fromEntries(new FormData(ret.form));
+        const user = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || '';
+        returnIssued = [];
+        let failedRow = null, failedError = '';
+        setReturnBusy(true);
+        for (let k = 0; k < rows.length; k++) {
+          const row = rows[k];
+          const item = returnRows.find(r => r.itemId === row.itemId) || {};
+          setReturnBusy(true, `Recording ${k + 1} of ${rows.length}…`);
+          try {
+            const res = await fetch('/api/inventory/return', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ itemId: row.itemId, qty: row.qty, customer: d.customer, remarks: d.remarks, stockOutRef: returnSelectedRef }),
+            });
+            let json;
+            try { json = await res.json(); }
+            catch (_) { throw new Error(`The server returned an unexpected response (HTTP ${res.status}).`); }
+            if (!json.ok) throw new Error(json.error || `Request failed (HTTP ${res.status}).`);
+            returnIssued.push({ itemId: row.itemId, name: item.name, unit: item.unit, qty: row.qty, backOrderId: json.backOrderId });
+          } catch (err) {
+            failedRow = row;
+            failedError = err instanceof TypeError ? 'Could not connect to the server.' : err.message;
+            break;
+          }
+        }
+        setReturnBusy(false);
+
+        if (!failedRow) {
+          returnLastInfo = { when: window.receiptNow(), customer: d.customer, ref: returnSelectedRef, remarks: d.remarks, user };
+          await refreshInventory();
+          bootstrap.Modal.getInstance(ret.modal)?.hide();   // hidden.bs.modal shows the receipt, then resets the picker
+          // "View Back Order" button on the success toast - scrolls down to
+          // where the record(s) now live, in the Back Orders table.
+          showToast(`Back-order return recorded — ${plural(returnIssued.length, 'item')}`, 'success', undefined, {
+            label: 'View Back Order',
+            onClick: scrollToBackOrdersTable,
+          });
+          return;
+        }
+        // Partial (or no) success - same pattern as Stock Out: report what went
+        // through, re-fetch inventory if anything did, zero out the rows that
+        // already succeeded (so a retry doesn't double-record them), and leave
+        // the modal open so the rest can be adjusted and confirmed again.
+        if (returnIssued.length) {
+          await refreshInventory();
+          returnIssued.forEach(r => {
+            const input = ret.body.querySelector(`tr[data-item-id="${CSS.escape(r.itemId)}"] .return-qty-input`);
+            if (input) input.value = '0';
+          });
+        }
+        const failedItem = returnRows.find(r => r.itemId === failedRow.itemId) || {};
+        showToast(
+          (returnIssued.length ? `${plural(returnIssued.length, 'item')} recorded, ` : 'Nothing was recorded — ') +
+          `stopped at ${failedItem.name || failedRow.itemId}: ${failedError}`,
+          'error', 'bi-exclamation-triangle');
+      });
+
       /* ---------- Stock In / Stock Out movement tables ----------
        window.ALL_MOVEMENTS holds every stock_movements row (both
        RECEIPT and ISSUANCE), fetched by app.js's refreshInventory()
@@ -1131,7 +1648,7 @@
           ? [['Supplier', item.sup], ['Warehouse / Location', item.loc], ['Remarks / Reference', m.remarks], ...common]
           : m.type === 'ISSUANCE'
             ? [['Project / Reference', m.remarks], ['Location', item.loc], ...common]
-            : [['Returned by (Client / Project)', m.backOrderBy], ['Original Stock Out Ref.', m.stockOutRef], ['Reason for Return', m.remarks],
+            : [['Project Code', m.stockOutRef], ['Received By', m.backOrderBy], ['Reason for Return', m.remarks],
                ['Disposition', m.disposition || 'Pending'], ['Location', item.loc], ...common];
         window.showTransactionReceipt(m.type, [{
           movementId: m.movementId, id: m.id, name: m.name, cat: m.cat, qty: m.qty, unit: m.unit, price: Number(item.price) || 0,

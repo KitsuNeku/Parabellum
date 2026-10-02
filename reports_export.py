@@ -161,10 +161,11 @@ def build_back_order_report(db_config):
     its own back_orders table (not stock_movements - see the Back Orders
     redesign in schema.sql). Not a supplier re-order; see the matching
     comment on the inventory page's Record Return modal. Includes a
-    Back-Ordered By column - the customer or project that returned the
-    material - separate from Recorded By (the staff member who entered
-    it), and a Disposition column: "Replaced" (added back to stock),
-    "Reimbursed" (written off), or "Pending" if not yet decided.
+    Received By column - the staff account that processed the return
+    (it's the logged-in user at the time, same as Recorded By - the
+    Record Return modal auto-fills it rather than asking for it) - and a
+    Disposition column: "Replaced" (added back to stock), "Reimbursed"
+    (written off), or "Pending" if not yet decided.
     """
     rows = execute_query(db_config, """
         SELECT m.material_name, m.category, bo.quantity, m.unit,
@@ -179,7 +180,7 @@ def build_back_order_report(db_config):
             r["remarks"] or "\u2014", r["back_order_by"] or "\u2014",
             r["recorded_by"] or "\u2014", r["disposition"] or "Pending"] for r in rows]
     return ("Back Order Report", "Materials returned from customers/projects",
-            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Back-Ordered By", "Recorded By", "Disposition"], out)
+            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Received By", "Recorded By", "Disposition"], out)
 
 
 

@@ -94,7 +94,7 @@ const RECEIPT_KINDS = {
   ISSUANCE: { title: 'STOCK OUT RECEIPT',  label: 'Stock Out',  badge: 'b-danger',  qty: 'Qty Issued',
               sigLeft: 'Released by',            sigRight: 'Received by (Client / Authorized Recipient)' },
   RETURN:   { title: 'BACK ORDER RECEIPT', label: 'Back Order', badge: 'b-warning', qty: 'Qty Returned',
-              sigLeft: 'Recorded / Inspected by', sigRight: 'Returned by' },
+              sigLeft: 'Recorded / Inspected by', sigRight: 'Received by' },
 };
 window.RECEIPT_KINDS = RECEIPT_KINDS;
 
@@ -565,7 +565,12 @@ document.addEventListener('DOMContentLoaded', () => {
       (d) => d.itemId ? '/api/inventory/stock-in' : '/api/inventory/save',
       (d) => (d.itemId
         ? { itemId: d.itemId, qty: d.qty, remarks: d.remarks }
-        : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: d.reorder, loc: d.loc }),
+        // Stock In's "new item" path no longer asks for Reorder Level (it's
+        // still set explicitly via Add Item, or editable afterward from the
+        // item's own Edit form) - 50 is the same default Add Item's own
+        // Reorder Level field starts at, so a new item registered this way
+        // still gets sensible Low Stock alerting out of the box.
+        : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: 50, loc: d.loc }),
       { successMsg: (d) => d.itemId ? 'Stock added to inventory' : 'New item added to inventory and stocked',
         // Stock In receipt: exactly the item + quantity just received.
         onSuccess: (d, form, { json, beforeIds, itemBefore }) => {
@@ -628,47 +633,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     window.refreshInventory = refreshInventory;
 
-    wire('#returnModal form', '/api/inventory/return', (d) => ({
-      itemId: d.itemId, qty: d.qty, customer: d.customer, remarks: d.remarks,
-      stockOutRef: d.stockOutRef,
-    }), {
-      successMsg: 'Back-order return recorded',
-      // Back Order receipt: exactly the returned item + what was recorded.
-      // The server returns the new back_order_id directly (no re-fetch
-      // heuristic needed, unlike Stock In/Out - back orders aren't in
-      // window.ALL_MOVEMENTS to search through).
-      onSuccess: (d, form, { json, itemBefore }) => {
-        const item = inventoryStore.find(d.itemId) || itemBefore || {};
-        const user = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || '';
-        window.showTransactionReceipt('RETURN', [{
-          movementId: json.backOrderId, id: d.itemId, name: item.name, cat: item.cat,
-          qty: Number(d.qty), unit: item.unit, price: Number(item.price) || 0,
-        }], {
-          when: window.receiptNow(),
-          fields: [['Returned by (Client / Project)', d.customer], ['Original Stock Out Ref.', d.stockOutRef],
-                   ['Reason for Return', d.remarks],
-                   ['Disposition', 'Pending (mark Reimbursed / Replaced in the Back Orders table)'],
-                   ['Location', item.loc], ['Recorded / Inspected by', user]],
-          recordedBy: user, counterparty: d.customer || '',
-          note: 'Back orders are logged for the record and do not change on-hand stock.',
-        });
-      },
-      // "View Back Order" button on the success toast (bottom-right) -
-      // scrolls the page down to where the record now lives, in the
-      // Back Orders table, and briefly highlights that card so it's
-      // obvious where to look.
-      successAction: () => ({
-        label: 'View Back Order',
-        onClick: () => {
-          const table = document.getElementById('returnsTable');
-          const card = table?.closest('.card');
-          if (!card) return;
-          card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          card.classList.add('highlight-flash');
-          setTimeout(() => card.classList.remove('highlight-flash'), 1800);
-        },
-      }),
-    });
+    // Record Return (Back Order) is no longer a single-item wire() form -
+    // it's a reference-code-driven, multi-item submit (pick a Stock Out
+    // reference, edit a Qty to Return per item it covers) handled entirely
+    // in inventory.html's own script, the same way Stock Out's cart is.
+    // See the "Record Return (Back Order)" block there.
 
     // The Stock Out Request modal's Project dropdown needs CUSTOMERS +
     // PROJECTS loaded on the Inventory page (they're not otherwise loaded

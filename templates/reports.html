@@ -452,7 +452,7 @@
         else stats.push(['Recorded by', new Set(list.map(m => m.recordedBy).filter(v => v && v !== '\u2014')).size + ' staff']);
 
         const extraHead = cfg.type === 'RECEIPT' ? '<th>Supplier</th><th>Remarks</th>'
-          : cfg.type === 'ISSUANCE' ? '<th>Project / Reference</th>' : '<th>Returned By</th><th>Reason</th><th>Disposition</th>';
+          : cfg.type === 'ISSUANCE' ? '<th>Project / Reference</th>' : '<th>Received By</th><th>Reason</th><th>Disposition</th>';
         const extraCells = (m) => cfg.type === 'RECEIPT'
           ? `<td>${escapeHTML(dash(itemOf(m.id).sup))}</td><td class="text-muted-2">${escapeHTML(dash(m.remarks))}</td>`
           : cfg.type === 'ISSUANCE' ? `<td>${escapeHTML(dash(m.remarks))}</td>`
@@ -479,7 +479,7 @@
         const fields = m.type === 'RECEIPT'
           ? [['Supplier', item.sup], ['Warehouse / Location', item.loc], ['Remarks / Reference', m.remarks], ...common]
           : m.type === 'ISSUANCE' ? [['Project / Reference', m.remarks], ['Location', item.loc], ...common]
-          : [['Returned by (Client / Project)', m.backOrderBy], ['Reason for Return', m.remarks], ['Disposition', m.disposition || 'Pending'], ['Location', item.loc], ...common];
+          : [['Project Code', m.stockOutRef], ['Received By', m.backOrderBy], ['Reason for Return', m.remarks], ['Disposition', m.disposition || 'Pending'], ['Location', item.loc], ...common];
         rpTitle.textContent = `${RECEIPT_KINDS[m.type].label} Receipt`;
         rpBody.innerHTML = `<button type="button" class="btn btn-light-2 btn-sm mb-3 no-print" data-back-to-report><i class="bi bi-arrow-left me-1"></i>Back to report</button>`
           + window.buildReceiptHTML(m.type, [{ movementId: m.movementId, id: m.id, name: m.name, cat: m.cat, qty: m.qty, unit: m.unit, price: Number(item.price) || 0 }], {

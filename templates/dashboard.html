@@ -184,9 +184,9 @@
           <div class="stat-value" id="dashKpiItems">16</div>
           <div class="stat-desc">Active materials in catalog</div>
         </div></div>
-        <!-- Clickable again: opens #dashLowStockModal for a quick look, on
-             top of the always-visible table below (which still shows the
-             full list immediately on load without needing a click). -->
+        <!-- Clickable: opens #dashLowStockModal for a quick look (the
+             always-visible table that used to sit below this was removed -
+             the modal is now the only on-dashboard way to see the list). -->
         <div class="col-md-6 col-xl-3"><div class="stat-card is-gold" role="button" tabindex="0" style="cursor:pointer"
              data-bs-toggle="modal" data-bs-target="#dashLowStockModal" aria-label="View low stock materials" title="View low stock materials">
           <div class="stat-ic"><i class="bi bi-exclamation-triangle"></i></div>
@@ -196,23 +196,6 @@
           <div class="stat-trend down"><i class="bi bi-arrow-down-short"></i> Needs attention</div>
         </div></div>
       </div>
-
-      <!-- ============ LOW STOCK MATERIALS (always-visible table, shown immediately on load; the KPI card above also opens a quick-look modal) ============ -->
-      <div class="card mb-4"><div class="card-body">
-        <div class="card-title-row">
-          <h2 class="panel-title"><i class="bi bi-exclamation-triangle me-2" style="color:var(--accent-dark)"></i>Low Stock Materials</h2>
-          {% if 'inventory' in allowed_pages %}
-          <a href="/inventory" class="small text-decoration-none" style="color:var(--primary)">View all in Inventory <i class="bi bi-arrow-right"></i></a>
-          {% endif %}
-        </div>
-        <p class="panel-sub mb-3">Items at or below their reorder level — restock these soon.</p>
-        <div class="table-wrap"><table class="table mb-0">
-          <thead><tr><th>Material</th><th>Location</th><th class="text-end">Current Stock</th><th class="text-end">Reorder Level</th>
-            <th style="min-width:160px">Stock Level</th><th class="text-end">Needed to Reorder Level</th></tr></thead>
-          <tbody id="dashLowStockBody"></tbody>
-        </table></div>
-        <div class="small text-muted-2 mt-2" id="dashLowStockNote"></div>
-      </div></div>
 
       <!-- ============ FORECAST ALERT CARD ============ -->
       <div class="card accent-card gold mb-4" style="background:var(--accent-soft);">
@@ -264,10 +247,10 @@
         </div></div></div>
       </div>
 
-      <!-- Low Stock Materials modal (opened from the KPI card above) - a
-           quick-look popup; the always-visible table above it has the
-           full detail (stock level bar, needed-to-reorder) if you don't
-           want to click through to Inventory. -->
+      <!-- Low Stock Materials modal (opened from the KPI card above) - the
+           only place on the dashboard that lists low-stock items; the full
+           detail (stock level bar, needed-to-reorder) lives on the
+           Inventory page's own low-stock view. -->
       <div class="modal fade" id="dashLowStockModal" tabindex="-1" aria-labelledby="dashLowStockTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title" id="dashLowStockTitle"><i class="bi bi-exclamation-triangle me-2" style="color:var(--accent-dark)"></i>Low Stock Materials</h5>
           <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
@@ -311,34 +294,12 @@
       set('dashKpiProjects', PROJECTS.filter(p=>p.status==='In Progress').length);
       set('dashKpiTxns', TRANSACTIONS.length);
       set('dashKpiItems', INVENTORY.length);
-      // Low Stock Materials: always-visible table, sorted most-critical-first
-      // (lowest qty/reorder ratio), capped at LOW_STOCK_MAX rows with an
-      // overflow note. Shown immediately on page load - no click needed.
-      const LOW_STOCK_MAX = 10;
+      // Low Stock Materials: sorted most-critical-first (lowest qty/reorder
+      // ratio). Only surfaced on the dashboard via the KPI card + modal
+      // below (the always-visible table that used to be here was removed).
       const low = INVENTORY.filter(i=>i.status==='Low Stock')
         .sort((a, b) => (a.qty / (a.reorder || 1)) - (b.qty / (b.reorder || 1)));
       set('dashKpiLow', low.length);
-      const lowBody = document.getElementById('dashLowStockBody');
-      if (lowBody) lowBody.innerHTML = low.length
-        ? low.slice(0, LOW_STOCK_MAX).map(i => {
-            const pct = Math.max(0, Math.min(100, Math.round(i.qty / (i.reorder || 1) * 100)));
-            const need = Math.max(0, i.reorder - i.qty);
-            return `<tr>
-              <td><div class="fw-medium">${escapeHTML(i.name)}</div><div class="small text-muted-2">${escapeHTML(i.id)}</div></td>
-              <td class="text-muted-2">${escapeHTML(i.loc)}</td>
-              <td class="text-end fw-medium" style="color:var(--accent-dark)">${NUM(i.qty)} ${escapeHTML(i.unit)}</td>
-              <td class="text-end">${NUM(i.reorder)} ${escapeHTML(i.unit)}</td>
-              <td><div class="d-flex align-items-center gap-2">
-                <div class="progress flex-grow-1" role="progressbar" aria-label="${escapeHTML(i.name)} stock vs reorder level" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">
-                  <div class="progress-bar gold" style="width:${pct}%"></div></div>
-                <span class="small text-muted-2" style="width:38px">${pct}%</span></div></td>
-              <td class="text-end">${need ? `${NUM(need)} ${escapeHTML(i.unit)}` : '<span class="text-muted-2">At reorder level</span>'}</td></tr>`;
-          }).join('')
-        : '<tr><td colspan="6" class="text-center text-muted-2 py-3">No low-stock materials. All items are above their reorder level.</td></tr>';
-      const lowNote = document.getElementById('dashLowStockNote');
-      if (lowNote) lowNote.textContent = low.length > LOW_STOCK_MAX
-        ? `Showing the ${LOW_STOCK_MAX} most critical of ${low.length} low-stock items.`
-        : (low.length ? `Showing all ${low.length} low-stock item${low.length === 1 ? '' : 's'}.` : '');
 
       // Quick-look modal list (opened from the KPI card) - same row pattern
       // as inventory.html's #lowStockList, shows everything (not capped).

@@ -230,7 +230,7 @@
           <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
             <div class="d-flex align-items-start gap-3">
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-box-arrow-in-down"></i></div>
-              <div class="flex-grow-1"><div class="fw-medium">Stock In Report</div><div class="small text-muted-2 mb-2">Materials received, remarks, totals</div>
+              <div class="flex-grow-1"><div class="fw-medium">Stock In Report</div><div class="small text-muted-2 mb-2">Materials received · filter by date · receipts</div>
                 <div class="d-flex gap-1">
                   <button class="btn btn-soft btn-sm" data-export="Stock In Report (PDF)" data-report="stock-in" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
                   <button class="btn btn-soft btn-sm" data-export="Stock In Report (Excel)" data-report="stock-in" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
@@ -240,7 +240,7 @@
           <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
             <div class="d-flex align-items-start gap-3">
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-box-arrow-up"></i></div>
-              <div class="flex-grow-1"><div class="fw-medium">Stock Out Report</div><div class="small text-muted-2 mb-2">Materials issued, projects/references, totals</div>
+              <div class="flex-grow-1"><div class="fw-medium">Stock Out Report</div><div class="small text-muted-2 mb-2">Materials issued · filter by date · receipts</div>
                 <div class="d-flex gap-1">
                   <button class="btn btn-soft btn-sm" data-export="Stock Out Report (PDF)" data-report="stock-out" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
                   <button class="btn btn-soft btn-sm" data-export="Stock Out Report (Excel)" data-report="stock-out" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
@@ -254,7 +254,7 @@
           <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
             <div class="d-flex align-items-start gap-3">
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-arrow-counterclockwise"></i></div>
-              <div class="flex-grow-1"><div class="fw-medium">Back Order Report</div><div class="small text-muted-2 mb-2">Returns from customers/projects, reasons, totals</div>
+              <div class="flex-grow-1"><div class="fw-medium">Back Order Report</div><div class="small text-muted-2 mb-2">Returns · filter by date · receipts</div>
                 <div class="d-flex gap-1">
                   <button class="btn btn-soft btn-sm" data-export="Back Order Report (PDF)" data-report="back-order" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
                   <button class="btn btn-soft btn-sm" data-export="Back Order Report (Excel)" data-report="back-order" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
@@ -323,10 +323,15 @@
     document.addEventListener('DOMContentLoaded', () => {
       /* Generate = fetch REAL data from the server and render an on-screen
  preview. The exact same builder function the server uses here also
- powers the PDF and Excel downloads, so all three always match. */
+ powers the PDF and Excel downloads, so all three always match.
+ Stock In / Stock Out / Back Order use a richer preview (see MOVE_REPORTS
+ below): date filter, period summary, and click-a-row-to-open-its-receipt. */
       const modal = new bootstrap.Modal('#reportPreviewModal');
       const today = new Date().toLocaleDateString('en-PH', { year:'numeric', month:'long', day:'numeric' });
+      const rpTitle = document.getElementById('rpTitle');
+      const rpBody  = document.getElementById('rpBody');
       let currentKey = null;
+      let currentRange = { from: '', to: '' };   // yyyy-mm-dd, '' = open-ended
 
       const wrap = (subtitle, columns, rows) => {
         const head = `<thead><tr>${columns.map(c=>`<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>`;
@@ -342,32 +347,202 @@
           <div class="table-wrap"><table class="table table-soft">${head}<tbody>${body}</tbody></table></div>`;
       };
 
+      /* ---------- Stock In / Stock Out / Back Order: date-filtered views ----------
+       Source: /api/inventory/movements (one row per recorded movement, with its
+       movement number), filtered by date in the browser - the same yyyy-mm-dd
+       string comparison the Inventory page's From/To filter uses. Filtering only
+       reads records; it never creates or changes any. If the signed-in user
+       can't read movements, falls back to /api/reports/<key>/data (filtered by
+       its Date column; rows can't be opened as receipts in that case). */
+      const MOVE_REPORTS = {
+        'stock-in':   { type: 'RECEIPT',  title: 'Stock In Report',   sub: 'Materials received into inventory', qty: 'Qty In' },
+        'stock-out':  { type: 'ISSUANCE', title: 'Stock Out Report',  sub: 'Materials issued to clients / projects', qty: 'Qty Out' },
+        'back-order': { type: 'RETURN',   title: 'Back Order Report', sub: 'Materials returned by clients / projects', qty: 'Qty Returned' },
+      };
+      const PRESETS = [['all','All'], ['today','Today'], ['yesterday','Yesterday'], ['week','This Week'], ['month','This Month'], ['custom','Custom']];
+      const iso = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      function presetRange(p){
+        const now = new Date(); const d0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (p === 'today') return { from: iso(d0), to: iso(d0) };
+        if (p === 'yesterday') { const y = new Date(d0); y.setDate(y.getDate() - 1); return { from: iso(y), to: iso(y) }; }
+        if (p === 'week') {   // calendar week, Monday to Sunday
+          const mon = new Date(d0); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+          const sun = new Date(mon); sun.setDate(sun.getDate() + 6); return { from: iso(mon), to: iso(sun) };
+        }
+        if (p === 'month') return { from: iso(new Date(d0.getFullYear(), d0.getMonth(), 1)), to: iso(new Date(d0.getFullYear(), d0.getMonth() + 1, 0)) };
+        return { from: '', to: '' };
+      }
+      const fmtDay = (s) => s ? new Date(s + 'T00:00:00').toLocaleDateString('en-PH', { year:'numeric', month:'short', day:'numeric' }) : '';
+      const periodLabel = ({ from, to }) => !from && !to ? 'All dates'
+        : from === to ? fmtDay(from) : `${from ? fmtDay(from) : 'Beginning'} \u2013 ${to ? fmtDay(to) : 'Today'}`;
+      const inRange = (date, { from, to }) => { const d = String(date || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); };
+      // Back orders live in their own table/id-space (back_order_id), so
+      // they're numbered "BKO-####" here too, matching buildReceiptHTML.
+      const movNo = (id, kind) => `${kind === 'RETURN' ? 'BKO' : 'MOV'}-${String(id).padStart(4,'0')}`;
+      const dash = (v) => (v && v !== '\u2014') ? v : '\u2014';
+
+      const mv = { key: null, preset: 'all', movements: null, fallback: null, items: null, viewing: null };
+
+      async function loadMoveData(){
+        // Item details (price / supplier / location) for receipts; optional.
+        try { const r = await fetch('/api/inventory'); const j = await r.json(); if (j.ok) mv.items = j.data; } catch (_) {}
+        // Stock In / Stock Out come from /api/inventory/movements; Back
+        // Order has its own table/endpoint now - same row shape either way
+        // (movementId, type, date, backOrderBy, disposition, ...), so the
+        // rest of this file (filtering, receipts) doesn't need to care which.
+        const endpoint = mv.key === 'back-order' ? '/api/inventory/backorders' : '/api/inventory/movements';
+        try {
+          const r = await fetch(endpoint); const j = await r.json();
+          if (j.ok) { mv.movements = j.data; return; }
+        } catch (_) {}
+        mv.movements = null;   // no access -> fallback report data
+        const r = await fetch(`/api/reports/${mv.key}/data`); const j = await r.json();
+        if (!j.ok) throw new Error(j.error || 'Could not load the report.');
+        mv.fallback = j.data;
+      }
+      const itemOf = (code) => (mv.items || (typeof INVENTORY !== 'undefined' ? INVENTORY : [])).find(i => i.id === code) || {};
+
+      function filterBar(){
+        const btns = PRESETS.map(([k, label]) =>
+          `<button type="button" class="btn btn-sm ${mv.preset === k ? 'btn-primary' : 'btn-soft'}" data-preset="${k}" aria-pressed="${mv.preset === k}">${label}</button>`).join('');
+        const custom = mv.preset === 'custom' ? `
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <label class="small text-muted-2" for="rpFrom">From</label><input type="date" class="form-control form-control-sm" style="max-width:170px" id="rpFrom" value="${currentRange.from}">
+            <label class="small text-muted-2" for="rpTo">To</label><input type="date" class="form-control form-control-sm" style="max-width:170px" id="rpTo" value="${currentRange.to}">
+          </div>` : '';
+        return `<div class="mb-3 no-print"><div class="d-flex flex-wrap gap-1" role="group" aria-label="Date filter">${btns}</div>${custom}</div>`;
+      }
+
+      function summaryCards(stats){
+        return `<div class="row g-2 mb-3">${stats.map(([label, value]) => `
+          <div class="col-6 col-md-3"><div class="border rounded-3 p-2 h-100" style="border-color:var(--border)!important">
+            <div class="small text-muted-2">${escapeHTML(label)}</div><div class="fw-bold">${escapeHTML(String(value))}</div></div></div>`).join('')}</div>`;
+      }
+      const qtyByUnit = (list) => {
+        const by = {}; list.forEach(m => { by[m.unit] = (by[m.unit] || 0) + (Number(m.qty) || 0); });
+        const parts = Object.entries(by).map(([u, q]) => `${NUM(q)} ${u}`);
+        return parts.length ? parts.join(' \u00b7 ') : '0';
+      };
+
+      function renderMoveReport(){
+        const cfg = MOVE_REPORTS[mv.key];
+        rpTitle.textContent = cfg.title;
+        const header = `
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div><div class="fw-bold" style="color:var(--primary)">PARABELLUM STEEL &amp; IRON WORKS</div>
+            <div class="small text-muted-2">${escapeHTML(cfg.sub)} \u00b7 <span class="fw-medium text-dark">${escapeHTML(periodLabel(currentRange))}</span></div></div>
+            <div class="small text-muted-2 text-end">Generated ${today}<br>by ${escapeHTML(CURRENT_USER.name || '')}</div>
+          </div><hr class="mt-2">`;
+
+        if (!mv.movements) {   // fallback: server-formatted rows, filtered by their Date column
+          const d = mv.fallback; const di = d.columns.findIndex(c => /date/i.test(c));
+          const rows = di < 0 ? d.rows : d.rows.filter(r => inRange(r[di], currentRange));
+          rpBody.innerHTML = filterBar() + header + summaryCards([['Transactions', rows.length]])
+            + `<div class="table-wrap"><table class="table table-soft"><thead><tr>${d.columns.map(c => `<th>${escapeHTML(c)}</th>`).join('')}</tr></thead><tbody>${
+                rows.length ? rows.map(r => `<tr>${r.map(c => `<td>${escapeHTML(String(c))}</td>`).join('')}</tr>`).join('')
+                : `<tr><td colspan="${d.columns.length}" class="text-center text-muted-2 py-3">No transactions in this period.</td></tr>`}</tbody></table></div>`;
+          return;
+        }
+
+        const list = mv.movements.filter(m => m.type === cfg.type && inRange(m.date, currentRange))
+          .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.movementId - a.movementId);
+        const stats = [['Transactions', list.length], [`Total ${cfg.qty}`, qtyByUnit(list)], ['Materials', new Set(list.map(m => m.id)).size]];
+        if (cfg.type === 'ISSUANCE') stats.push(['Projects / References', new Set(list.map(m => m.remarks).filter(Boolean)).size]);
+        else if (cfg.type === 'RETURN') stats.push(['Pending Disposition', list.filter(m => !m.disposition).length]);
+        else stats.push(['Recorded by', new Set(list.map(m => m.recordedBy).filter(v => v && v !== '\u2014')).size + ' staff']);
+
+        const extraHead = cfg.type === 'RECEIPT' ? '<th>Supplier</th><th>Remarks</th>'
+          : cfg.type === 'ISSUANCE' ? '<th>Project / Reference</th>' : '<th>Returned By</th><th>Reason</th><th>Disposition</th>';
+        const extraCells = (m) => cfg.type === 'RECEIPT'
+          ? `<td>${escapeHTML(dash(itemOf(m.id).sup))}</td><td class="text-muted-2">${escapeHTML(dash(m.remarks))}</td>`
+          : cfg.type === 'ISSUANCE' ? `<td>${escapeHTML(dash(m.remarks))}</td>`
+          : `<td>${escapeHTML(dash(m.backOrderBy))}</td><td class="text-muted-2">${escapeHTML(dash(m.remarks))}</td><td>${escapeHTML(m.disposition || 'Pending')}</td>`;
+        const cols = 7 + (cfg.type === 'ISSUANCE' ? 1 : cfg.type === 'RECEIPT' ? 2 : 3);
+        rpBody.innerHTML = filterBar() + header + summaryCards(stats) + `
+          <div class="table-wrap"><table class="table table-soft table-hover mb-1"><thead><tr>
+            <th>Ref No.</th><th>Date</th><th>Material</th><th>Category</th><th class="text-end">${cfg.qty}</th><th>Unit</th>${extraHead}<th>Recorded By</th></tr></thead>
+            <tbody>${list.length ? list.map(m => `<tr role="button" tabindex="0" style="cursor:pointer" data-open-movement="${m.movementId}" title="Open receipt">
+                <td class="fw-id">${movNo(m.movementId, m.type)}</td><td class="text-muted-2" style="white-space:nowrap">${escapeHTML(m.date)}</td>
+                <td><div class="fw-medium">${escapeHTML(m.name)}</div><div class="small text-muted-2">${escapeHTML(m.id)}</div></td>
+                <td>${escapeHTML(m.cat)}</td><td class="text-end">${NUM(m.qty)}</td><td>${escapeHTML(m.unit)}</td>
+                ${extraCells(m)}<td class="text-muted-2">${escapeHTML(dash(m.recordedBy))}</td></tr>`).join('')
+              : `<tr><td colspan="${cols}" class="text-center text-muted-2 py-3">No transactions in this period.</td></tr>`}</tbody></table></div>
+          ${list.length ? '<div class="small text-muted-2 no-print"><i class="bi bi-hand-index me-1"></i>Click a row to open its receipt.</div>' : ''}`;
+      }
+
+      // Drill-in: a movement's full receipt, same renderer as the Inventory page.
+      function openMovementReceipt(id){
+        const m = (mv.movements || []).find(x => String(x.movementId) === String(id)); if (!m) return;
+        mv.viewing = m.movementId;
+        const item = itemOf(m.id);
+        const common = [['Date Recorded', m.date], ['Recorded by', m.recordedBy]];
+        const fields = m.type === 'RECEIPT'
+          ? [['Supplier', item.sup], ['Warehouse / Location', item.loc], ['Remarks / Reference', m.remarks], ...common]
+          : m.type === 'ISSUANCE' ? [['Project / Reference', m.remarks], ['Location', item.loc], ...common]
+          : [['Returned by (Client / Project)', m.backOrderBy], ['Reason for Return', m.remarks], ['Disposition', m.disposition || 'Pending'], ['Location', item.loc], ...common];
+        rpTitle.textContent = `${RECEIPT_KINDS[m.type].label} Receipt`;
+        rpBody.innerHTML = `<button type="button" class="btn btn-light-2 btn-sm mb-3 no-print" data-back-to-report><i class="bi bi-arrow-left me-1"></i>Back to report</button>`
+          + window.buildReceiptHTML(m.type, [{ movementId: m.movementId, id: m.id, name: m.name, cat: m.cat, qty: m.qty, unit: m.unit, price: Number(item.price) || 0 }], {
+              when: m.date, fields, recordedBy: m.recordedBy && m.recordedBy !== '\u2014' ? m.recordedBy : '',
+              counterparty: m.type === 'RECEIPT' ? (item.sup || '') : (m.type === 'RETURN' ? (m.backOrderBy || '') : ''),
+              note: 'Reprint of a recorded movement. Unit price shown is the item\u2019s current price.',
+            });
+      }
+
+      rpBody.addEventListener('click', (e) => {
+        if (!mv.key) return;
+        const p = e.target.closest('[data-preset]');
+        if (p) { mv.preset = p.dataset.preset; if (mv.preset !== 'custom') currentRange = presetRange(mv.preset); renderMoveReport(); return; }
+        if (e.target.closest('[data-back-to-report]')) { mv.viewing = null; renderMoveReport(); return; }
+        const row = e.target.closest('[data-open-movement]');
+        if (row) openMovementReceipt(row.dataset.openMovement);
+      });
+      rpBody.addEventListener('keydown', (e) => {
+        const row = e.target.closest('[data-open-movement]');
+        if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openMovementReceipt(row.dataset.openMovement); }
+      });
+      rpBody.addEventListener('change', (e) => {
+        if (!mv.key || !['rpFrom', 'rpTo'].includes(e.target.id)) return;
+        const f = document.getElementById('rpFrom')?.value || '', t = document.getElementById('rpTo')?.value || '';
+        currentRange = (f && t && f > t) ? { from: t, to: f } : { from: f, to: t };   // swap if reversed
+        renderMoveReport();
+      });
+
       document.querySelectorAll('[data-gen]').forEach(btn => btn.addEventListener('click', async () => {
         const key = btn.dataset.gen;
         currentKey = key;
-        document.getElementById('rpTitle').textContent = 'Loading\u2026';
-        document.getElementById('rpBody').innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>';
+        mv.key = MOVE_REPORTS[key] ? key : null;
+        mv.preset = 'all'; mv.movements = null; mv.fallback = null; mv.viewing = null;
+        currentRange = { from: '', to: '' };
+        rpTitle.textContent = 'Loading\u2026';
+        rpBody.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>';
         modal.show();
         try {
+          if (mv.key) { await loadMoveData(); renderMoveReport(); return; }
           const res = await fetch(`/api/reports/${key}/data`);
           const json = await res.json();
           if (!json.ok) throw new Error(json.error);
           const d = json.data;
-          document.getElementById('rpTitle').textContent = d.title;
-          document.getElementById('rpBody').innerHTML = wrap(d.subtitle, d.columns, d.rows);
+          rpTitle.textContent = d.title;
+          rpBody.innerHTML = wrap(d.subtitle, d.columns, d.rows);
         } catch (err) {
-          document.getElementById('rpTitle').textContent = 'Report Preview';
-          document.getElementById('rpBody').innerHTML =
-            `<div class="alert alert-danger mb-0">${escapeHTML(err.message)}</div>`;
+          rpTitle.textContent = 'Report Preview';
+          rpBody.innerHTML = `<div class="alert alert-danger mb-0">${escapeHTML(err.message)}</div>`;
         }
       }));
 
-      // Preview modal's own Export buttons download whichever report is open.
+      // Preview modal's own Export buttons download whichever report is open
+      // (for the movement reports, with the chosen period as ?from=&to=).
+      const exportUrl = (fmt) => {
+        const qs = mv.key && (currentRange.from || currentRange.to)
+          ? '?' + new URLSearchParams({ from: currentRange.from, to: currentRange.to }).toString() : '';
+        return `/api/reports/${currentKey}/${fmt}${qs}`;
+      };
       document.getElementById('rpExportPdf')?.addEventListener('click', () => {
-        if (currentKey) window.location.href = `/api/reports/${currentKey}/pdf`;
+        if (currentKey) { if (window.STATIC_PREVIEW) return window.previewNotice('PDF export'); window.location.href = exportUrl('pdf'); }
       });
       document.getElementById('rpExportExcel')?.addEventListener('click', () => {
-        if (currentKey) window.location.href = `/api/reports/${currentKey}/excel`;
+        if (currentKey) { if (window.STATIC_PREVIEW) return window.previewNotice('Excel export'); window.location.href = exportUrl('excel'); }
       });
     });
   </script>

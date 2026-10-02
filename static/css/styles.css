@@ -378,14 +378,14 @@ a { text-decoration: none; }
 .act-btn:hover { background: var(--primary-soft); color: var(--primary); }
 .act-btn.danger:hover { background: rgba(192,57,43,.12); color: var(--danger); }
 
-/* Back Orders row actions: Refurbished / Returned checkmark toggles,
+/* Back Orders row actions: Reimbursed / Replaced checkmark toggles,
    in place of the View/Print/Delete icons the other movement tables use. */
 .disposition-btn { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border);
   background:#fff; border-radius:20px; padding:4px 10px; font-size:.72rem; font-weight:500;
   color:var(--text-muted); white-space:nowrap; cursor:pointer; transition:background .12s, border-color .12s, color .12s; }
 .disposition-btn:hover { border-color: var(--primary); color: var(--primary); }
-.disposition-btn.is-active.is-refurbished { border-color: var(--success); background: rgba(31,157,85,.1); color: var(--success); }
-.disposition-btn.is-active.is-returned { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.disposition-btn.is-active.is-reimbursed { border-color: var(--success); background: rgba(31,157,85,.1); color: var(--success); }
+.disposition-btn.is-active.is-replaced { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
 
 /* ----------------------------- Forms ----------------------------- */
 .form-label { font-weight: 600; font-size: .82rem; color: var(--text); margin-bottom: 5px; }
@@ -509,6 +509,15 @@ a { text-decoration: none; }
 /* Print (reports / invoices) */
 @media print {
   .sidebar, .topbar, .app-footer, .no-print { display: none !important; }
+  /* When a modal (receipt / report preview) is open, print ONLY that modal. */
+  body.modal-open .page > :not(.modal.show), body.modal-open .toast-container, body.modal-open .modal-backdrop { display: none !important; }
+  body.modal-open > :not(.app):not(.modal.show) { display: none !important; }
+  body.modal-open .modal.show { position: static; display: block !important; overflow: visible !important; }
+  body.modal-open .modal.show .modal-dialog { max-width: 100%; margin: 0; transform: none !important; height: auto; min-height: 0; display: block; }
+  body.modal-open, body.modal-open .main, body.modal-open .modal.show .modal-content { background: #fff !important; }
+  body.modal-open .modal.show .modal-content { border: 0; box-shadow: none; max-height: none; }
+  body.modal-open .modal.show .modal-body { overflow: visible !important; }
+  body.modal-open .modal.show .modal-header, body.modal-open .modal.show .modal-footer { display: none !important; }
   .main { margin-left: 0; }
   .page { padding: 0; }
   .card { box-shadow: none; border: 1px solid #ddd; }

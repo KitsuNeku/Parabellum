@@ -156,31 +156,30 @@ def build_stock_out_report(db_config):
 
 def build_back_order_report(db_config):
     """
-    Every RETURN movement - materials returned by a customer/project (the
-    Inventory page's "Back Orders (Returns from Customers)" table). Not a
-    supplier re-order; see the matching comment on the inventory page's
-    Record Return modal. A back order is logged here but does NOT add to
-    the material's on-hand stock (see _apply_movement in app.py), so this
-    report is the only place that quantity is counted as "returned".
-    Includes a Back-Ordered By column - the customer or project that
-    returned the material - separate from Recorded By (the staff member
-    who entered it into the system).
+    Every back order - materials returned by a customer/project (the
+    Inventory page's "Back Orders (Returns from Customers)" table), from
+    its own back_orders table (not stock_movements - see the Back Orders
+    redesign in schema.sql). Not a supplier re-order; see the matching
+    comment on the inventory page's Record Return modal. Includes a
+    Back-Ordered By column - the customer or project that returned the
+    material - separate from Recorded By (the staff member who entered
+    it), and a Disposition column: "Replaced" (added back to stock),
+    "Reimbursed" (written off), or "Pending" if not yet decided.
     """
     rows = execute_query(db_config, """
-        SELECT m.material_name, m.category, sm.quantity, m.unit,
-               sm.movement_date, sm.remarks, sm.recorded_by, sm.back_order_by
-        FROM stock_movements sm
-        JOIN materials m ON m.material_id = sm.material_id
-        WHERE sm.movement_type = 'RETURN'
-        ORDER BY sm.movement_date DESC, sm.movement_id DESC;
+        SELECT m.material_name, m.category, bo.quantity, m.unit,
+               bo.return_date, bo.remarks, bo.recorded_by, bo.back_order_by, bo.disposition
+        FROM back_orders bo
+        JOIN materials m ON m.material_id = bo.material_id
+        ORDER BY bo.return_date DESC, bo.back_order_id DESC;
     """, fetch=True)
     out = [[r["material_name"], r["category"] or "\u2014",
             f"{float(r['quantity']):g} {r['unit']}",
-            str(r["movement_date"]) if r["movement_date"] else "\u2014",
+            str(r["return_date"]) if r["return_date"] else "\u2014",
             r["remarks"] or "\u2014", r["back_order_by"] or "\u2014",
-            r["recorded_by"] or "\u2014"] for r in rows]
+            r["recorded_by"] or "\u2014", r["disposition"] or "Pending"] for r in rows]
     return ("Back Order Report", "Materials returned from customers/projects",
-            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Back-Ordered By", "Recorded By"], out)
+            ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Back-Ordered By", "Recorded By", "Disposition"], out)
 
 
 

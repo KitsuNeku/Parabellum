@@ -188,15 +188,16 @@
         </div></div></div>
         <!-- Stock Summary: total stock on hand + total value (qty x unit price),
              then a per-item breakdown. Figures come straight from each item's
-             current_stock, which (per the Back Order redesign) never includes
-             returned/back-ordered quantities - so this is on-hand stock only,
-             back orders excluded by construction, not filtered out here. -->
+             current_stock, which only ever reflects actual Stock In / Stock
+             Out plus any back order marked "Replaced" (the one disposition
+             that adds back to stock - see the Back Orders table). A pending
+             or "Reimbursed" back order is never included here. -->
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
             <h2 class="panel-title"><i class="bi bi-calculator me-2" style="color:var(--primary)"></i>Stock Summary</h2>
             <span class="badge b-neutral" id="sumItemCount">0 items</span>
           </div>
-          <p class="panel-sub mb-2">On-hand stock per item and its value. Back-ordered quantities are not included.</p>
+          <p class="panel-sub mb-2">On-hand stock per item and its value. Includes back orders marked Replaced.</p>
           <div class="d-flex flex-wrap gap-2 column-gap-3 mb-2">
             <div class="flex-fill"><div class="small text-muted-2">Total Stock Value</div><div class="fw-bold fs-5" style="color:var(--primary)" id="sumTotalValue">—</div></div>
             <div class="flex-fill"><div class="small text-muted-2">Total Stock</div><div class="fw-bold fs-5" id="sumTotalQty">—</div></div>
@@ -257,16 +258,17 @@
 
       <!-- Stock Movement Summary table -->
       <!-- Per-item aggregate: Total In (RECEIPT), Total Out (ISSUANCE),
-           and Back Orders (RETURN — material that came back from a
-           customer, logged for the record but NOT added to stock).
-           Net Stock = In - Out (Back Orders is shown for reference only,
-           it isn't part of this total). -->
+           and Back Orders (material that came back from a customer,
+           from its own back_orders table). Net Stock = In - Out + any
+           Back Orders marked "Replaced" (the only disposition that
+           adds back into current_stock - see _set_back_order_disposition
+           in app.py and /api/inventory/summary's query). -->
       <div class="card mb-4">
         <div class="card-body">
           <div class="card-title-row mb-2">
             <h2 class="panel-title mb-0"><i class="bi bi-clipboard-data me-2" style="color:var(--primary)"></i>Stock Movement Summary</h2>
           </div>
-          <p class="panel-sub mb-3">Per-item totals across all recorded movements. Back Orders are units returned by customers, logged for the record - they do not add to stock.</p>
+          <p class="panel-sub mb-3">Per-item totals across all recorded movements. Back Orders are units returned by customers; Net Stock includes the ones marked Replaced.</p>
           <div class="table-wrap"><table class="table" id="stockSummaryTable">
             <thead><tr>
               <th>Item Code</th><th>Item Name</th><th>Category</th>
@@ -332,7 +334,7 @@
           <div class="card-title-row mb-2">
             <h2 class="panel-title mb-0"><i class="bi bi-arrow-counterclockwise me-2" style="color:var(--primary)"></i>Back Orders (Returns from Customers)</h2>
           </div>
-          <p class="panel-sub mb-3">Materials returned from customers or projects — logged for the record, not added back to on-hand stock.</p>
+          <p class="panel-sub mb-3">Materials returned from customers or projects. Marking one "Replaced" adds it back to on-hand stock; "Reimbursed" does not.</p>
           <div class="table-wrap"><table class="table" id="returnsTable">
             <thead><tr>
               <th>Item</th><th>Category</th><th class="text-end">Qty Returned</th>
@@ -470,7 +472,7 @@
             <div class="small text-muted-2"><i class="bi bi-person-check me-1"></i>Recorded by: <strong>{{ current_user.name }}</strong> ({{ current_user.role }})</div>
             <div class="small text-muted-2">Date: <span class="fw-medium" id="returnDate">—</span></div>
           </div>
-          <div class="col-12"><div class="alert alert-soft-info small mb-0"><i class="bi bi-info-circle me-1"></i>This is logged in the Back Orders table and the Stock Movement Summary, but it does <strong>not</strong> change this item's on-hand stock count.</div></div>
+          <div class="col-12"><div class="alert alert-soft-info small mb-0"><i class="bi bi-info-circle me-1"></i>This logs the return in the Back Orders table. It does <strong>not</strong> change on-hand stock yet — only marking it "Replaced" there adds it back.</div></div>
           <div class="col-12 position-relative">
             <label class="form-label">Select Item</label>
             <input type="text" class="form-control" id="returnItemSearch" placeholder="Search item name or ID…" autocomplete="off" required>
@@ -480,6 +482,7 @@
           </div>
           <div class="col-md-6"><label class="form-label">Quantity Returned</label><input type="number" class="form-control" name="qty" min="1" value="0" required></div>
           <div class="col-md-6"><label class="form-label">Back-Ordered By</label><input class="form-control" name="customer" placeholder="e.g. M. Santos or PRJ-301"></div>
+          <div class="col-md-6"><label class="form-label">Original Stock Out Ref. <span class="text-muted-2 fw-normal">(if known)</span></label><input class="form-control" name="stockOutRef" placeholder="e.g. MOV-0102 or PRJ-301"></div>
           <div class="col-12"><label class="form-label">Reason for Return</label><input class="form-control" name="remarks" placeholder="e.g. Wrong size delivered, item unused"></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Confirm Return</button></div>
@@ -508,11 +511,13 @@
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button></div>
       </div></div></div>
 
-      <!-- Stock Movement Slip (print) -->
-      <div class="modal fade" id="moveSlipModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2" style="color:var(--primary)"></i>Stock Movement Slip</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <!-- Transaction receipt: pops up after Confirm (Stock In / Stock Out / Back
+           Order) and when reprinting a row. Printing is optional - Close skips it.
+           Content comes from showTransactionReceipt() in app.js. -->
+      <div class="modal fade" id="moveSlipModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2" style="color:var(--primary)"></i>Receipt</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body" id="moveSlipBody"></div>
-        <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" data-print><i class="bi bi-printer me-1"></i>Print Slip</button></div>
+        <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" data-print><i class="bi bi-printer me-1"></i>Print Receipt</button></div>
       </div></div></div>
 
     </main>
@@ -682,6 +687,10 @@
        call per row, in order). Reset whenever the modal opens or is closed
        without confirming. */
       let stockOutCart = [];      // [{ itemId, name, code, unit, available, requestedQty }]
+      // Rows the SERVER confirmed as issued in this request (never just-reserved
+      // cart rows), plus the client/project details captured at confirm time.
+      let stockOutIssued = [];
+      let stockOutReceiptInfo = null;
       let stockOutBusy = false;   // true while Confirm is issuing rows
       const so = {
         modal:   document.getElementById('stockOutModal'),
@@ -834,6 +843,7 @@
 
       function resetStockOut(){
         stockOutCart = [];
+        stockOutIssued = []; stockOutReceiptInfo = null;
         so.project.value = ''; so.project.classList.remove('is-invalid');
         so.search.value = ''; so.itemId.value = ''; so.qty.value = '';
         setCartError(''); hideStockOutResult();
@@ -841,7 +851,29 @@
         renderStockOutCart();
       }
       so.modal?.addEventListener('show.bs.modal', resetStockOut);
-      so.modal?.addEventListener('hidden.bs.modal', () => { if (!stockOutBusy) resetStockOut(); });
+      // When the request window closes, show ONE receipt for every item actually
+      // issued in it (full success, or partly issued and then closed).
+      function showStockOutReceipt(){
+        if (!stockOutIssued.length || !stockOutReceiptInfo) return;
+        const info = stockOutReceiptInfo;
+        const items = stockOutIssued.map(r => {
+          const i = inventoryStore.find(r.itemId) || {};
+          return { movementId: r.movementId, id: r.itemId, name: r.name || i.name, cat: i.cat,
+                   qty: r.requestedQty, unit: r.unit || i.unit, price: Number(i.price) || 0 };
+        });
+        const locs = [...new Set(stockOutIssued.map(r => (inventoryStore.find(r.itemId) || {}).loc).filter(Boolean))].join(', ');
+        window.showTransactionReceipt('ISSUANCE', items, {
+          when: info.when,
+          fields: [['Client / Customer', info.client], ['Project', info.project], ['Delivery Address', info.address],
+                   ['Contact', info.contact], ['Purpose / Reference', info.projectId], ['Location', locs], ['Released by', info.user]],
+          recordedBy: info.user, counterparty: '',
+        });
+      }
+      so.modal?.addEventListener('hidden.bs.modal', () => {
+        if (stockOutBusy) return;
+        showStockOutReceipt();
+        resetStockOut();
+      });
       // Don't let the modal close mid-confirm (rows are being issued one by one).
       so.modal?.addEventListener('hide.bs.modal', (e) => { if (stockOutBusy) e.preventDefault(); });
 
@@ -875,6 +907,11 @@
         }
         const projectId = so.project.value;
         const rows = stockOutCart.map(r => ({ ...r }));
+        const proj = (typeof PROJECTS !== 'undefined') ? PROJECTS.find(x => x.id === projectId) : null;
+        const txt = (el) => { const t = (el?.textContent || '').trim(); return t === '—' ? '' : t; };
+        stockOutReceiptInfo = { projectId, project: proj ? `${proj.id} — ${proj.name}` : projectId,
+          client: txt(so.client), address: txt(so.address), contact: txt(so.contact),
+          user: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || '', when: window.receiptNow() };
         hideStockOutResult();
         setStockOutBusy(true, `Issuing 1 of ${rows.length}\u2026`);
         let outcome;
@@ -887,8 +924,9 @@
           setStockOutBusy(false);
         }
 
+        stockOutIssued.push(...(outcome.issued || []));   // only server-confirmed deductions
         if (!outcome.failed) {
-          bootstrap.Modal.getInstance(so.modal)?.hide();   // hidden.bs.modal resets the cart
+          bootstrap.Modal.getInstance(so.modal)?.hide();   // hidden.bs.modal shows the receipt, then resets the cart
           showToast(`Stock issued for ${projectId} \u2014 ${plural(outcome.issued.length, 'item')}`, 'success');
           return;
         }
@@ -906,7 +944,8 @@
             ? `<div class="mb-1"><i class="bi bi-check-circle me-1"></i>Issued: ${names(outcome.issued)}.</div>`
             : `<div class="mb-1"><i class="bi bi-x-circle me-1"></i>Nothing was issued.</div>`)
           + `<div class="mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Stopped at ${names([outcome.failed.row])}: ${escapeHTML(outcome.failed.error)}</div>`
-          + `<div>The ${plural(stockOutCart.length, 'item')} still listed ${stockOutCart.length === 1 ? 'was' : 'were'} not issued. Adjust or remove ${stockOutCart.length === 1 ? 'it' : 'them'}, then confirm again.</div>`);
+          + `<div>The ${plural(stockOutCart.length, 'item')} still listed ${stockOutCart.length === 1 ? 'was' : 'were'} not issued. Adjust or remove ${stockOutCart.length === 1 ? 'it' : 'them'}, then confirm again.</div>`
+          + (stockOutIssued.length ? `<div class="mt-1"><i class="bi bi-receipt me-1"></i>A receipt for the issued items appears when you finish or close this request.</div>` : ''));
         if (outcome.issued.length) showToast(`${plural(outcome.issued.length, 'item')} issued for ${projectId} \u2014 ${plural(stockOutCart.length, 'item')} still pending`, 'warning', 'bi-exclamation-triangle');
         else showToast(outcome.failed.error, 'error', 'bi-exclamation-triangle');
       });
@@ -923,6 +962,7 @@
        alongside the materials list itself. This page filters/paginates
        that array into two independent tables by `type`. */
       window.ALL_MOVEMENTS = window.ALL_MOVEMENTS || [];
+      window.ALL_BACKORDERS = window.ALL_BACKORDERS || [];
       window.STOCK_SUMMARY = window.STOCK_SUMMARY || [];
 
       const MOVE_PAGE_SIZE = 10;
@@ -942,22 +982,22 @@
       document.getElementById('moveSearchInput')?.addEventListener('input', (e) => {
         moveSearchQuery = e.target.value.toLowerCase().trim();
         resetAllPages();
-        renderMovements(); renderStockSummary();
+        renderMovements(); renderBackOrders(); renderStockSummary();
       });
       document.getElementById('moveCategoryFilter')?.addEventListener('change', (e) => {
         moveCategoryFilter = e.target.value;
         resetAllPages();
-        renderMovements(); renderStockSummary();
+        renderMovements(); renderBackOrders(); renderStockSummary();
       });
       document.getElementById('moveDateFrom')?.addEventListener('change', (e) => {
         moveDateFrom = e.target.value;
         resetAllPages();
-        renderMovements();
+        renderMovements(); renderBackOrders();
       });
       document.getElementById('moveDateTo')?.addEventListener('change', (e) => {
         moveDateTo = e.target.value;
         resetAllPages();
-        renderMovements();
+        renderMovements(); renderBackOrders();
       });
       document.getElementById('moveDateClearBtn')?.addEventListener('click', () => {
         moveDateFrom = ''; moveDateTo = '';
@@ -966,7 +1006,7 @@
         if (fromEl) fromEl.value = '';
         if (toEl) toEl.value = '';
         resetAllPages();
-        renderMovements();
+        renderMovements(); renderBackOrders();
       });
 
       /* ---------- "Search" button (record-level filter) ----------
@@ -993,14 +1033,14 @@
       stockSearchInput?.addEventListener('input', (e) => {
         stockTableQuery = e.target.value.toLowerCase().trim();
         resetAllPages();
-        renderMovements();
+        renderMovements(); renderBackOrders();
       });
       stockSearchInput?.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         stockSearchInput.value = '';
         stockTableQuery = '';
         resetAllPages();
-        renderMovements();
+        renderMovements(); renderBackOrders();
         setStockSearchOpen(false);
         stockSearchBtn?.focus();
       });
@@ -1052,51 +1092,54 @@
       /* Back Orders only: the Actions column here isn't View/Print/Delete
        (deleting a material from a back-order row never made much sense) -
        it's two checkmark toggles for what staff decided to do with the
-       item once it came back: Refurbished or Returned. Mutually exclusive
+       item once it came back: Reimbursed or Replaced. Mutually exclusive
        (picking one clears the other); clicking the active one again
        clears it back to "not yet marked". Persisted via
        /api/inventory/return/disposition, keyed by movementId since each
        back-order record needs its own disposition, not the material's. */
       function backOrderActionBtns(m){
-        const refurbished = m.disposition === 'Refurbished';
-        const returned = m.disposition === 'Returned';
+        const reimbursed = m.disposition === 'Reimbursed';
+        const replaced = m.disposition === 'Replaced';
         return `<div class="d-inline-flex gap-1">
-            <button type="button" class="disposition-btn${refurbished ? ' is-active is-refurbished' : ''}"
-                    data-disposition-btn data-disposition="Refurbished" data-movement-id="${m.movementId}"
-                    data-bs-toggle="tooltip" title="${refurbished ? 'Marked Refurbished — click to clear' : 'Mark as Refurbished'}">
-              <i class="bi ${refurbished ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Refurbished
+            <button type="button" class="disposition-btn${reimbursed ? ' is-active is-reimbursed' : ''}"
+                    data-disposition-btn data-disposition="Reimbursed" data-movement-id="${m.movementId}"
+                    data-bs-toggle="tooltip" title="${reimbursed ? 'Marked Reimbursed — click to clear' : 'Mark as Reimbursed'}">
+              <i class="bi ${reimbursed ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Reimbursed
             </button>
-            <button type="button" class="disposition-btn${returned ? ' is-active is-returned' : ''}"
-                    data-disposition-btn data-disposition="Returned" data-movement-id="${m.movementId}"
-                    data-bs-toggle="tooltip" title="${returned ? 'Marked Returned — click to clear' : 'Mark as Returned'}">
-              <i class="bi ${returned ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Returned
+            <button type="button" class="disposition-btn${replaced ? ' is-active is-replaced' : ''}"
+                    data-disposition-btn data-disposition="Replaced" data-movement-id="${m.movementId}"
+                    data-bs-toggle="tooltip" title="${replaced ? 'Marked Replaced — click to clear' : 'Mark as Replaced'}">
+              <i class="bi ${replaced ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Replaced
             </button>
+            <button class="act-btn print-move" data-bs-toggle="tooltip" title="Print Receipt" data-movement-id="${m.movementId}"><i class="bi bi-printer"></i></button>
           </div>`;
       }
 
-      const moveSlipModal = new bootstrap.Modal('#moveSlipModal');
+      /* Reprint one recorded movement (row "Print" button). Same receipt as the
+       one shown right after Confirm (showTransactionReceipt in app.js). Uses
+       what the movement record stores; supplier / price / location come from
+       the item's CURRENT record, since movements don't store them yet. */
       function showMoveSlip(movementId){
-        const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
+        // Stock In/Out movements and Back Orders are two separate tables/
+        // arrays now - search whichever one actually has this id.
+        const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId)
+               || (window.ALL_BACKORDERS || []).find(x => x.movementId === movementId);
         if (!m) return;
-        const meta = m.type === 'RECEIPT'
-          ? { title: 'STOCK IN RECEIPT', label: 'Stock In',   badge: 'b-success' }
+        const item = inventoryStore.find(m.id) || {};
+        const common = [['Date Recorded', m.date], ['Recorded by', m.recordedBy]];
+        const fields = m.type === 'RECEIPT'
+          ? [['Supplier', item.sup], ['Warehouse / Location', item.loc], ['Remarks / Reference', m.remarks], ...common]
           : m.type === 'ISSUANCE'
-            ? { title: 'STOCK OUT SLIP',   label: 'Stock Out',  badge: 'b-danger'  }
-            : { title: 'BACK ORDER SLIP',  label: 'Back Order', badge: 'b-primary' };
-        document.getElementById('moveSlipBody').innerHTML = `
-          <div class="d-flex justify-content-between align-items-start mb-3">
-            <div class="d-flex gap-2 align-items-center"><img src="{{ url_for('static', filename='assets/img/logo.svg') }}" style="width:40px"><div><div class="fw-bold" style="color:var(--primary)">PARABELLUM</div><div class="small text-muted-2">Steel &amp; Iron Works</div></div></div>
-            <div class="text-end"><div class="h5 mb-0">${meta.title}</div><div class="small text-muted-2">MOV-${String(m.movementId).padStart(4,'0')}</div></div>
-          </div><hr>
-          <div class="row small mb-3">
-            <div class="col-6"><div class="text-muted-2">Material</div><div class="fw-medium">${escapeHTML(m.name)}</div><div>${m.id}</div></div>
-            <div class="col-6 text-end"><div class="text-muted-2">Date</div><div class="fw-medium">${m.date}</div></div>
-            ${m.type === 'RETURN' ? `<div class="col-6 mt-2"><div class="text-muted-2">Back-Ordered By</div><div class="fw-medium">${escapeHTML(m.backOrderBy || '\u2014')}</div></div>` : ''}
-          </div>
-          <div class="table-responsive"><table class="table table-soft"><thead><tr><th>Category</th><th class="text-end">Quantity</th><th>Remarks</th></tr></thead>
-          <tbody><tr><td>${escapeHTML(m.cat)}</td><td class="text-end">${NUM(m.qty)} ${m.unit}</td><td>${escapeHTML(m.remarks || '\u2014')}</td></tr></tbody></table></div>
-          <div class="mt-3"><span class="badge ${meta.badge}">${meta.label}</span></div>`;
-        moveSlipModal.show();
+            ? [['Project / Reference', m.remarks], ['Location', item.loc], ...common]
+            : [['Returned by (Client / Project)', m.backOrderBy], ['Original Stock Out Ref.', m.stockOutRef], ['Reason for Return', m.remarks],
+               ['Disposition', m.disposition || 'Pending'], ['Location', item.loc], ...common];
+        window.showTransactionReceipt(m.type, [{
+          movementId: m.movementId, id: m.id, name: m.name, cat: m.cat, qty: m.qty, unit: m.unit, price: Number(item.price) || 0,
+        }], {
+          when: m.date, fields, recordedBy: m.recordedBy && m.recordedBy !== '\u2014' ? m.recordedBy : '',
+          counterparty: m.type === 'RECEIPT' ? (item.sup || '') : (m.type === 'RETURN' ? (m.backOrderBy || '') : ''),
+          note: 'Reprint of a recorded movement. Unit price shown is the item\u2019s current price.',
+        });
       }
 
       function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun, showBackOrderedBy){
@@ -1136,29 +1179,34 @@
         return clampedPage;
       }
 
+      // Shared by renderMovements() (Stock In/Out) and renderBackOrders() -
+      // both read from the same toolbar controls (search, category, date
+      // range, inline table search) even though they're two separate arrays
+      // (window.ALL_MOVEMENTS and window.ALL_BACKORDERS) now.
+      function matchesMoveFilters(m){
+        if (moveCategoryFilter && m.cat !== moveCategoryFilter) return false;
+        if (moveSearchQuery) {
+          const hay = `${m.id} ${m.name}`.toLowerCase();
+          if (!hay.includes(moveSearchQuery)) return false;
+        }
+        // m.date is "yyyy-mm-dd" (or a datetime string starting with that),
+        // which sorts/compares correctly as a plain string against the
+        // <input type="date"> values, so no Date parsing is needed.
+        const moveDate = (m.date || '').slice(0, 10);
+        if (moveDateFrom && moveDate < moveDateFrom) return false;
+        if (moveDateTo && moveDate > moveDateTo) return false;
+        if (stockTableQuery) {
+          const rec = [m.id, m.name, m.cat, m.date, m.qty, m.unit, m.remarks, m.recordedBy, m.backOrderBy]
+            .map(v => v == null ? '' : String(v)).join(' ').toLowerCase();
+          if (!rec.includes(stockTableQuery)) return false;
+        }
+        return true;
+      }
+
       function renderMovements(){
-        const filtered = (window.ALL_MOVEMENTS || []).filter(m => {
-          if (moveCategoryFilter && m.cat !== moveCategoryFilter) return false;
-          if (moveSearchQuery) {
-            const hay = `${m.id} ${m.name}`.toLowerCase();
-            if (!hay.includes(moveSearchQuery)) return false;
-          }
-          // m.date is "yyyy-mm-dd" (or a datetime string starting with that),
-          // which sorts/compares correctly as a plain string against the
-          // <input type="date"> values, so no Date parsing is needed.
-          const moveDate = (m.date || '').slice(0, 10);
-          if (moveDateFrom && moveDate < moveDateFrom) return false;
-          if (moveDateTo && moveDate > moveDateTo) return false;
-          if (stockTableQuery) {
-            const rec = [m.id, m.name, m.cat, m.date, m.qty, m.unit, m.remarks, m.recordedBy, m.backOrderBy]
-              .map(v => v == null ? '' : String(v)).join(' ').toLowerCase();
-            if (!rec.includes(stockTableQuery)) return false;
-          }
-          return true;
-        });
+        const filtered = (window.ALL_MOVEMENTS || []).filter(matchesMoveFilters);
         const inRows  = filtered.filter(m => m.type === 'RECEIPT');
         const outRows = filtered.filter(m => m.type === 'ISSUANCE');
-        const retRows = filtered.filter(m => m.type === 'RETURN');
 
         stockInPage = renderMoveSection(inRows, stockInPage,
           { tbody: 'stockInBody', count: 'stockInCount', nav: 'stockInPaginationNav', ul: 'stockInPagination' },
@@ -1167,12 +1215,22 @@
         stockOutPage = renderMoveSection(outRows, stockOutPage,
           { tbody: 'stockOutBody', count: 'stockOutCount', nav: 'stockOutPaginationNav', ul: 'stockOutPagination' },
           (p) => { stockOutPage = p; renderMovements(); }, 'stock-out');
-
-        returnsPage = renderMoveSection(retRows, returnsPage,
-          { tbody: 'returnsBody', count: 'returnsCount', nav: 'returnsPaginationNav', ul: 'returnsPagination' },
-          (p) => { returnsPage = p; renderMovements(); }, 'back-order', true);
       }
       window.renderMovements = renderMovements;
+
+      /* ---------- Back Orders table ----------
+       Its own array/table/endpoint now (window.ALL_BACKORDERS, from
+       /api/inventory/backorders) - back orders are no longer rows inside
+       stock_movements, they're a separate record type with their own
+       lifecycle (pending -> Reimbursed/Replaced). Shares the same toolbar
+       filters as Stock In/Out via matchesMoveFilters() above. */
+      function renderBackOrders(){
+        const retRows = (window.ALL_BACKORDERS || []).filter(matchesMoveFilters);
+        returnsPage = renderMoveSection(retRows, returnsPage,
+          { tbody: 'returnsBody', count: 'returnsCount', nav: 'returnsPaginationNav', ul: 'returnsPagination' },
+          (p) => { returnsPage = p; renderBackOrders(); }, 'back-order', true);
+      }
+      window.renderBackOrders = renderBackOrders;
 
       /* ---------- Stock Movement Summary (per-item aggregate) ----------
        window.STOCK_SUMMARY holds one row per material with pre-aggregated
@@ -1223,21 +1281,24 @@
       }
       window.renderStockSummary = renderStockSummary;
 
-      /* Back Orders only: persists a disposition click (Refurbished /
-       Returned) to the server, updates the local movement row so the
-       checkmark reflects it immediately, then re-renders. Clicking the
-       already-active option sends '' (clears it) - same toggle either way. */
-      async function setBackOrderDisposition(movementId, disposition){
+      /* Back Orders only: persists a disposition click (Reimbursed /
+       Replaced) to the server. Clicking the already-active option sends ''
+       (clears it) - same toggle either way. Unlike before, this CAN now
+       change the item's on-hand stock ("Replaced" adds it back - see
+       _set_back_order_disposition in app.py), so a full refreshInventory()
+       re-fetches materials/movements/back-orders/summary together, rather
+       than patching just the one row - keeping the Inventory table, Low
+       Stock badges, and Stock Movement Summary all in sync with the new
+       on-hand figure, not just the Back Orders table. */
+      async function setBackOrderDisposition(backOrderId, disposition){
         try {
           const res = await fetch('/api/inventory/return/disposition', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ movementId, disposition }),
+            body: JSON.stringify({ backOrderId, disposition }),
           });
           const json = await res.json();
           if (!json.ok) throw new Error(json.error);
-          const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
-          if (m) m.disposition = json.disposition || '';
-          renderMovements();
+          if (typeof window.refreshInventory === 'function') await window.refreshInventory();
           showToast(json.disposition ? `Marked as ${json.disposition}` : 'Disposition cleared', 'success');
         } catch (err) {
           showToast(err.message, 'error', 'bi-exclamation-triangle');
@@ -1247,18 +1308,18 @@
       /* ---------- Delegated row actions on the movement tables: View / Edit /
        Delete (they operate on the underlying MATERIAL, same as before -
        just triggered from a movement row instead of a snapshot row); Back
-       Orders also delegates its Refurbished/Returned checkmarks here. ---------- */
+       Orders also delegates its Reimbursed/Replaced checkmarks here. ---------- */
       function handleRowAction(e){
         const printBtn = e.target.closest('.print-move');
         if (printBtn) { showMoveSlip(parseInt(printBtn.dataset.movementId, 10)); return; }
 
         const dispBtn = e.target.closest('[data-disposition-btn]');
         if (dispBtn) {
-          const movementId = parseInt(dispBtn.dataset.movementId, 10);
-          const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
+          const backOrderId = parseInt(dispBtn.dataset.movementId, 10);
+          const m = (window.ALL_BACKORDERS || []).find(x => x.movementId === backOrderId);
           const clicked = dispBtn.dataset.disposition;
           const next = (m && m.disposition === clicked) ? '' : clicked;  // toggle off if already active
-          setBackOrderDisposition(movementId, next);
+          setBackOrderDisposition(backOrderId, next);
           return;
         }
 
@@ -1273,6 +1334,7 @@
             // too - otherwise they'd linger in the Stock In/Out tables
             // until the next full page reload.
             window.ALL_MOVEMENTS = (window.ALL_MOVEMENTS || []).filter(m => m.id !== i.id);
+            window.ALL_BACKORDERS = (window.ALL_BACKORDERS || []).filter(m => m.id !== i.id);
             renderInventory();
             showToast(`${i.name} deleted`, 'success', 'bi-trash');
           });
@@ -1310,10 +1372,10 @@
 
         // Stock Summary: total value (qty x unit price) + on-hand stock,
         // broken down per item (not per unit). i.qty is each item's
-        // current_stock, which never includes back-ordered/returned
-        // quantities (a RETURN movement never adds to current_stock - see
-        // the Record Return flow), so back orders are already excluded
-        // here by construction rather than filtered out in this script.
+        // current_stock, which only reflects actual Stock In / Stock Out
+        // plus any back order marked "Replaced" (see
+        // _set_back_order_disposition in app.py) - a pending or "Reimbursed"
+        // back order is never included here.
         const totalValue = items.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
         const totalQty   = items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
         set('sumItemCount', `${items.length} item${items.length === 1 ? '' : 's'}`);
@@ -1333,6 +1395,7 @@
           .forEach(b => { b.textContent = oos; b.classList.toggle('d-none', oos === 0); });
 
         renderMovements();
+        renderBackOrders();
         renderStockSummary();
       }
 

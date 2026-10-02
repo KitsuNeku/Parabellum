@@ -426,43 +426,24 @@ def api_inventory_save():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
-def _apply_movement(material_code, quantity, kind, remarks, project_id=None, recorded_by=None, is_damaged=False, back_order_by=None):
+def _apply_movement(material_code, quantity, kind, remarks, project_id=None, recorded_by=None):
     """
-    Record a stock movement and adjust the balance.
+    Record a Stock In / Stock Out movement and adjust the balance.
 
-    kind = 'RECEIPT'  (stock in from supplier, increases balance),
-           'ISSUANCE' (stock out to project/customer, decreases balance), or
-           'RETURN'   (back-order: material returned by a customer. Logged
-                       in the Back Orders table/report and the Stock
-                       Movement Summary, but does NOT change
-                       materials.current_stock - a back order is tracked
-                       separately from on-hand stock, not folded into it,
-                       so the material's "pcs on hand" figure everywhere
-                       else in the app (Inventory, Dashboard's Low Stock
-                       list, etc.) only ever reflects actual Stock In /
-                       Stock Out, never a return).
+    kind = 'RECEIPT'  (stock in from supplier, increases balance), or
+           'ISSUANCE' (stock out to project/customer, decreases balance).
+    Back orders are a separate thing entirely now - see
+    _record_back_order() below, which writes to its own back_orders
+    table instead of stock_movements.
 
     For issuances this ENFORCES the non-negative-stock rule required by
     Objective 1.1 and test Table 2 - an over-issuance is rejected outright,
     not silently clamped to zero.
 
     recorded_by: display name of the logged-in user performing this action,
-    stored alongside the movement so the Stock In / Stock Out / Back Orders
-    tables can show who did it - independent of `remarks`, which describes
-    the movement itself (a delivery note, a project reference), not the
-    person.
-
-    is_damaged: dormant - RETURN never touches current_stock any more
-    (see above), so "damaged vs good" no longer changes the balance
-    math either way. The column and parameter are kept only so historical
-    rows and the Back Orders report/badge still mean what they always
-    meant, not because anything can set it True from the UI any more.
-
-    back_order_by: only meaningful when kind='RETURN'. The customer or
-    project that returned the material - who initiated the back order -
-    stored as its own column so the Back Orders table/report can show it
-    separately from `recorded_by` (the staff member who typed it in) and
-    from `remarks` (the free-text reason for the return).
+    stored alongside the movement so the Stock In / Stock Out tables can
+    show who did it - independent of `remarks`, which describes the
+    movement itself (a delivery note, a project reference), not the person.
     """
     rows = execute_query(DB_CONFIG,
         "SELECT material_id, material_name, unit, current_stock FROM materials WHERE material_code=%s;",
@@ -472,7 +453,6 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
     m = rows[0]
     balance = float(m["current_stock"])
     quantity = float(quantity)
-    is_damaged = bool(is_damaged) and kind == "RETURN"
 
     if quantity <= 0:
         raise ValueError("Quantity must be greater than zero.")
@@ -481,29 +461,104 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
         raise ValueError(
             f"Cannot issue {quantity:g} {m['unit']} — only {balance:g} in stock.")
 
-    # RECEIPT adds stock, ISSUANCE subtracts - a RETURN (back order) is
-    # logged but deliberately leaves current_stock untouched either way;
-    # see the kind/is_damaged docstring notes above for why.
-    if kind == "ISSUANCE":
-        new_balance = balance - quantity
-    elif kind == "RETURN":
-        new_balance = balance
-    else:
-        new_balance = balance + quantity
-
-    back_order_by = (back_order_by or None) if kind == "RETURN" else None
+    new_balance = balance - quantity if kind == "ISSUANCE" else balance + quantity
 
     execute_query(DB_CONFIG, """
         INSERT INTO stock_movements
-            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by, is_damaged, back_order_by)
-        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s);
-    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by, is_damaged, back_order_by))
+            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by)
+        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s);
+    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by))
 
     execute_query(DB_CONFIG,
         "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
         (new_balance, m["material_id"]))
 
     return m["material_name"], new_balance
+
+
+def _record_back_order(material_code, quantity, remarks, back_order_by=None, recorded_by=None, stock_out_ref=None):
+    """
+    Log a back order (material returned by a customer/project) in its own
+    back_orders table. Unlike _apply_movement(), this never touches
+    materials.current_stock by itself - that only happens later, if/when
+    staff mark it "Replaced" via _set_back_order_disposition() below.
+
+    Returns (material_name, back_order_id) - the id lets the frontend show
+    a receipt for exactly this record without having to re-fetch and guess
+    which row is new.
+    """
+    rows = execute_query(DB_CONFIG,
+        "SELECT material_id, material_name FROM materials WHERE material_code=%s;",
+        (material_code,), fetch=True)
+    if not rows:
+        raise ValueError("That material was not found.")
+    m = rows[0]
+    quantity = float(quantity)
+    if quantity <= 0:
+        raise ValueError("Quantity must be greater than zero.")
+
+    result = execute_query(DB_CONFIG, """
+        INSERT INTO back_orders
+            (material_id, quantity, return_date, stock_out_ref, remarks, back_order_by, recorded_by)
+        VALUES (%s, %s, CURRENT_DATE, %s, %s, %s, %s)
+        RETURNING back_order_id;
+    """, (m["material_id"], quantity, stock_out_ref or None, remarks, back_order_by or None, recorded_by), fetch=True)
+
+    return m["material_name"], result[0]["back_order_id"]
+
+
+def _set_back_order_disposition(back_order_id, disposition):
+    """
+    Set (or clear) a back order's disposition and apply the stock change
+    that goes with it:
+      'Replaced' -> the item itself goes back on the shelf: ADD its
+                       quantity to materials.current_stock (once).
+      'Reimbursed' or cleared (None) -> does NOT sit in stock: if this
+                       record was previously restocked, REMOVE that
+                       quantity again (reversing the earlier add), clamped
+                       at 0 so a disposition change can never push stock
+                       negative.
+
+    back_orders.restocked tracks whether this row's quantity is CURRENTLY
+    included in current_stock, so switching dispositions back and forth
+    (or clicking the same checkmark twice to clear it) only ever applies
+    the quantity once in either direction - never double-counted.
+
+    Returns (material_name, new_balance_or_None, stock_delta) for the
+    audit log; stock_delta is 0 if nothing about current_stock changed.
+    """
+    rows = execute_query(DB_CONFIG, """
+        SELECT bo.material_id, bo.quantity, bo.restocked, m.material_name, m.current_stock, m.unit
+          FROM back_orders bo JOIN materials m ON m.material_id = bo.material_id
+         WHERE bo.back_order_id = %s;
+    """, (back_order_id,), fetch=True)
+    if not rows:
+        raise ValueError("Back order record not found.")
+    row = rows[0]
+    quantity = float(row["quantity"])
+    balance = float(row["current_stock"])
+    was_restocked = bool(row["restocked"])
+    now_restocked = (disposition == "Replaced")
+
+    stock_delta = 0.0
+    new_balance = balance
+    if now_restocked and not was_restocked:
+        new_balance = balance + quantity
+        stock_delta = quantity
+    elif was_restocked and not now_restocked:
+        new_balance = max(0.0, balance - quantity)
+        stock_delta = new_balance - balance
+
+    if stock_delta != 0.0:
+        execute_query(DB_CONFIG,
+            "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
+            (new_balance, row["material_id"]))
+
+    execute_query(DB_CONFIG,
+        "UPDATE back_orders SET disposition=%s, restocked=%s WHERE back_order_id=%s;",
+        (disposition, now_restocked, back_order_id))
+
+    return row["material_name"], new_balance, stock_delta
 
 
 @app.route("/api/inventory/stock-in", methods=["POST"])
@@ -548,26 +603,26 @@ def api_stock_out():
 def api_inventory_return():
     """
     Record a back-order return: material coming back from a customer or
-    project. Logged with movement_type = 'RETURN' so the Back Orders
-    table/report and the Stock Movement Summary can show it, but it does
-    NOT change the material's on-hand current_stock - a back order is
-    tracked as its own figure, separate from actual Stock In/Stock Out,
-    so it never inflates the "pcs on hand" shown on Inventory or the
-    Dashboard's Low Stock list.
+    project. Logged in its own back_orders table (see _record_back_order),
+    NOT in stock_movements - a back order is its own record type, not a
+    Stock In or Stock Out. It does not change the material's on-hand
+    current_stock by itself; that only happens later if staff mark it
+    "Replaced" (see /api/inventory/return/disposition).
     """
     d = request.get_json(silent=True) or {}
     try:
         remarks = d.get("remarks") or ""
         customer = (d.get("customer") or "").strip()
-        name, bal = _apply_movement(d.get("itemId"), d.get("qty"), "RETURN",
-                                    remarks,
+        stock_out_ref = (d.get("stockOutRef") or "").strip()
+        name, back_order_id = _record_back_order(d.get("itemId"), d.get("qty"), remarks,
+                                    back_order_by=customer or None,
                                     recorded_by=session["user"]["name"],
-                                    back_order_by=customer or None)
+                                    stock_out_ref=stock_out_ref or None)
         log_audit(DB_CONFIG, "STOCK_RETURN",
-                  f"{d.get('qty')} of {name} logged as a back order (on-hand stock unchanged, still {bal:g})."
+                  f"{d.get('qty')} of {name} logged as a back order (on-hand stock unchanged for now)."
                   + (f" Back-ordered by {customer}." if customer else ""),
                   session["user"]["username"])
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "backOrderId": back_order_id})
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
@@ -580,37 +635,38 @@ def api_inventory_return():
 def api_inventory_return_disposition():
     """
     Mark (or clear) what happened to a back-ordered item once it came
-    back: 'Refurbished' or 'Returned'. Shown as a checkmark in the Back
+    back: 'Reimbursed' or 'Replaced'. Shown as a checkmark in the Back
     Orders table's Actions column, replacing the old View/Print/Delete
     icons there (those still apply to Stock In/Stock Out - this column
-    is back-order-specific). Only valid for a movement_id that is itself
-    a RETURN row - this never touches materials.current_stock, it's
-    purely a record of the physical disposition.
+    is back-order-specific).
 
-    Clicking an already-active option again clears it back to "not yet
-    marked" (disposition = NULL) - same toggle behavior either way.
+    Unlike before, this NOW changes materials.current_stock: marking a
+    back order "Replaced" adds its quantity back into stock (the item
+    goes back on the shelf); "Reimbursed" does not. See
+    _set_back_order_disposition() for exactly how that's applied -
+    idempotently, so clicking the same checkmark twice (clearing it back
+    to "not yet marked") or switching between the two options always
+    applies the quantity exactly once in the right direction.
     """
     d = request.get_json(silent=True) or {}
-    movement_id = d.get("movementId")
+    back_order_id = d.get("backOrderId") or d.get("movementId")   # movementId kept for older clients
     disposition = (d.get("disposition") or "").strip() or None
-    if disposition is not None and disposition not in ("Refurbished", "Returned"):
-        return jsonify({"ok": False, "error": "Disposition must be 'Refurbished' or 'Returned'."}), 400
+    if disposition is not None and disposition not in ("Reimbursed", "Replaced"):
+        return jsonify({"ok": False, "error": "Disposition must be 'Reimbursed' or 'Replaced'."}), 400
     try:
-        row = execute_query(DB_CONFIG,
-            "SELECT movement_type FROM stock_movements WHERE movement_id=%s;",
-            (movement_id,), fetch=True)
-        if not row:
-            return jsonify({"ok": False, "error": "Back order record not found."}), 404
-        if row[0]["movement_type"] != "RETURN":
-            return jsonify({"ok": False, "error": "Disposition only applies to back-order (RETURN) records."}), 400
-
-        execute_query(DB_CONFIG,
-            "UPDATE stock_movements SET disposition=%s WHERE movement_id=%s;",
-            (disposition, movement_id))
+        name, new_balance, stock_delta = _set_back_order_disposition(back_order_id, disposition)
+        if stock_delta > 0:
+            stock_note = f" {stock_delta:g} added back to stock (now {new_balance:g})."
+        elif stock_delta < 0:
+            stock_note = f" {-stock_delta:g} removed from stock (now {new_balance:g})."
+        else:
+            stock_note = " Stock unchanged."
         log_audit(DB_CONFIG, "BACK_ORDER_DISPOSITION",
-                  f"Back order MOV-{int(movement_id):04d} marked as {disposition or 'not yet marked'}.",
+                  f"Back order BKO-{int(back_order_id):04d} ({name}) marked as {disposition or 'not yet marked'}.{stock_note}",
                   session["user"]["username"])
-        return jsonify({"ok": True, "disposition": disposition or ""})
+        return jsonify({"ok": True, "disposition": disposition or "", "newStock": new_balance})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -620,47 +676,54 @@ def api_inventory_return_disposition():
 @permission_required("inventory")
 def api_inventory_summary():
     """
-    Per-material aggregated totals across the entire stock_movements
-    history: Total In (RECEIPT), Total Out (ISSUANCE), and Back Orders
-    (RETURN — material that came back from a customer or project).
+    Per-material aggregated totals: Total In (RECEIPT) and Total Out
+    (ISSUANCE) from stock_movements, plus Back Orders from the separate
+    back_orders table (material that came back from a customer/project).
 
-    Back Orders is informational only - it does NOT feed into Net Stock.
-    A back order is logged (so the Back Orders table/report can show it)
-    but deliberately never changes materials.current_stock (see
-    _apply_movement in app.py), so Net Stock = In - Out, which for any
-    material with no manual adjustments equals the current on-hand
-    quantity in materials.current_stock — surfacing the same number two
-    ways is a quick reconciliation check for the person managing
-    inventory. "damagedReturn" is a leftover field from a removed UI
-    control (see _apply_movement's is_damaged docstring note); it no
-    longer affects anything and is always 0 for any return logged since
-    that control was removed.
+    Net Stock = In - Out + Restocked Back Orders, which for any material
+    with no manual adjustments equals the current on-hand quantity in
+    materials.current_stock — surfacing the same number two ways is a
+    quick reconciliation check for the person managing inventory.
+    "Restocked" back orders are the ones marked "Replaced" - the only
+    disposition that adds back into current_stock (see
+    _set_back_order_disposition in app.py). "Reimbursed" back orders are
+    included in backOrder (informational total) but not in netStock.
     """
     try:
         rows = execute_query(DB_CONFIG, """
             SELECT m.material_code, m.material_name, m.category, m.unit,
                    m.current_stock,
-                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RECEIPT'  THEN sm.quantity ELSE 0 END), 0) AS total_in,
-                   COALESCE(SUM(CASE WHEN sm.movement_type = 'ISSUANCE' THEN sm.quantity ELSE 0 END), 0) AS total_out,
-                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' AND NOT sm.is_damaged THEN sm.quantity ELSE 0 END), 0) AS total_return,
-                   COALESCE(SUM(CASE WHEN sm.movement_type = 'RETURN' AND sm.is_damaged     THEN sm.quantity ELSE 0 END), 0) AS total_damaged
+                   COALESCE(sm.total_in, 0)  AS total_in,
+                   COALESCE(sm.total_out, 0) AS total_out,
+                   COALESCE(bo.total_return, 0)    AS total_return,
+                   COALESCE(bo.total_restocked, 0) AS total_restocked
               FROM materials m
-              LEFT JOIN stock_movements sm ON sm.material_id = m.material_id
-             GROUP BY m.material_id, m.material_code, m.material_name,
-                      m.category, m.unit, m.current_stock
+              LEFT JOIN (
+                    SELECT material_id,
+                           SUM(CASE WHEN movement_type = 'RECEIPT'  THEN quantity ELSE 0 END) AS total_in,
+                           SUM(CASE WHEN movement_type = 'ISSUANCE' THEN quantity ELSE 0 END) AS total_out
+                      FROM stock_movements
+                     GROUP BY material_id
+                   ) sm ON sm.material_id = m.material_id
+              LEFT JOIN (
+                    SELECT material_id,
+                           SUM(quantity) AS total_return,
+                           SUM(CASE WHEN restocked THEN quantity ELSE 0 END) AS total_restocked
+                      FROM back_orders
+                     GROUP BY material_id
+                   ) bo ON bo.material_id = m.material_id
              ORDER BY m.material_code;
         """, fetch=True)
         data = [{
-            "id":            r["material_code"],
-            "name":          r["material_name"],
-            "cat":           r["category"] or "Uncategorized",
-            "unit":          r["unit"],
-            "totalIn":       float(r["total_in"]),
-            "totalOut":      float(r["total_out"]),
-            "backOrder":     float(r["total_return"]),
-            "damagedReturn": float(r["total_damaged"]),
-            "netStock":      float(r["total_in"]) - float(r["total_out"]),
-            "onHand":        float(r["current_stock"]),
+            "id":        r["material_code"],
+            "name":      r["material_name"],
+            "cat":       r["category"] or "Uncategorized",
+            "unit":      r["unit"],
+            "totalIn":   float(r["total_in"]),
+            "totalOut":  float(r["total_out"]),
+            "backOrder": float(r["total_return"]),
+            "netStock":  float(r["total_in"]) - float(r["total_out"]) + float(r["total_restocked"]),
+            "onHand":    float(r["current_stock"]),
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
@@ -674,9 +737,13 @@ def api_inventory_delete():
     d = request.get_json(silent=True) or {}
     code = d.get("id")
     try:
-        # Remove dependent stock movements first (FK safety).
+        # Remove dependent stock movements and back orders first (FK safety).
         execute_query(DB_CONFIG, """
             DELETE FROM stock_movements
+            WHERE material_id = (SELECT material_id FROM materials WHERE material_code=%s);
+        """, (code,))
+        execute_query(DB_CONFIG, """
+            DELETE FROM back_orders
             WHERE material_id = (SELECT material_id FROM materials WHERE material_code=%s);
         """, (code,))
         execute_query(DB_CONFIG, "DELETE FROM materials WHERE material_code=%s;", (code,))
@@ -692,21 +759,21 @@ def api_inventory_delete():
 @permission_required("inventory")
 def api_inventory_movements():
     """
-    Full stock movement history (both RECEIPT and ISSUANCE), joined to
-    each material's current code/name/unit, most recent first. The
-    Inventory page splits this by `type` into its Stock In and Stock Out
-    tables. `id` is the material's code, matching the same value used
-    everywhere else on the page - so the existing Edit/Delete wiring
-    (inventoryStore.find(id) / inventoryStore.remove(id)) works
-    unchanged when those actions live on a movement row instead of a
-    material-snapshot row.
+    Full Stock In / Stock Out movement history (RECEIPT and ISSUANCE
+    only - back orders live in their own table now, see
+    /api/inventory/backorders below), joined to each material's current
+    code/name/unit, most recent first. The Inventory page splits this by
+    `type` into its Stock In and Stock Out tables. `id` is the material's
+    code, matching the same value used everywhere else on the page - so
+    the existing Edit/Delete wiring (inventoryStore.find(id) /
+    inventoryStore.remove(id)) works unchanged when those actions live on
+    a movement row instead of a material-snapshot row.
     """
     try:
         rows = execute_query(DB_CONFIG, """
             SELECT sm.movement_id, m.material_code, m.material_name, m.unit,
                    m.category, sm.movement_type, sm.quantity, sm.movement_date,
-                   sm.remarks, sm.recorded_by, sm.is_damaged, sm.back_order_by,
-                   sm.disposition
+                   sm.remarks, sm.recorded_by
               FROM stock_movements sm
               JOIN materials m ON m.material_id = sm.material_id
              ORDER BY sm.movement_date DESC, sm.movement_id DESC;
@@ -717,23 +784,64 @@ def api_inventory_movements():
             "name":       r["material_name"],
             "unit":       r["unit"],
             "cat":        r["category"] or "Uncategorized",
-            "type":       r["movement_type"],   # 'RECEIPT', 'ISSUANCE' or 'RETURN'
+            "type":       r["movement_type"],   # 'RECEIPT' or 'ISSUANCE'
             "qty":        float(r["quantity"]),
             "date":       str(r["movement_date"]),
             "remarks":    r["remarks"] or "",
             "recordedBy": r["recorded_by"] or "\u2014",
-            # Only meaningful for type='RETURN' - a damaged return was
-            # logged but did NOT add back to current_stock (see
-            # _apply_movement in app.py). Always False for RECEIPT/ISSUANCE.
-            "isDamaged":  bool(r["is_damaged"]),
-            # Only meaningful for type='RETURN' - who returned the material
-            # (customer/project), distinct from recordedBy (the staff user
-            # who entered it).
-            "backOrderBy": r["back_order_by"] or "",
-            # Only meaningful for type='RETURN' - what staff decided to do
-            # with the item once it came back: 'Refurbished', 'Returned',
-            # or "" if not yet marked. Set via /api/inventory/return/disposition.
-            "disposition": r["disposition"] or "",
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/inventory/backorders")
+@permission_required("inventory")
+def api_inventory_backorders():
+    """
+    Full back-order history, from its own back_orders table (NOT
+    stock_movements - see the Back Orders redesign in schema.sql), joined
+    to each material's current code/name/unit, most recent first. The
+    Inventory page's Back Orders table and the Reports page's Back Order
+    report both read this.
+
+    `movementId` here is actually the back_order_id, kept under that key
+    so the shared receipt/print/disposition JS (originally written for
+    stock_movements rows) works unchanged against a back order row - the
+    receipt itself is numbered "BKO-####" rather than "MOV-####" so the
+    two id spaces are never confused (see buildReceiptHTML in app.js).
+    """
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT bo.back_order_id, m.material_code, m.material_name, m.unit, m.category,
+                   bo.quantity, bo.return_date, bo.stock_out_ref, bo.remarks,
+                   bo.back_order_by, bo.recorded_by, bo.disposition, bo.restocked
+              FROM back_orders bo
+              JOIN materials m ON m.material_id = bo.material_id
+             ORDER BY bo.return_date DESC, bo.back_order_id DESC;
+        """, fetch=True)
+        data = [{
+            "id":           r["material_code"],
+            "movementId":   r["back_order_id"],
+            "backOrderId":  r["back_order_id"],
+            "name":         r["material_name"],
+            "unit":         r["unit"],
+            "cat":          r["category"] or "Uncategorized",
+            "type":         "RETURN",
+            "qty":          float(r["quantity"]),
+            "date":         str(r["return_date"]),
+            "stockOutRef":  r["stock_out_ref"] or "",
+            "remarks":      r["remarks"] or "",
+            "recordedBy":   r["recorded_by"] or "\u2014",
+            "backOrderBy":  r["back_order_by"] or "",
+            # 'Reimbursed', 'Replaced', or "" if not yet marked. Set via
+            # /api/inventory/return/disposition, which also updates
+            # restocked below.
+            "disposition":  r["disposition"] or "",
+            # True only while this row's quantity is currently added into
+            # materials.current_stock (disposition = 'Replaced').
+            "restocked":    bool(r["restocked"]),
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:

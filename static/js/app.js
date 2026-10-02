@@ -75,6 +75,135 @@ function buildPageWindow(current, total, maxNeighbors = 1) {
   return out;
 }
 
+/* ---------------- Transaction receipts (Stock In / Stock Out / Back Order) ----------------
+ ONE receipt renderer for every entry point, so a receipt looks the same
+ whether it pops up right after Confirm, is reprinted from a table row, or is
+ opened from the Reports page:
+   buildReceiptHTML(kind, items, info)      -> the receipt's HTML
+   showTransactionReceipt(kind, items, info) -> shows it in #moveSlipModal
+ kind:  'RECEIPT' (Stock In) | 'ISSUANCE' (Stock Out) | 'RETURN' (Back Order)
+ items: one row per material in the transaction:
+        [{ movementId, id, name, cat, qty, unit, price }]
+        (several items = one receipt with several rows, never one receipt each)
+ info:  { when, fields: [[label, value], ...], recordedBy, counterparty, note }
+ The modal footer has Close + Print (the app's existing [data-print] button),
+ so printing is always optional. */
+const RECEIPT_KINDS = {
+  RECEIPT:  { title: 'STOCK IN RECEIPT',   label: 'Stock In',   badge: 'b-success', qty: 'Qty Received',
+              sigLeft: 'Received / Recorded by', sigRight: 'Delivered by (Supplier)' },
+  ISSUANCE: { title: 'STOCK OUT RECEIPT',  label: 'Stock Out',  badge: 'b-danger',  qty: 'Qty Issued',
+              sigLeft: 'Released by',            sigRight: 'Received by (Client / Authorized Recipient)' },
+  RETURN:   { title: 'BACK ORDER RECEIPT', label: 'Back Order', badge: 'b-warning', qty: 'Qty Returned',
+              sigLeft: 'Recorded / Inspected by', sigRight: 'Returned by' },
+};
+window.RECEIPT_KINDS = RECEIPT_KINDS;
+
+const _rcEsc  = (s) => (typeof escapeHTML === 'function' ? escapeHTML(s) : esc(s));
+const _rcNum  = (n) => (typeof NUM === 'function' ? NUM(n) : String(n));
+const _rcPeso = (n) => (typeof PESO === 'function' ? PESO(n) : String(n));
+// Back orders live in their own table/id-space now (back_order_id), so
+// they're numbered "BKO-####" rather than "MOV-####" - the two are never
+// confused even though both ride in the same `movementId` JS field.
+const movNo   = (id, kind) => (id || id === 0) && String(id) !== ''
+  ? `${kind === 'RETURN' ? 'BKO' : 'MOV'}-${String(id).padStart(4, '0')}` : '';
+
+/* Date + time the receipt was produced, e.g. "October 2, 2026 · 2:45 PM". */
+window.receiptNow = () => {
+  const d = new Date();
+  return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
+    + ' · ' + d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+};
+
+window.buildReceiptHTML = function (kind, items, info = {}) {
+  const k = RECEIPT_KINDS[kind] || RECEIPT_KINDS.RECEIPT;
+  const rows = items || [];
+  const ids = rows.map(r => Number(r.movementId)).filter(n => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  const receiptNo = !ids.length ? 'Pending (assigned on save)'
+    : ids.length === 1 ? movNo(ids[0], kind) : `${movNo(ids[0], kind)} – ${movNo(ids[ids.length - 1], kind)}`;
+  const hasPrice = rows.some(r => Number(r.price) > 0);
+  const multi = rows.length > 1;
+  const units = [...new Set(rows.map(r => r.unit))];
+  const totalQty = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const totalAmt = rows.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.price) || 0), 0);
+  const logo = document.querySelector('.sidebar__brand img, img.logo-mark')?.getAttribute('src') || 'static/assets/img/logo.svg';
+
+  const fields = (info.fields || []).filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '');
+  const fieldHTML = fields.map(([label, value]) =>
+    `<div class="col-6 col-md-4 mb-2"><div class="text-muted-2">${_rcEsc(label)}</div><div class="fw-medium">${_rcEsc(value)}</div></div>`).join('');
+
+  const head = `<tr><th style="width:36px">#</th>${multi ? '<th style="white-space:nowrap">Ref No.</th>' : ''}<th>Material ID</th><th>Article / Description</th><th>Category</th>
+      <th class="text-end">${k.qty}</th><th>Unit</th>${hasPrice ? '<th class="text-end">Unit Price</th><th class="text-end">Amount</th>' : ''}</tr>`;
+  const body = rows.map((r, i) => `<tr>
+      <td class="text-muted-2">${i + 1}</td>${multi ? `<td class="text-muted-2" style="white-space:nowrap">${movNo(r.movementId, kind) || '—'}</td>` : ''}
+      <td class="fw-id">${_rcEsc(r.id || '—')}</td><td class="fw-medium">${_rcEsc(r.name || '—')}</td><td>${_rcEsc(r.cat || '—')}</td>
+      <td class="text-end">${_rcNum(r.qty)}</td><td>${_rcEsc(r.unit || '')}</td>
+      ${hasPrice ? `<td class="text-end">${Number(r.price) > 0 ? _rcPeso(r.price) : '—'}</td><td class="text-end">${Number(r.price) > 0 ? _rcPeso((Number(r.qty) || 0) * Number(r.price)) : '—'}</td>` : ''}
+    </tr>`).join('');
+  const span = 4 + (multi ? 1 : 0);
+  const foot = `<tr class="fw-bold"><td colspan="${span}" class="text-end">Total${multi ? ` (${rows.length} items)` : ''}</td>
+      <td class="text-end">${units.length === 1 ? _rcNum(totalQty) : '—'}</td><td>${units.length === 1 ? _rcEsc(units[0] || '') : 'mixed units'}</td>
+      ${hasPrice ? `<td></td><td class="text-end">${_rcPeso(totalAmt)}</td>` : ''}</tr>`;
+
+  const sig = (label, name) => `<div class="col-6"><div style="border-bottom:1px solid #999;height:34px" class="d-flex align-items-end justify-content-center pb-1 fw-medium">${_rcEsc(name || '')}</div>
+      <div class="small text-muted-2 text-center mt-1">${_rcEsc(label)}</div></div>`;
+
+  return `
+    <div class="receipt-doc">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div class="d-flex gap-2 align-items-center"><img src="${_rcEsc(logo)}" alt="" style="width:42px">
+          <div><div class="fw-bold" style="color:var(--primary)">PARABELLUM STEEL &amp; IRON WORKS</div>
+          <div class="small text-muted-2">Inventory &amp; Service Optimization System</div></div></div>
+        <div class="text-end"><div class="h5 mb-0">${k.title}</div>
+          <div class="small text-muted-2">Receipt No. <span class="fw-medium text-dark">${_rcEsc(receiptNo)}</span></div>
+          <div class="small text-muted-2">${_rcEsc(info.when || '')}</div></div>
+      </div><hr class="mt-0">
+      <div class="row small mb-2">${fieldHTML}</div>
+      <div class="table-responsive"><table class="table table-soft table-sm mb-2" style="font-size:.86rem"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
+      ${info.note ? `<div class="small text-muted-2 mb-2"><i class="bi bi-info-circle me-1"></i>${_rcEsc(info.note)}</div>` : ''}
+      <div class="row g-4 mt-2 small">${sig(k.sigLeft, info.recordedBy)}${sig(k.sigRight, info.counterparty)}</div>
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <span class="badge ${k.badge}">${k.label}</span>
+        <span class="small text-muted-2">System-generated receipt · Parabellum ISOS</span>
+      </div>
+    </div>`;
+};
+
+/* Shows a receipt in #moveSlipModal (created here if the page doesn't have
+ one, e.g. Reports). If another modal is still closing (the Stock In / Stock
+ Out / Back Order form), waits for it so the two don't overlap. */
+window.showTransactionReceipt = function (kind, items, info = {}) {
+  let el = document.getElementById('moveSlipModal');
+  if (!el) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal fade" id="moveSlipModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2" style="color:var(--primary)"></i><span id="moveSlipTitle">Receipt</span></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body" id="moveSlipBody"></div>
+        <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" data-print-receipt><i class="bi bi-printer me-1"></i>Print Receipt</button></div>
+      </div></div></div>`);
+    el = document.getElementById('moveSlipModal');
+    el.querySelector('[data-print-receipt]').addEventListener('click', () => window.print());
+  }
+  const k = RECEIPT_KINDS[kind] || RECEIPT_KINDS.RECEIPT;
+  const title = el.querySelector('#moveSlipTitle') || el.querySelector('.modal-title');
+  if (title) title.innerHTML = `<i class="bi bi-receipt me-2" style="color:var(--primary)"></i>${k.label} Receipt`;
+  el.querySelector('#moveSlipBody').innerHTML = window.buildReceiptHTML(kind, items, info);
+  const open = () => bootstrap.Modal.getOrCreateInstance(el).show();
+  const closing = [...document.querySelectorAll('.modal.show, .modal.showing')].find(m => m !== el);
+  if (closing) closing.addEventListener('hidden.bs.modal', open, { once: true });
+  else open();
+};
+
+/* The movement a save just created. Uses the id the server returned when it
+ sends one (json.movementId); otherwise the newest movement of that type for
+ that material that wasn't in the list before the save - read from the
+ freshly re-fetched ALL_MOVEMENTS, never from unsaved form/cart state. */
+window.findNewMovement = function (type, code, beforeIds, preferId) {
+  const all = window.ALL_MOVEMENTS || [];
+  if (preferId) { const hit = all.find(m => String(m.movementId) === String(preferId)); if (hit) return hit; }
+  return all.filter(m => m.type === type && m.id === code && !(beforeIds && beforeIds.has(m.movementId)))
+            .sort((a, b) => b.movementId - a.movementId)[0] || null;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
 
   /* ---------------- Dashboard: replace sample KPIs with REAL DB data ----------
@@ -341,24 +470,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const refreshInventory = async () => {
       try {
-        const [invRes, moveRes, sumRes] = await Promise.all([
+        const [invRes, moveRes, boRes, sumRes] = await Promise.all([
           fetch('/api/inventory'),
           fetch('/api/inventory/movements'),
+          fetch('/api/inventory/backorders'),
           fetch('/api/inventory/summary'),
         ]);
         const invJson  = await invRes.json();
         const moveJson = await moveRes.json();
+        const boJson   = await boRes.json();
         const sumJson  = await sumRes.json();
-        if (!invJson.ok || !moveJson.ok || !sumJson.ok) {
+        if (!invJson.ok || !moveJson.ok || !boJson.ok || !sumJson.ok) {
           console.error('Failed to load real inventory from the server:',
-                        invJson.error || moveJson.error || sumJson.error || invRes.status);
+                        invJson.error || moveJson.error || boJson.error || sumJson.error || invRes.status);
           showToast('Could not load inventory from the database — showing may be outdated', 'error', 'bi-exclamation-triangle');
           return;
         }
         INVENTORY.length = 0;               // clear sample rows, keep the array reference
         invJson.data.forEach(r => INVENTORY.push(r));
-        window.ALL_MOVEMENTS = moveJson.data;   // Stock In / Stock Out / Back Orders tables read this
-        window.STOCK_SUMMARY = sumJson.data;    // per-item In/Out/Back Order aggregate table
+        window.ALL_MOVEMENTS = moveJson.data;    // Stock In / Stock Out tables read this
+        window.ALL_BACKORDERS = boJson.data;     // Back Orders table reads this (its own table now)
+        window.STOCK_SUMMARY = sumJson.data;     // per-item In/Out/Back Order aggregate table
         if (typeof window.renderInventory === 'function') window.renderInventory();
       } catch (err) {
         console.error('refreshInventory failed:', err);
@@ -382,6 +514,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // a form that posts to different endpoints depending on its own state
         // (e.g. the Stock In modal's "Existing Item" vs "New Item" toggle).
         const targetUrl = typeof url === 'function' ? url(data, form) : url;
+        // Snapshot BEFORE saving: which movements already existed (so the new
+        // one can be told apart after the re-fetch) and the item's details.
+        const beforeIds  = new Set((window.ALL_MOVEMENTS || []).map(m => m.movementId));
+        const itemBefore = data.itemId && typeof inventoryStore !== 'undefined' ? { ...(inventoryStore.find(data.itemId) || {}) } : null;
         try {
           const res = await fetch(targetUrl, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -400,6 +536,11 @@ document.addEventListener('DOMContentLoaded', () => {
           // a button on the success toast (e.g. "View Back Order").
           const action = typeof opts.successAction === 'function' ? opts.successAction(data, form) : null;
           showToast(msg, 'success', undefined, action);
+          // e.g. pop up the transaction receipt (only reached after the server saved it)
+          if (typeof opts.onSuccess === 'function') {
+            try { opts.onSuccess(data, form, { json, beforeIds, itemBefore }); }
+            catch (hookErr) { console.error('Receipt could not be shown:', hookErr); }
+          }
         } catch (err) {
           // e.g. "Cannot issue 500 pcs - only 120 in stock." Keep the modal open.
           showToast(err.message, 'error', 'bi-exclamation-triangle');
@@ -425,7 +566,24 @@ document.addEventListener('DOMContentLoaded', () => {
       (d) => (d.itemId
         ? { itemId: d.itemId, qty: d.qty, remarks: d.remarks }
         : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: d.reorder, loc: d.loc }),
-      { successMsg: (d) => d.itemId ? 'Stock added to inventory' : 'New item added to inventory and stocked' });
+      { successMsg: (d) => d.itemId ? 'Stock added to inventory' : 'New item added to inventory and stocked',
+        // Stock In receipt: exactly the item + quantity just received.
+        onSuccess: (d, form, { json, beforeIds, itemBefore }) => {
+          const code = d.itemId || json.code || json.id || '';
+          const mv   = window.findNewMovement('RECEIPT', code, beforeIds, json.movementId);
+          const item = (code && inventoryStore.find(code)) || itemBefore || {};
+          const user = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || mv?.recordedBy || '';
+          window.showTransactionReceipt('RECEIPT', [{
+            movementId: mv?.movementId, id: code, name: item.name || d.name, cat: item.cat || d.cat,
+            qty: Number(d.qty), unit: item.unit || d.unit, price: Number(item.price ?? d.price) || 0,
+          }], {
+            when: window.receiptNow(),
+            fields: [['Supplier', item.sup || d.sup], ['Warehouse / Location', item.loc || d.loc],
+                     ['Remarks / Reference', d.remarks], ['Recorded by', user],
+                     ['Transaction', d.itemId ? 'Stock received' : 'New item registered + first stock']],
+            recordedBy: user, counterparty: item.sup || d.sup || '',
+          });
+        } });
 
     /* Stock Out is now a multi-item request (cart-style). inventory.html
      builds the cart and calls this on "Confirm Stock Out". The server
@@ -439,6 +597,12 @@ document.addEventListener('DOMContentLoaded', () => {
        returns { issued: [...], failed: { row, error } | null, remaining: [...] } */
     window.submitStockOutRequest = async (rows, ref, onProgress) => {
       const issued = [];
+      const beforeIds = new Set((window.ALL_MOVEMENTS || []).map(m => m.movementId));
+      // After the re-fetch, tag each issued row with the movement it created.
+      const tagIssued = () => issued.forEach(r => {
+        const mv = window.findNewMovement('ISSUANCE', r.itemId, beforeIds, r.movementId);
+        if (mv) { r.movementId = mv.movementId; beforeIds.add(mv.movementId); }
+      });
       for (let k = 0; k < rows.length; k++) {
         const row = rows[k];
         if (onProgress) onProgress(k + 1, rows.length, row);
@@ -451,22 +615,44 @@ document.addEventListener('DOMContentLoaded', () => {
           try { json = await res.json(); }
           catch (_) { throw new Error(`The server returned an unexpected response (HTTP ${res.status}).`); }
           if (!json.ok) throw new Error(json.error || `Request failed (HTTP ${res.status}).`);
-          issued.push(row);
+          issued.push({ ...row, movementId: json.movementId });   // only rows the server actually deducted
         } catch (err) {
           const error = err instanceof TypeError ? 'Could not connect to the server.' : err.message;
-          if (issued.length) await refreshInventory();
+          if (issued.length) { await refreshInventory(); tagIssued(); }
           return { issued, failed: { row, error }, remaining: rows.slice(k) };
         }
       }
       await refreshInventory();
+      tagIssued();
       return { issued, failed: null, remaining: [] };
     };
     window.refreshInventory = refreshInventory;
 
     wire('#returnModal form', '/api/inventory/return', (d) => ({
       itemId: d.itemId, qty: d.qty, customer: d.customer, remarks: d.remarks,
+      stockOutRef: d.stockOutRef,
     }), {
       successMsg: 'Back-order return recorded',
+      // Back Order receipt: exactly the returned item + what was recorded.
+      // The server returns the new back_order_id directly (no re-fetch
+      // heuristic needed, unlike Stock In/Out - back orders aren't in
+      // window.ALL_MOVEMENTS to search through).
+      onSuccess: (d, form, { json, itemBefore }) => {
+        const item = inventoryStore.find(d.itemId) || itemBefore || {};
+        const user = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || '';
+        window.showTransactionReceipt('RETURN', [{
+          movementId: json.backOrderId, id: d.itemId, name: item.name, cat: item.cat,
+          qty: Number(d.qty), unit: item.unit, price: Number(item.price) || 0,
+        }], {
+          when: window.receiptNow(),
+          fields: [['Returned by (Client / Project)', d.customer], ['Original Stock Out Ref.', d.stockOutRef],
+                   ['Reason for Return', d.remarks],
+                   ['Disposition', 'Pending (mark Reimbursed / Replaced in the Back Orders table)'],
+                   ['Location', item.loc], ['Recorded / Inspected by', user]],
+          recordedBy: user, counterparty: d.customer || '',
+          note: 'Back orders are logged for the record and do not change on-hand stock.',
+        });
+      },
       // "View Back Order" button on the success toast (bottom-right) -
       // scrolls the page down to where the record now lives, in the
       // Back Orders table, and briefly highlights that card so it's

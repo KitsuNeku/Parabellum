@@ -130,30 +130,49 @@ CREATE TABLE stock_movements (
     movement_id   SERIAL PRIMARY KEY,
     material_id   INT NOT NULL REFERENCES materials(material_id),
     movement_type VARCHAR(10) NOT NULL
-                  CHECK (movement_type IN ('RECEIPT', 'ISSUANCE', 'RETURN')),
+                  CHECK (movement_type IN ('RECEIPT', 'ISSUANCE')),
     quantity      NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
     movement_date DATE NOT NULL,
     project_id    INT REFERENCES projects(project_id),
     remarks       TEXT,
-    recorded_by   VARCHAR(80),  -- display name of the user who performed this movement
-    -- Only meaningful for movement_type = 'RETURN': a damaged return is
-    -- still logged (so the Back Orders table/report shows it came back),
-    -- but is NOT added to materials.current_stock - see _apply_movement()
-    -- in app.py. Always FALSE for RECEIPT/ISSUANCE rows.
-    is_damaged    BOOLEAN NOT NULL DEFAULT FALSE,
-    -- Only meaningful for movement_type = 'RETURN': the customer or
-    -- project that returned the material, i.e. who initiated the back
-    -- order. Kept separate from recorded_by (the staff member who typed
-    -- it in) and from remarks (free-text reason for the return).
-    back_order_by VARCHAR(120),
-    -- Only meaningful for movement_type = 'RETURN': what happened to a
-    -- back-ordered item after it came back - set from the Back Orders
-    -- table once staff decide. NULL = not yet resolved.
-    disposition   VARCHAR(20)
-                  CHECK (disposition IS NULL OR disposition IN ('Refurbished', 'Returned'))
+    recorded_by   VARCHAR(80)  -- display name of the user who performed this movement
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);
+
+-- ---- Back Orders (material returned by a customer/project) -----
+-- Its own table, separate from stock_movements, since a back order isn't
+-- a Stock In or Stock Out movement - it's a record of something that
+-- came back, with its own lifecycle (pending -> Reimbursed/Replaced).
+CREATE TABLE back_orders (
+    back_order_id SERIAL PRIMARY KEY,
+    material_id   INT NOT NULL REFERENCES materials(material_id),
+    quantity      NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
+    return_date   DATE NOT NULL,
+    -- The original Stock Out this item came back from, if known (free text
+    -- - e.g. "MOV-0102" or a project code - not a hard FK to stock_movements).
+    stock_out_ref VARCHAR(120),
+    remarks       TEXT,
+    -- The customer or project that returned the material, i.e. who
+    -- initiated the back order. Kept separate from recorded_by (the staff
+    -- member who typed it in) and from remarks (reason for the return).
+    back_order_by VARCHAR(120),
+    recorded_by   VARCHAR(80),
+    -- What happened to the item once it came back. NULL = not yet decided.
+    -- 'Replaced' = the item itself is fine and goes back on the shelf -
+    -- this is the ONLY disposition that adds back to materials.current_stock.
+    -- 'Reimbursed' = the customer was given their money back instead;
+    -- this one is written off and never restocks.
+    disposition   VARCHAR(20)
+                  CHECK (disposition IS NULL OR disposition IN ('Reimbursed', 'Replaced')),
+    -- True only while this row's quantity is CURRENTLY included in
+    -- materials.current_stock (i.e. disposition = 'Replaced'). Tracked
+    -- explicitly so toggling the disposition adds/removes that quantity
+    -- exactly once, instead of re-deriving it from disposition alone.
+    restocked     BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX idx_back_order_material_date
+    ON back_orders (material_id, return_date);
 
 -- ---- D4: Monthly Demand Records (forecasting-ready panel) -------
 -- Built by aggregate_monthly_demand() — DFD process 3.2.

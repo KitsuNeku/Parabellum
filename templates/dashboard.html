@@ -301,6 +301,11 @@
      PROJECTS/TRANSACTIONS/INVENTORY arrays replace the sample ones -
      same pattern as renderInventory/renderTransactions/renderProjects on
      their own pages. */
+    // renderDashboard() runs several times as each of PROJECTS/TRANSACTIONS/
+    // INVENTORY finishes loading from the server (see app.js), so this flag
+    // makes sure the auto-popup below fires exactly once per page load -
+    // the moment real inventory data is actually in, not on every re-render.
+    let autoShownLowStockModal = false;
     function renderDashboard(){
       const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
       set('dashKpiProjects', PROJECTS.filter(p=>p.status==='In Progress').length);
@@ -345,6 +350,16 @@
             <div class="sl-qty" style="color:var(--accent-dark)">${NUM(i.qty)} ${i.unit}</div>
           </div>`).join('')
         : '<div class="stock-empty">No low-stock materials.</div>';
+
+      // Pop the modal open automatically the moment real inventory data has
+      // loaded (INVENTORY.length > 0 means the /api/inventory fetch below
+      // actually finished - not still the cleared/sample array), so the
+      // admin sees it right when they land on the dashboard, no click
+      // needed. Only once per page load - see autoShownLowStockModal above.
+      if (!autoShownLowStockModal && INVENTORY.length > 0) {
+        autoShownLowStockModal = true;
+        if (low.length) bootstrap.Modal.getOrCreateInstance('#dashLowStockModal').show();
+      }
 
       const tb = document.getElementById('dashTxnBody');
       if (!tb) return;

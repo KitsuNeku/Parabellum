@@ -378,6 +378,15 @@ a { text-decoration: none; }
 .act-btn:hover { background: var(--primary-soft); color: var(--primary); }
 .act-btn.danger:hover { background: rgba(192,57,43,.12); color: var(--danger); }
 
+/* Back Orders row actions: Refurbished / Returned checkmark toggles,
+   in place of the View/Print/Delete icons the other movement tables use. */
+.disposition-btn { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--border);
+  background:#fff; border-radius:20px; padding:4px 10px; font-size:.72rem; font-weight:500;
+  color:var(--text-muted); white-space:nowrap; cursor:pointer; transition:background .12s, border-color .12s, color .12s; }
+.disposition-btn:hover { border-color: var(--primary); color: var(--primary); }
+.disposition-btn.is-active.is-refurbished { border-color: var(--success); background: rgba(31,157,85,.1); color: var(--success); }
+.disposition-btn.is-active.is-returned { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+
 /* ----------------------------- Forms ----------------------------- */
 .form-label { font-weight: 600; font-size: .82rem; color: var(--text); margin-bottom: 5px; }
 .form-control, .form-select {

@@ -145,7 +145,12 @@ CREATE TABLE stock_movements (
     -- project that returned the material, i.e. who initiated the back
     -- order. Kept separate from recorded_by (the staff member who typed
     -- it in) and from remarks (free-text reason for the return).
-    back_order_by VARCHAR(120)
+    back_order_by VARCHAR(120),
+    -- Only meaningful for movement_type = 'RETURN': what happened to a
+    -- back-ordered item after it came back - set from the Back Orders
+    -- table once staff decide. NULL = not yet resolved.
+    disposition   VARCHAR(20)
+                  CHECK (disposition IS NULL OR disposition IN ('Refurbished', 'Returned'))
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);

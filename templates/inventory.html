@@ -1049,6 +1049,31 @@
           </div>`;
       }
 
+      /* Back Orders only: the Actions column here isn't View/Print/Delete
+       (deleting a material from a back-order row never made much sense) -
+       it's two checkmark toggles for what staff decided to do with the
+       item once it came back: Refurbished or Returned. Mutually exclusive
+       (picking one clears the other); clicking the active one again
+       clears it back to "not yet marked". Persisted via
+       /api/inventory/return/disposition, keyed by movementId since each
+       back-order record needs its own disposition, not the material's. */
+      function backOrderActionBtns(m){
+        const refurbished = m.disposition === 'Refurbished';
+        const returned = m.disposition === 'Returned';
+        return `<div class="d-inline-flex gap-1">
+            <button type="button" class="disposition-btn${refurbished ? ' is-active is-refurbished' : ''}"
+                    data-disposition-btn data-disposition="Refurbished" data-movement-id="${m.movementId}"
+                    data-bs-toggle="tooltip" title="${refurbished ? 'Marked Refurbished — click to clear' : 'Mark as Refurbished'}">
+              <i class="bi ${refurbished ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Refurbished
+            </button>
+            <button type="button" class="disposition-btn${returned ? ' is-active is-returned' : ''}"
+                    data-disposition-btn data-disposition="Returned" data-movement-id="${m.movementId}"
+                    data-bs-toggle="tooltip" title="${returned ? 'Marked Returned — click to clear' : 'Mark as Returned'}">
+              <i class="bi ${returned ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Returned
+            </button>
+          </div>`;
+      }
+
       const moveSlipModal = new bootstrap.Modal('#moveSlipModal');
       function showMoveSlip(movementId){
         const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
@@ -1101,7 +1126,7 @@
             <td class="text-muted-2">${escapeHTML(m.remarks || '\u2014')}</td>
             ${backOrderedByCell}
             <td class="text-muted-2">${escapeHTML(m.recordedBy || '\u2014')}</td>
-            <td class="text-center">${moveActionBtns(m)}</td></tr>`);
+            <td class="text-center">${showBackOrderedBy ? backOrderActionBtns(m) : moveActionBtns(m)}</td></tr>`);
         });
         initTooltips(tbody);
         set(ids.count, pageItems.length === rows.length
@@ -1198,12 +1223,44 @@
       }
       window.renderStockSummary = renderStockSummary;
 
+      /* Back Orders only: persists a disposition click (Refurbished /
+       Returned) to the server, updates the local movement row so the
+       checkmark reflects it immediately, then re-renders. Clicking the
+       already-active option sends '' (clears it) - same toggle either way. */
+      async function setBackOrderDisposition(movementId, disposition){
+        try {
+          const res = await fetch('/api/inventory/return/disposition', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ movementId, disposition }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
+          if (m) m.disposition = json.disposition || '';
+          renderMovements();
+          showToast(json.disposition ? `Marked as ${json.disposition}` : 'Disposition cleared', 'success');
+        } catch (err) {
+          showToast(err.message, 'error', 'bi-exclamation-triangle');
+        }
+      }
+
       /* ---------- Delegated row actions on the movement tables: View / Edit /
        Delete (they operate on the underlying MATERIAL, same as before -
-       just triggered from a movement row instead of a snapshot row) ---------- */
+       just triggered from a movement row instead of a snapshot row); Back
+       Orders also delegates its Refurbished/Returned checkmarks here. ---------- */
       function handleRowAction(e){
         const printBtn = e.target.closest('.print-move');
         if (printBtn) { showMoveSlip(parseInt(printBtn.dataset.movementId, 10)); return; }
+
+        const dispBtn = e.target.closest('[data-disposition-btn]');
+        if (dispBtn) {
+          const movementId = parseInt(dispBtn.dataset.movementId, 10);
+          const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId);
+          const clicked = dispBtn.dataset.disposition;
+          const next = (m && m.disposition === clicked) ? '' : clicked;  // toggle off if already active
+          setBackOrderDisposition(movementId, next);
+          return;
+        }
 
         const btn = e.target.closest('[data-act]'); if (!btn) return;
         const i = inventoryStore.find(btn.dataset.id); if (!i) return;

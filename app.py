@@ -575,6 +575,47 @@ def api_inventory_return():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
+@app.route("/api/inventory/return/disposition", methods=["POST"])
+@permission_required("inventory")
+def api_inventory_return_disposition():
+    """
+    Mark (or clear) what happened to a back-ordered item once it came
+    back: 'Refurbished' or 'Returned'. Shown as a checkmark in the Back
+    Orders table's Actions column, replacing the old View/Print/Delete
+    icons there (those still apply to Stock In/Stock Out - this column
+    is back-order-specific). Only valid for a movement_id that is itself
+    a RETURN row - this never touches materials.current_stock, it's
+    purely a record of the physical disposition.
+
+    Clicking an already-active option again clears it back to "not yet
+    marked" (disposition = NULL) - same toggle behavior either way.
+    """
+    d = request.get_json(silent=True) or {}
+    movement_id = d.get("movementId")
+    disposition = (d.get("disposition") or "").strip() or None
+    if disposition is not None and disposition not in ("Refurbished", "Returned"):
+        return jsonify({"ok": False, "error": "Disposition must be 'Refurbished' or 'Returned'."}), 400
+    try:
+        row = execute_query(DB_CONFIG,
+            "SELECT movement_type FROM stock_movements WHERE movement_id=%s;",
+            (movement_id,), fetch=True)
+        if not row:
+            return jsonify({"ok": False, "error": "Back order record not found."}), 404
+        if row[0]["movement_type"] != "RETURN":
+            return jsonify({"ok": False, "error": "Disposition only applies to back-order (RETURN) records."}), 400
+
+        execute_query(DB_CONFIG,
+            "UPDATE stock_movements SET disposition=%s WHERE movement_id=%s;",
+            (disposition, movement_id))
+        log_audit(DB_CONFIG, "BACK_ORDER_DISPOSITION",
+                  f"Back order MOV-{int(movement_id):04d} marked as {disposition or 'not yet marked'}.",
+                  session["user"]["username"])
+        return jsonify({"ok": True, "disposition": disposition or ""})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
 @app.route("/api/inventory/summary")
 @permission_required("inventory")
 def api_inventory_summary():
@@ -664,7 +705,8 @@ def api_inventory_movements():
         rows = execute_query(DB_CONFIG, """
             SELECT sm.movement_id, m.material_code, m.material_name, m.unit,
                    m.category, sm.movement_type, sm.quantity, sm.movement_date,
-                   sm.remarks, sm.recorded_by, sm.is_damaged, sm.back_order_by
+                   sm.remarks, sm.recorded_by, sm.is_damaged, sm.back_order_by,
+                   sm.disposition
               FROM stock_movements sm
               JOIN materials m ON m.material_id = sm.material_id
              ORDER BY sm.movement_date DESC, sm.movement_id DESC;
@@ -688,6 +730,10 @@ def api_inventory_movements():
             # (customer/project), distinct from recordedBy (the staff user
             # who entered it).
             "backOrderBy": r["back_order_by"] or "",
+            # Only meaningful for type='RETURN' - what staff decided to do
+            # with the item once it came back: 'Refurbished', 'Returned',
+            # or "" if not yet marked. Set via /api/inventory/return/disposition.
+            "disposition": r["disposition"] or "",
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:

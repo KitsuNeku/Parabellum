@@ -169,16 +169,28 @@ def build_back_order_report(db_config):
     """
     rows = execute_query(db_config, """
         SELECT m.material_name, m.category, bo.quantity, m.unit,
-               bo.return_date, bo.remarks, bo.recorded_by, bo.back_order_by, bo.disposition
+               bo.return_date, bo.remarks, bo.recorded_by, bo.back_order_by, bo.disposition,
+               bo.replaced_qty, bo.reimbursed_amount
         FROM back_orders bo
         JOIN materials m ON m.material_id = bo.material_id
         ORDER BY bo.return_date DESC, bo.back_order_id DESC;
     """, fetch=True)
+
+    def _disposition_cell(r):
+        # "Replaced" / "Reimbursed" alone doesn't say how much - the
+        # disposition popup on the Inventory page now collects that (Qty
+        # Replaced, or Amount Reimbursed in pesos), so show it here too.
+        if r["disposition"] == "Replaced" and r["replaced_qty"] is not None:
+            return f"Replaced ({float(r['replaced_qty']):g} {r['unit']})"
+        if r["disposition"] == "Reimbursed" and r["reimbursed_amount"] is not None:
+            return f"Reimbursed (\u20b1{float(r['reimbursed_amount']):,.2f})"
+        return r["disposition"] or "Pending"
+
     out = [[r["material_name"], r["category"] or "\u2014",
             f"{float(r['quantity']):g} {r['unit']}",
             str(r["return_date"]) if r["return_date"] else "\u2014",
             r["remarks"] or "\u2014", r["back_order_by"] or "\u2014",
-            r["recorded_by"] or "\u2014", r["disposition"] or "Pending"] for r in rows]
+            r["recorded_by"] or "\u2014", _disposition_cell(r)] for r in rows]
     return ("Back Order Report", "Materials returned from customers/projects",
             ["Item", "Category", "Qty Returned", "Date", "Reason / Reference", "Received By", "Recorded By", "Disposition"], out)
 

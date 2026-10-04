@@ -161,7 +161,6 @@
           <div class="nav flex-column nav-pills" role="tablist" id="settingsTabs">
             <button class="nav-link active text-start" data-bs-toggle="pill" data-bs-target="#tab-company"><i class="bi bi-building me-2"></i>Company</button>
             <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-users"><i class="bi bi-people me-2"></i>User Management</button>
-            <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-roles"><i class="bi bi-shield-lock me-2"></i>Roles &amp; Permissions</button>
             <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-theme"><i class="bi bi-palette me-2"></i>Theme</button>
             <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-notif"><i class="bi bi-bell me-2"></i>Notifications</button>
             <button class="nav-link text-start" data-bs-toggle="pill" data-bs-target="#tab-security"><i class="bi bi-lock me-2"></i>Security</button>
@@ -186,24 +185,46 @@
             </form>
           </div></div></div>
 
-          <!-- Users -->
+          <!-- Users (merged with Roles & Permissions: pick an account above the
+               table, review/edit its page access, Apply - no separate tab, no
+               popup needed for the common case) -->
           <div class="tab-pane fade" id="tab-users"><div class="card"><div class="card-body">
             <div class="card-title-row"><h3 class="panel-title">User Management</h3><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#userModal"><i class="bi bi-person-plus me-1"></i>Add User</button></div>
+
+            <div class="result-line mb-4" style="background:var(--bg-soft,#f8f9fa);border-radius:10px;padding:16px;">
+              <h5 class="mb-1"><i class="bi bi-shield-lock me-2" style="color:var(--primary)"></i>Roles &amp; Permissions</h5>
+              <p class="small text-muted-2 mb-3">Select an account below, review or change which pages it can access, then click Apply.</p>
+
+              <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-6">
+                  <label class="form-label" for="permUserSelect">Account</label>
+                  <select class="form-select" id="permUserSelect"><option value="">Select a user…</option></select>
+                </div>
+                <div class="col-md-6">
+                  <div class="small text-muted-2" id="permUserMeta">Pick a user to see their current access.</div>
+                </div>
+              </div>
+
+              <div id="permEditor" style="display:none">
+                <div class="alert alert-soft-info small mb-3" id="permRoleDefaultNote">
+                  <i class="bi bi-info-circle me-1"></i>By default this role grants: <strong id="permRoleDefaultList">—</strong>. Tick or untick pages below to override that for this one user.
+                </div>
+                <div id="permCheckboxes" class="row g-2"></div>
+                <div class="small text-muted-2 mt-3" id="permAdminSelfHint" style="display:none">
+                  <i class="bi bi-exclamation-triangle me-1"></i>You can't remove your own Settings access — that would lock you out of this page. Change your role instead if you really need to demote yourself.
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                  <button type="button" class="btn btn-light-2" id="permResetBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Role Defaults</button>
+                  <button type="button" class="btn btn-primary" id="permApplyBtn"><i class="bi bi-check-lg me-1"></i>Apply</button>
+                </div>
+              </div>
+            </div>
+
             <div class="table-wrap mt-2"><table class="table">
               <thead><tr><th>User</th><th>Role</th><th>Department</th><th>Status</th><th class="text-center">Actions</th></tr></thead>
               <tbody id="usersBody">
               </tbody>
             </table></div>
-          </div></div></div>
-
-          <!-- Roles -->
-          <div class="tab-pane fade" id="tab-roles"><div class="card"><div class="card-body">
-            <h3 class="panel-title mb-1">Roles &amp; Permissions</h3><p class="panel-sub mb-3">Module access per role.</p>
-            <div class="table-wrap"><table class="table" id="rolesMatrix">
-              <thead id="rolesMatrixHead"></thead>
-              <tbody id="rolesMatrixBody"></tbody>
-            </table></div>
-            <p class="small text-muted-2 mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>Click a cell to grant or revoke a module for that role. Changes apply the next time a user on that role signs in. A per-user Access override (User Management tab) still takes priority over these defaults for that one user.</p>
           </div></div></div>
 
           <!-- Theme -->
@@ -326,34 +347,6 @@
         </form>
       </div></div></div>
 
-      <!-- Per-user Access modal (Settings > Users > shield icon) -->
-      <div class="modal fade" id="accessModal" tabindex="-1" aria-labelledby="accessModalTitle"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title" id="accessModalTitle"><i class="bi bi-shield-lock me-2" style="color:var(--primary)"></i>Access Control</h5>
-          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-        <form id="accessForm">
-        <div class="modal-body">
-          <div class="mb-3">
-            <div class="fw-medium" id="accessUserName">—</div>
-            <div class="small text-muted-2"><span id="accessUserRole">—</span> · <span id="accessUserUsername">—</span></div>
-          </div>
-          <div class="alert alert-soft-info small mb-3" id="accessRoleDefaultNote">
-            <i class="bi bi-info-circle me-1"></i>By default this role grants: <strong id="accessRoleDefaultList">—</strong>. Tick or untick pages below to override that for this one user.
-          </div>
-          <div id="accessCheckboxes" class="row g-2"></div>
-          <div class="small text-muted-2 mt-3" id="accessAdminSelfHint" style="display:none">
-            <i class="bi bi-exclamation-triangle me-1"></i>You can't remove your own Settings access — that would lock you out of this page. Change your role instead if you really need to demote yourself.
-          </div>
-        </div>
-        <div class="modal-footer d-flex justify-content-between">
-          <button type="button" class="btn btn-light-2" id="accessResetBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset to Role Defaults</button>
-          <div class="d-flex gap-2">
-            <button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Save Access</button>
-          </div>
-        </div>
-        </form>
-      </div></div></div>
-
       <!-- Restore confirmation modal (Settings > Backup & Restore) -->
       <div class="modal fade" id="restoreConfirmModal" tabindex="-1" aria-labelledby="restoreConfirmTitle"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title" id="restoreConfirmTitle"><i class="bi bi-exclamation-triangle me-2" style="color:var(--primary)"></i>Restore Database</h5>
@@ -415,11 +408,12 @@
               <td><span class="badge ${u.status==='Active'?'b-success':'b-warning'}">${u.status}</span></td>
               <td class="text-center">
                 <button class="act-btn" data-bs-toggle="tooltip" title="Edit" data-act="edit" data-id="${u.id}"><i class="bi bi-pencil"></i></button>
-                <button class="act-btn" data-bs-toggle="tooltip" title="Access" data-act="access" data-id="${u.id}"><i class="bi bi-shield-lock"></i></button>
+                <button class="act-btn" data-bs-toggle="tooltip" title="Permissions" data-act="access" data-id="${u.id}"><i class="bi bi-shield-lock"></i></button>
                 <button class="act-btn danger" data-bs-toggle="tooltip" title="Deactivate" data-act="deactivate" data-id="${u.id}"><i class="bi bi-person-x"></i></button>
               </td></tr>`);
           });
           initTooltips(tb);
+          populatePermUserSelect();
         } catch (err) {
           tb.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${escapeHTML(err.message)}</td></tr>`;
         }
@@ -461,16 +455,24 @@
         const accessBtn = e.target.closest('[data-act="access"]');
         if (accessBtn) {
           const u = usersCache.find(x => x.id === accessBtn.dataset.id); if (!u) return;
-          openAccessModal(u);
+          const sel = document.getElementById('permUserSelect');
+          if (sel) { sel.value = u.id; sel.dispatchEvent(new Event('change')); }
+          document.getElementById('permUserSelect')?.closest('.result-line')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       });
 
-      /* ---------- Per-user Access modal (Settings > Users > shield) ----------
-       Renders one checkbox per module. Ticked boxes = pages this user can
-       reach. Saves a comma-separated custom_permissions value on the users
-       row (or NULL when Reset is used). The server intersects with the
-       full permission list, always keeps "settings" admin-only, and
-       refuses to let the current admin remove their own Settings access. */
+      /* ---------- Roles & Permissions, merged into User Management ----------
+       Used to be two separate things: a per-user "Access" popup here, and a
+       standalone "Roles & Permissions" tab with a role-level defaults grid.
+       Merged into one inline panel above the Users table: pick an account
+       from the dropdown (or the row's shield icon), review/edit which pages
+       it can reach, then Apply. Saves a comma-separated custom_permissions
+       value on the users row (or NULL when Reset is used). The server
+       intersects with the full permission list, always keeps "settings"
+       admin-only, and refuses to let the current admin remove their own
+       Settings access. (The old role-defaults grid is gone - this is the
+       only permissions UI now; "Reset to Role Defaults" still gets a user
+       back to whatever their role normally grants.) */
       const ACCESS_MODULES = [
         ['dashboard',    'Dashboard'],
         ['inventory',    'Inventory'],
@@ -483,23 +485,39 @@
         ['settings',     'Settings'],
         ['profile',      'Profile'],
       ];
-      const accessModal = new bootstrap.Modal('#accessModal');
-      const accessForm  = document.getElementById('accessForm');
-      let currentAccessUser = null;
+      const permUserSelect = document.getElementById('permUserSelect');
+      const permUserMeta   = document.getElementById('permUserMeta');
+      const permEditor     = document.getElementById('permEditor');
+      const permApplyBtn   = document.getElementById('permApplyBtn');
+      const permResetBtn   = document.getElementById('permResetBtn');
+      let currentPermUser  = null;
 
-      function openAccessModal(u){
-        currentAccessUser = u;
-        document.getElementById('accessUserName').textContent = u.name;
-        document.getElementById('accessUserRole').textContent = u.role;
-        document.getElementById('accessUserUsername').textContent = u.username;
+      // Keeps the dropdown's options in sync with the Users table, without
+      // losing whatever account is currently selected (loadUsers() re-runs
+      // after every save/deactivate).
+      function populatePermUserSelect(){
+        if (!permUserSelect) return;
+        const prevValue = permUserSelect.value;
+        permUserSelect.innerHTML = '<option value="">Select a user…</option>' +
+          usersCache.map(u => `<option value="${u.id}">${escapeHTML(u.name)} (${escapeHTML(u.username)})</option>`).join('');
+        if (prevValue && usersCache.some(u => u.id === prevValue)) {
+          permUserSelect.value = prevValue;
+          const u = usersCache.find(x => x.id === prevValue);
+          if (u) renderPermEditor(u);
+        }
+      }
+
+      function renderPermEditor(u){
+        currentPermUser = u;
+        permUserMeta.innerHTML = `${roleBadge(u.role)} <span class="ms-1">${escapeHTML(u.username)} · ${escapeHTML(u.email)}</span>`;
 
         const roleDefaults = new Set(u.rolePermissions || []);
-        document.getElementById('accessRoleDefaultList').textContent =
+        document.getElementById('permRoleDefaultList').textContent =
           [...roleDefaults].map(k => ACCESS_MODULES.find(m=>m[0]===k)?.[1] || k).join(', ') || '(nothing)';
 
         // Build checkboxes. Effective (currently allowed) pages come pre-ticked.
         const effective = new Set(u.effectivePermissions || []);
-        const container = document.getElementById('accessCheckboxes');
+        const container = document.getElementById('permCheckboxes');
         const isSelf = CURRENT_USER && CURRENT_USER.user_id === parseInt(u.id.split('-')[1], 10);
         const isAdmin = u.role === 'System Administrator';
         container.innerHTML = ACCESS_MODULES.map(([key, label]) => {
@@ -512,23 +530,34 @@
           const selfLockAttr = settingsAdminSelfLock ? 'data-self-locked="1"' : '';
           return `<div class="col-md-6">
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="acc-${key}" data-perm="${key}" ${checked} ${disabled} ${selfLockAttr}>
-              <label class="form-check-label" for="acc-${key}"><strong>${escapeHTML(label)}</strong></label>
+              <input class="form-check-input" type="checkbox" id="perm-${key}" data-perm="${key}" ${checked} ${disabled} ${selfLockAttr}>
+              <label class="form-check-label" for="perm-${key}"><strong>${escapeHTML(label)}</strong></label>
               ${lockedNote}
             </div>
           </div>`;
         }).join('');
 
-        document.getElementById('accessAdminSelfHint').style.display =
+        document.getElementById('permAdminSelfHint').style.display =
           (isSelf && isAdmin) ? '' : 'none';
 
-        accessModal.show();
+        permEditor.style.display = '';
       }
+
+      permUserSelect?.addEventListener('change', () => {
+        const u = usersCache.find(x => x.id === permUserSelect.value);
+        if (!u) {
+          permEditor.style.display = 'none';
+          currentPermUser = null;
+          permUserMeta.textContent = 'Pick a user to see their current access.';
+          return;
+        }
+        renderPermEditor(u);
+      });
 
       // Guard: prevent the current admin from unticking their own Settings
       // access in the UI (server also refuses, but catching it here avoids a
       // wasted request and a scary error toast).
-      document.getElementById('accessCheckboxes')?.addEventListener('change', (e) => {
+      document.getElementById('permCheckboxes')?.addEventListener('change', (e) => {
         const cb = e.target.closest('input[data-perm="settings"][data-self-locked="1"]');
         if (!cb) return;
         if (!cb.checked) {
@@ -537,39 +566,44 @@
         }
       });
 
-      accessForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!currentAccessUser) return;
-        const perms = [...document.querySelectorAll('#accessCheckboxes input[type="checkbox"]:checked')]
+      permApplyBtn?.addEventListener('click', async () => {
+        if (!currentPermUser) return;
+        const perms = [...document.querySelectorAll('#permCheckboxes input[type="checkbox"]:checked')]
           .map(cb => cb.dataset.perm);
         try {
           const res = await fetch('/api/users/permissions', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ id: currentAccessUser.id, permissions: perms }),
+            body: JSON.stringify({ id: currentPermUser.id, permissions: perms }),
           });
           const json = await res.json();
           if (!json.ok) throw new Error(json.error);
-          showToast('Access updated', 'success', 'bi-check-circle-fill');
-          accessModal.hide();
-          loadUsers();
+          showToast(`Permissions applied to ${currentPermUser.name}`, 'success', 'bi-check-circle-fill');
+          await loadUsers();
+          // Applied - collapse the editor and clear the picker instead of
+          // leaving it open, so Apply reads as "done" rather than inviting
+          // another edit on the same account right away.
+          permEditor.style.display = 'none';
+          currentPermUser = null;
+          if (permUserSelect) permUserSelect.value = '';
+          permUserMeta.textContent = 'Pick a user to see their current access.';
         } catch (err) {
           showToast(err.message, 'error', 'bi-exclamation-triangle');
         }
       });
 
-      document.getElementById('accessResetBtn').addEventListener('click', async () => {
-        if (!currentAccessUser) return;
-        if (!confirm(`Reset ${currentAccessUser.name}'s access back to the role defaults for ${currentAccessUser.role}?`)) return;
+      permResetBtn?.addEventListener('click', async () => {
+        if (!currentPermUser) return;
+        if (!confirm(`Reset ${currentPermUser.name}'s access back to the role defaults for ${currentPermUser.role}?`)) return;
         try {
           const res = await fetch('/api/users/permissions', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ id: currentAccessUser.id, reset: true }),
+            body: JSON.stringify({ id: currentPermUser.id, reset: true }),
           });
           const json = await res.json();
           if (!json.ok) throw new Error(json.error);
           showToast('Access reset to role defaults', 'success', 'bi-check-circle-fill');
-          accessModal.hide();
-          loadUsers();
+          await loadUsers();
+          if (permUserSelect) { permUserSelect.value = currentPermUser.id; permUserSelect.dispatchEvent(new Event('change')); }
         } catch (err) {
           showToast(err.message, 'error', 'bi-exclamation-triangle');
         }
@@ -610,78 +644,6 @@
           showToast(err.message, 'error', 'bi-exclamation-triangle');
         }
       }, true);
-
-      /* ---------- Roles & Permissions matrix - live, clickable, backed by the
-       role_permissions DB table via /api/roles/permissions(/toggle) ----------
-       Each cell is a button, not static markup, so an admin can grant or
-       revoke a module for an entire role straight from this screen. The
-       server enforces the same safeguards as the per-user Access override
-       (Settings can't leave System Administrator, can't be granted to
-       anyone else, and no role can be left with zero modules) - this page
-       just reflects those rules and reverts a cell if the server rejects it. */
-      const MODULES = [
-        ['dashboard','Dashboard'], ['inventory','Inventory'], ['suppliers','Suppliers'], ['customers','Customers'],
-        ['projects','Projects'], ['transactions','Client Transactions'],
-        ['forecasting','Forecasting'], ['reports','Reports'], ['settings','Settings'],
-      ];
-      let roleMatrixData = {};   // { role: [permKey, ...] }, from the server
-
-      function cellHTML(role, key, has){
-        return `<button type="button" class="role-cell-btn" data-role="${escapeHTML(role)}" data-module="${key}"
-            aria-pressed="${has}" aria-label="${escapeHTML(role)} — ${key}"
-            style="background:none;border:0;padding:4px;cursor:pointer;line-height:1">
-          ${has
-            ? '<i class="bi bi-check-circle-fill" style="color:var(--success);font-size:1.1rem"></i>'
-            : '<i class="bi bi-dash-circle text-muted-2" style="font-size:1.1rem"></i>'}
-        </button>`;
-      }
-
-      function renderRolesMatrix(){
-        const roles = Object.keys(roleMatrixData);
-        document.getElementById('rolesMatrixHead').innerHTML =
-          `<tr><th>Module</th>${roles.map(r => `<th class="text-center">${escapeHTML(r)}</th>`).join('')}</tr>`;
-        document.getElementById('rolesMatrixBody').innerHTML = MODULES.map(([key,label]) =>
-          `<tr><td class="fw-medium">${label}</td>${roles.map(r =>
-            `<td class="text-center">${cellHTML(r, key, (roleMatrixData[r] || []).includes(key))}</td>`).join('')}</tr>`).join('');
-      }
-
-      async function loadRolesMatrix(){
-        try {
-          const res = await fetch('/api/roles/permissions');
-          const json = await res.json();
-          if (!json.ok) throw new Error(json.error);
-          roleMatrixData = json.data;
-          renderRolesMatrix();
-        } catch (err) {
-          document.getElementById('rolesMatrixBody').innerHTML =
-            `<tr><td colspan="99" class="text-center text-danger py-3">${escapeHTML(err.message)}</td></tr>`;
-        }
-      }
-
-      // Delegated click: toggle one cell, optimistic UI, revert on error.
-      document.getElementById('rolesMatrixBody').addEventListener('click', async (e) => {
-        const btn = e.target.closest('.role-cell-btn'); if (!btn) return;
-        const role = btn.dataset.role, module = btn.dataset.module;
-        const current = (roleMatrixData[role] || []).includes(module);
-        const enabled = !current;
-        btn.disabled = true;
-        try {
-          const res = await fetch('/api/roles/permissions/toggle', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role, module, enabled }),
-          });
-          const json = await res.json();
-          if (!json.ok) throw new Error(json.error);
-          roleMatrixData[role] = json.data;
-          renderRolesMatrix();
-          showToast(`${enabled ? 'Granted' : 'Revoked'} ${module} ${enabled ? 'to' : 'from'} ${role}`, 'success');
-        } catch (err) {
-          showToast(err.message, 'error', 'bi-exclamation-triangle');
-          btn.disabled = false;   // cell stays as it was - no optimistic change was applied yet
-        }
-      });
-
-      loadRolesMatrix();
 
       /* ---------- System Logs: real audit_logs table (D7) ---------- */
       async function loadLogs(){

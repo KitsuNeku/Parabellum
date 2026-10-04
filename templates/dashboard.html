@@ -288,7 +288,15 @@
     // INVENTORY finishes loading from the server (see app.js), so this flag
     // makes sure the auto-popup below fires exactly once per page load -
     // the moment real inventory data is actually in, not on every re-render.
+    // A plain in-memory flag would reset on every page load/navigation,
+    // which is exactly the bug being fixed here (the modal was popping up
+    // every time the dashboard was opened, not just right after logging
+    // in) - so this is tracked in sessionStorage instead, which survives
+    // navigating away and back but is cleared on sign-out (see app.js) and
+    // whenever the browser tab/session actually ends.
+    const LOW_STOCK_MODAL_KEY = 'parabellum.lowStockModalShown';
     let autoShownLowStockModal = false;
+    try { autoShownLowStockModal = sessionStorage.getItem(LOW_STOCK_MODAL_KEY) === '1'; } catch (_) {}
     function renderDashboard(){
       const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.textContent=v; };
       set('dashKpiProjects', PROJECTS.filter(p=>p.status==='In Progress').length);
@@ -319,6 +327,7 @@
       // needed. Only once per page load - see autoShownLowStockModal above.
       if (!autoShownLowStockModal && INVENTORY.length > 0) {
         autoShownLowStockModal = true;
+        try { sessionStorage.setItem(LOW_STOCK_MODAL_KEY, '1'); } catch (_) {}
         if (low.length) bootstrap.Modal.getOrCreateInstance('#dashLowStockModal').show();
       }
 

@@ -156,27 +156,12 @@
           <p class="page-subtitle">Track stock levels, suppliers, and material movement.</p>
         </div>
       </div>
-      <!-- Summary cards -->
-      <div class="row g-3 mb-4">
-        <div class="col-6 col-xl-3"><div class="stat-card">
-          <div class="stat-ic"><i class="bi bi-box-seam"></i></div>
-          <div class="stat-label">Total Items</div><div class="stat-value" id="invKpiTotal">16</div><div class="stat-desc">Across 7 categories</div>
-        </div></div>
-        <div class="col-6 col-xl-3"><div class="stat-card is-success">
-          <div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
-          <div class="stat-label">In Stock</div><div class="stat-value" id="invKpiIn">11</div><div class="stat-desc">Healthy stock level</div>
-        </div></div>
-        <div class="col-6 col-xl-3"><div class="stat-card is-gold">
-          <div class="stat-ic"><i class="bi bi-exclamation-triangle"></i></div>
-          <div class="stat-label">Low Stock</div><div class="stat-value" id="invKpiLow">3</div><div class="stat-desc">Below reorder level</div>
-        </div></div>
-        <div class="col-6 col-xl-3"><div class="stat-card is-danger">
-          <div class="stat-ic"><i class="bi bi-x-octagon"></i></div>
-          <div class="stat-label">Out of Stock</div><div class="stat-value" id="invKpiOut">2</div><div class="stat-desc">Reorder required</div>
-        </div></div>
-      </div>
-
-      <!-- Attention lists: Low Stock / Stock Summary / Out of Stock (data-driven from INVENTORY) -->
+      <!-- Attention lists: Low Stock / Out of Stock / New Stock Materials
+           (data-driven from INVENTORY and ALL_MOVEMENTS). The old KPI stat
+           cards (Total Items / In Stock / Low Stock / Out of Stock) and the
+           Stock Summary panel that used to sit here were removed per client
+           request - Stock Summary now lives on the Reports page as its own
+           card instead (see reports.html). -->
       <div class="row g-3 mb-4">
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
@@ -186,24 +171,6 @@
           <p class="panel-sub mb-2">Items at or below their reorder level.</p>
           <div class="stock-list" id="lowStockList"></div>
         </div></div></div>
-        <!-- Stock Summary: total stock on hand + total value (qty x unit price),
-             then a per-item breakdown. Figures come straight from each item's
-             current_stock, which only ever reflects actual Stock In / Stock
-             Out plus any back order marked "Replaced" (the one disposition
-             that adds back to stock - see the Back Orders table). A pending
-             or "Reimbursed" back order is never included here. -->
-        <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
-          <div class="card-title-row">
-            <h2 class="panel-title"><i class="bi bi-calculator me-2" style="color:var(--primary)"></i>Stock Summary</h2>
-            <span class="badge b-neutral" id="sumItemCount">0 items</span>
-          </div>
-          <p class="panel-sub mb-2">On-hand stock per item and its value. Includes back orders marked Replaced.</p>
-          <div class="d-flex flex-wrap gap-2 column-gap-3 mb-2">
-            <div class="flex-fill"><div class="small text-muted-2">Total Stock Value</div><div class="fw-bold fs-5" style="color:var(--primary)" id="sumTotalValue">—</div></div>
-            <div class="flex-fill"><div class="small text-muted-2">Total Stock</div><div class="fw-bold fs-5" id="sumTotalQty">—</div></div>
-          </div>
-          <div class="stock-list" id="sumByItem"></div>
-        </div></div></div>
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
             <h2 class="panel-title"><i class="bi bi-x-octagon me-2" style="color:var(--primary)"></i>Out of Stock Materials</h2>
@@ -211,6 +178,21 @@
           </div>
           <p class="panel-sub mb-2">Items that need immediate reordering.</p>
           <div class="stock-list" id="outStockList"></div>
+        </div></div></div>
+        <!-- New Stock Materials: today's Stock In (RECEIPT) movements only,
+             most-recent-first. ALL_MOVEMENTS already comes back from the
+             server sorted by movement_date DESC, movement_id DESC, and
+             movement_id increases with insertion order, so filtering to
+             today's date and keeping that order is also sorted by time -
+             there's no separate time-of-day column to sort by (movement_date
+             is a DATE, not a timestamp). -->
+        <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
+          <div class="card-title-row">
+            <h2 class="panel-title"><i class="bi bi-clock-history me-2" style="color:var(--primary)"></i>New Stock Materials</h2>
+            <span class="badge b-neutral" id="newStockCount">0</span>
+          </div>
+          <p class="panel-sub mb-2">Materials stocked in today, most recent first.</p>
+          <div class="stock-list" id="newStockList"></div>
         </div></div></div>
       </div>
 
@@ -233,18 +215,17 @@
               <input type="date" class="form-control form-control-sm" style="max-width:160px" id="moveDateFrom">
               <label for="moveDateTo" class="form-label mb-0 text-muted-2 small ms-1">To</label>
               <input type="date" class="form-control form-control-sm" style="max-width:160px" id="moveDateTo">
-              <button type="button" class="btn btn-light-2 btn-sm" id="moveDateClearBtn" title="Clear date filter"><i class="bi bi-x-lg"></i></button>
+              <button type="button" class="btn btn-light-2 btn-sm" id="moveDateClearBtn" title="Clear search and date filter"><i class="bi bi-x-lg"></i></button>
             </div>
-            <!-- Inline "Search" toggle - reveals a second, record-level filter
-                 scoped to the Stock In / Stock Out / Back Orders tables (matches
-                 across item, id, category, date, qty, remarks, recorded-by).
-                 Kept separate from #moveSearchInput (item name/ID only). -->
-            <div class="d-flex align-items-center gap-2">
-              <input type="search" class="form-control form-control-sm d-none" style="max-width:220px" id="stockTableSearchInput"
-                     placeholder="Filter movement records…" aria-label="Filter movement records" autocomplete="off">
-              <button type="button" class="btn btn-primary btn-sm" id="stockTableSearchBtn"
-                      aria-controls="stockTableSearchInput" aria-expanded="false"><i class="bi bi-search me-1"></i>Search</button>
-            </div>
+            <!-- "Search" button - applies whatever's already typed/picked in
+                 #moveSearchInput (item name/ID) and the From/To date range
+                 above to the Stock In / Stock Out / Back Orders tables below.
+                 Those controls already filter live as you type/pick them;
+                 this button is an explicit, discoverable way to trigger the
+                 same search rather than a separate filter field of its own
+                 (the inline "Filter movement records…" bar this used to
+                 reveal has been removed). -->
+            <button type="button" class="btn btn-primary btn-sm" id="stockTableSearchBtn"><i class="bi bi-search me-1"></i>Search</button>
           </div>
           <!-- Row 2: stock movement actions, left-aligned under the filter row.
                The .toolbar's own bottom margin provides the spacing between rows. -->
@@ -317,7 +298,7 @@
           <div class="table-wrap"><table class="table" id="stockOutTable">
             <thead><tr>
               <th>Item</th><th>Category</th><th class="text-end">Qty Issued</th>
-              <th>Date</th><th>Remarks</th><th>Recorded By</th><th class="text-center">Actions</th>
+              <th>Date</th><th>Project</th><th>Recorded By</th><th class="text-center">Actions</th>
             </tr></thead>
             <tbody id="stockOutBody"></tbody>
           </table></div>
@@ -458,7 +439,7 @@
           <div class="col-md-6"><label class="form-label">Payment Terms</label><select class="form-select" name="terms" id="addSupplierTerms"></select></div>
           <div class="col-12"><label class="form-label">Remarks</label><textarea class="form-control" name="remarks" rows="2" placeholder="Notes about this supplier (optional)"></textarea></div>
         </div></div>
-        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Supplier</button></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="addSupplierSaveBtn">Save Supplier</button></div>
         </form>
       </div></div></div>
 
@@ -482,6 +463,7 @@
             <label class="form-label" for="stockOutProject">Project</label>
             <select class="form-select" name="projectId" id="stockOutProject" required><option value="">Select a project…</option></select>
             <div class="invalid-feedback">Choose the project these materials are for.</div>
+            <div class="form-text d-none" id="stockOutProjectLockHint">Locked while this request has items in it - remove them all to pick a different project.</div>
           </div>
           <div class="col-md-6"><label class="form-label">Client</label><div class="form-control-plaintext fw-medium" id="stockOutClient">—</div></div>
           <div class="col-md-6"><label class="form-label">Address</label><div class="form-control-plaintext fw-medium" id="stockOutAddress">—</div></div>
@@ -514,11 +496,15 @@
             <div class="table-wrap" id="stockOutCartWrap"><table class="table mb-0">
               <thead><tr>
                 <th>Item / Material Name</th><th>Item Code</th><th class="text-end">Available Qty</th>
-                <th style="width:140px">Requested Qty</th><th>Unit</th><th class="text-center">Action</th>
+                <th style="width:140px">Requested Qty</th><th>Unit</th>
+                <th class="text-end">Unit Price</th><th class="text-end">Line Total</th><th class="text-center">Action</th>
               </tr></thead>
               <tbody id="stockOutCartBody"></tbody>
             </table></div>
             <div class="stock-empty" id="stockOutCartEmpty">No items added yet.</div>
+            <div class="d-flex justify-content-end mt-2 d-none" id="stockOutCartTotalWrap">
+              <div class="small"><span class="text-muted-2">Total Price:</span> <span class="fw-bold fs-5" style="color:var(--primary)" id="stockOutCartTotal">₱0.00</span></div>
+            </div>
             <div class="small text-muted-2 mt-2"><i class="bi bi-info-circle me-1"></i>Items in this list are only reserved for the request. Inventory is reduced when you confirm.</div>
           </div>
 
@@ -599,6 +585,59 @@
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button></div>
       </div></div></div>
 
+      <!-- Back Order Disposition Modal - opened from the Back Orders table's
+           Reimbursed/Replaced buttons when newly marking one (clicking an
+           ALREADY-marked button still clears it instantly, no popup needed
+           to undo - see handleRowAction). The item, supplier and receiver
+           are read-only here (same field style as the Item Detail modal
+           above) since they're just confirming an existing record, not
+           editing it; the one number that actually varies per case - how
+           many units were really replaced, or how much was paid back -
+           stays editable, alongside a remarks field for the disposition
+           itself (condition on return, how the refund was given, etc.),
+           kept separate from the return's original reason. Modeled on
+           Record Return's own "confirm the specifics, then post" shape,
+           just for the Replaced/Reimbursed side of a back order instead of
+           the return itself. -->
+      <div class="modal fade" id="dispositionModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="dispoTitle"><i class="bi bi-check2-circle me-2" style="color:var(--primary)"></i>Mark as Replaced</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form id="dispositionForm" novalidate>
+        <div class="modal-body">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <div><h5 class="mb-0" id="dispoItemName">—</h5><div class="small text-muted-2" id="dispoItemId">—</div></div>
+          </div>
+          <div class="row g-3 small mb-1">
+            <div class="col-6"><div class="text-muted-2">Supplier</div><div class="fw-medium" id="dispoSupplier">—</div></div>
+            <div class="col-6"><div class="text-muted-2">Received By</div><div class="fw-medium" id="dispoReceivedBy">—</div></div>
+            <div class="col-6"><div class="text-muted-2">Qty Returned</div><div class="fw-medium" id="dispoQtyReturned">—</div></div>
+            <div class="col-6"><div class="text-muted-2">Date Returned</div><div class="fw-medium" id="dispoDate">—</div></div>
+          </div>
+          <hr>
+          <div class="row g-3">
+            <div class="col-12" id="dispoReplacedWrap">
+              <label class="form-label" for="dispoQtyInput">Qty Replaced</label>
+              <input type="number" class="form-control" id="dispoQtyInput" min="0.01" step="0.01" required>
+              <div class="form-text">How many of the returned units actually went back on the shelf (up to <span id="dispoMaxQtyHint">—</span>) - not necessarily all of them.</div>
+            </div>
+            <div class="col-12" id="dispoReimbursedWrap" style="display:none">
+              <label class="form-label" for="dispoAmountInput">Amount Reimbursed (₱)</label>
+              <input type="number" class="form-control" id="dispoAmountInput" min="0.01" step="0.01" required>
+              <div class="form-text">Defaults to qty returned × the item's current unit price - edit if the actual refund was different.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="dispoNotes">Remarks</label>
+              <textarea class="form-control" id="dispoNotes" rows="2" placeholder="e.g. Repackaged and inspected, or Refunded in cash"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="dispoSubmitBtn">Confirm</button>
+        </div>
+        </form>
+      </div></div></div>
+
       <!-- Transaction receipt: pops up after Confirm (Stock In / Stock Out / Back
            Order) and when reprinting a row. Printing is optional - Close skips it.
            Content comes from showTransactionReceipt() in app.js. -->
@@ -665,13 +704,26 @@
         // pickable state there (that's the whole point of Stock In).
         const flagOutOfStock = !!opts.flagOutOfStock;
 
+        // Stock In only: an explicit "Others" row at the bottom of the
+        // dropdown, so adding a material that isn't in the list yet is a
+        // deliberate pick rather than something the user has to discover on
+        // their own by typing past the list. Picking it clears any selected
+        // item and leaves the field free to type a brand-new name into
+        // (Stock In already treats an unmatched name as a new item at
+        // submit time - see allowUnmatched above).
+        const allowOthers = !!opts.allowOthers;
+        const othersRow = `<div class="isr-item isr-item--other" data-other="1">
+            <div class="fw-medium"><i class="bi bi-plus-lg me-1"></i>Others</div>
+            <div class="small text-muted-2">Not in the list - add it as a new item</div>
+          </div>`;
+
         function renderResults(query){
           const items = inventoryStore.all();
           const q = query.trim().toLowerCase();
           const matches = q
             ? items.filter(i => i.name.toLowerCase().includes(q) || i.id.toLowerCase().includes(q)).slice(0, 8)
             : items.slice(0, 8);
-          results.innerHTML = matches.length
+          results.innerHTML = (matches.length
             ? matches.map(i => {
                 const outOfStock = flagOutOfStock && Number(i.qty) <= 0;
                 return `<div class="isr-item${outOfStock ? ' isr-item--out' : ''}" data-id="${i.id}">
@@ -679,7 +731,7 @@
                 <div class="small ${outOfStock ? '' : 'text-muted-2'}">${i.id} \u2022 ${outOfStock ? 'Out of stock' : `${NUM(i.qty)} ${i.unit} on hand`}</div>
               </div>`;
               }).join('')
-            : `<div class="isr-empty">No matching items.</div>`;
+            : `<div class="isr-empty">No matching items.</div>`) + (allowOthers ? othersRow : '');
           results.classList.add('show');
           fitSearchResults(searchInput, results);
         }
@@ -703,6 +755,16 @@
           // mousedown (not click) fires before the input's blur, so the
           // selection registers before the dropdown gets hidden.
           const item = e.target.closest('.isr-item'); if (!item) return;
+          if (item.dataset.other) {
+            const wasSelected = !!hiddenInput.value;
+            hiddenInput.value = '';
+            searchInput.value = '';
+            searchInput.setCustomValidity(unmatchedMsg);
+            results.classList.remove('show');
+            if (wasSelected && typeof opts.onClear === 'function') opts.onClear();
+            setTimeout(() => searchInput.focus(), 0);
+            return;
+          }
           const material = inventoryStore.find(item.dataset.id); if (!material) return;
           hiddenInput.value = material.id;
           searchInput.value = material.name;
@@ -732,6 +794,7 @@
       // unlocks them again.
       wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', {
         allowUnmatched: true,
+        allowOthers: true,
         onSelect: (material) => {
           const sup = document.getElementById('stockInSupplier');
           const price = document.getElementById('stockInPrice');
@@ -865,10 +928,28 @@
         if (termsSel) termsSel.innerHTML =
           SUPPLIER_TERMS.map(t => `<option ${t === 'Net 30' ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('');
 
+        const saveBtn = document.getElementById('addSupplierSaveBtn');
+        // Guards against a double-click (or any other way of firing two
+        // overlapping submits) sending two /api/suppliers/save requests at
+        // once - without this, both can read the same "next supplier code"
+        // before either has inserted, and the second one fails with a
+        // duplicate-key error (see the server-side retry on that endpoint
+        // for the other half of this fix).
+        function setAddSupplierBusy(busy){
+          form.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
+          if (saveBtn) {
+            saveBtn.disabled = busy;
+            saveBtn.innerHTML = busy
+              ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…`
+              : 'Save Supplier';
+          }
+        }
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           if (!form.checkValidity()) { e.stopPropagation(); form.classList.add('was-validated'); return; }
+          if (saveBtn?.disabled) return;
           const d = Object.fromEntries(new FormData(form));
+          setAddSupplierBusy(true);
           try {
             const res = await fetch('/api/suppliers/save', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -884,10 +965,13 @@
             showToast('Supplier saved', 'success');
           } catch (err) {
             showToast(err.message, 'error', 'bi-exclamation-triangle');
+          } finally {
+            setAddSupplierBusy(false);
           }
         });
         form.closest('.modal')?.addEventListener('show.bs.modal', () => {
           form.reset(); form.classList.remove('was-validated');
+          setAddSupplierBusy(false);
         });
       })();
 
@@ -1057,8 +1141,17 @@
         ? 'At least 1.'
         : (r.requestedQty > r.available ? `Max ${NUM(r.available)}.` : '');
       function renderStockOutCart(){
+        let cartTotal = 0;
         so.body.innerHTML = stockOutCart.map((r, idx) => {
           const err = rowQtyError(r);
+          // Unit price comes from the item's own record (not stored on the
+          // cart row itself) so it always reflects the current price, same
+          // as Stock In's auto-fill. Purely informational here - the server
+          // doesn't take a price on stock-out either way.
+          const unitPrice = Number(inventoryStore.find(r.itemId)?.price) || 0;
+          const qtyForTotal = Number.isFinite(r.requestedQty) ? r.requestedQty : 0;
+          const lineTotal = unitPrice * qtyForTotal;
+          cartTotal += lineTotal;
           return `<tr>
             <td class="fw-medium">${escapeHTML(r.name)}</td>
             <td class="text-muted-2">${escapeHTML(r.code)}</td>
@@ -1069,6 +1162,8 @@
               <div class="invalid-feedback">${err}</div>
             </td>
             <td class="text-muted-2">${escapeHTML(r.unit)}</td>
+            <td class="text-end text-muted-2">${PESO(unitPrice)}</td>
+            <td class="text-end fw-medium">${PESO(lineTotal)}</td>
             <td class="text-center"><button type="button" class="act-btn danger" data-cart-remove="${idx}" title="Remove from request" aria-label="Remove ${escapeHTML(r.name)} from request" ${stockOutBusy ? 'disabled' : ''}><i class="bi bi-trash"></i></button></td>
           </tr>`;
         }).join('');
@@ -1076,6 +1171,17 @@
         so.wrap.classList.toggle('d-none', n === 0);
         so.empty.classList.toggle('d-none', n > 0);
         so.count.textContent = plural(n, 'item');
+        const totalWrap = document.getElementById('stockOutCartTotalWrap');
+        const totalEl = document.getElementById('stockOutCartTotal');
+        if (totalWrap) totalWrap.classList.toggle('d-none', n === 0);
+        if (totalEl) totalEl.textContent = PESO(cartTotal);
+        // Once an item's been added, the project is locked - switching it
+        // part-way through would leave the cart's "available stock" figures
+        // (and the project-scoped Back Order lookup, which groups by
+        // project) pointing at the wrong project. Remove every row to
+        // unlock it again.
+        if (so.project) so.project.disabled = stockOutBusy || n > 0;
+        document.getElementById('stockOutProjectLockHint')?.classList.toggle('d-none', n === 0);
         updateStockOutConfirm();
       }
       // Editing a requested qty: update state as you type (so Confirm reacts),
@@ -1517,49 +1623,28 @@
         renderMovements(); renderBackOrders();
       });
       document.getElementById('moveDateClearBtn')?.addEventListener('click', () => {
-        moveDateFrom = ''; moveDateTo = '';
+        moveDateFrom = ''; moveDateTo = ''; moveSearchQuery = '';
         const fromEl = document.getElementById('moveDateFrom');
         const toEl = document.getElementById('moveDateTo');
+        const searchEl = document.getElementById('moveSearchInput');
         if (fromEl) fromEl.value = '';
         if (toEl) toEl.value = '';
+        if (searchEl) searchEl.value = '';
         resetAllPages();
-        renderMovements(); renderBackOrders();
+        renderMovements(); renderBackOrders(); renderStockSummary();
       });
 
-      /* ---------- "Search" button (record-level filter) ----------
-       Reveals an inline input that filters ONLY the Stock In / Stock Out /
-       Back Orders record tables. Separate from #moveSearchInput (item
-       name/ID): this one matches across the whole record - item, ID,
-       category, date, qty, remarks and recorded-by. One click opens and
-       focuses it; Esc clears and collapses it; clicking Search again on an
-       empty box collapses it. */
-      let stockTableQuery = '';
-      const stockSearchBtn   = document.getElementById('stockTableSearchBtn');
-      const stockSearchInput = document.getElementById('stockTableSearchInput');
-      function setStockSearchOpen(open){
-        if (!stockSearchBtn || !stockSearchInput) return;
-        stockSearchInput.classList.toggle('d-none', !open);
-        stockSearchBtn.setAttribute('aria-expanded', String(open));
-        if (open) stockSearchInput.focus();
-      }
-      stockSearchBtn?.addEventListener('click', () => {
-        const isOpen = !stockSearchInput.classList.contains('d-none');
-        if (isOpen && !stockSearchInput.value) setStockSearchOpen(false);
-        else setStockSearchOpen(true);
-      });
-      stockSearchInput?.addEventListener('input', (e) => {
-        stockTableQuery = e.target.value.toLowerCase().trim();
+      /* ---------- "Search" button ----------
+       #moveSearchInput and the From/To date inputs above already filter the
+       Stock In / Stock Out / Back Orders tables live as they're typed/picked
+       (see their own 'input'/'change' listeners). This button doesn't add a
+       filter of its own - it just re-runs that same search/date filter on
+       click, as an explicit, discoverable "go" action (and a plain button
+       press for anyone who'd rather click Search than wait for live
+       filtering). */
+      document.getElementById('stockTableSearchBtn')?.addEventListener('click', () => {
         resetAllPages();
-        renderMovements(); renderBackOrders();
-      });
-      stockSearchInput?.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape') return;
-        stockSearchInput.value = '';
-        stockTableQuery = '';
-        resetAllPages();
-        renderMovements(); renderBackOrders();
-        setStockSearchOpen(false);
-        stockSearchBtn?.focus();
+        renderMovements(); renderBackOrders(); renderStockSummary();
       });
 
       function buildMovePagination(navId, ulId, currentPage, totalItems, onChange){
@@ -1617,15 +1702,21 @@
       function backOrderActionBtns(m){
         const reimbursed = m.disposition === 'Reimbursed';
         const replaced = m.disposition === 'Replaced';
+        const reimbursedTitle = reimbursed
+          ? `Marked Reimbursed (${PESO(m.reimbursedAmount || 0)}) — click to clear`
+          : 'Mark as Reimbursed';
+        const replacedTitle = replaced
+          ? `Marked Replaced (${NUM(m.replacedQty != null ? m.replacedQty : m.qty)} ${m.unit}) — click to clear`
+          : 'Mark as Replaced';
         return `<div class="d-inline-flex gap-1">
             <button type="button" class="disposition-btn${reimbursed ? ' is-active is-reimbursed' : ''}"
                     data-disposition-btn data-disposition="Reimbursed" data-movement-id="${m.movementId}"
-                    data-bs-toggle="tooltip" title="${reimbursed ? 'Marked Reimbursed — click to clear' : 'Mark as Reimbursed'}">
+                    data-bs-toggle="tooltip" title="${reimbursedTitle}">
               <i class="bi ${reimbursed ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Reimbursed
             </button>
             <button type="button" class="disposition-btn${replaced ? ' is-active is-replaced' : ''}"
                     data-disposition-btn data-disposition="Replaced" data-movement-id="${m.movementId}"
-                    data-bs-toggle="tooltip" title="${replaced ? 'Marked Replaced — click to clear' : 'Mark as Replaced'}">
+                    data-bs-toggle="tooltip" title="${replacedTitle}">
               <i class="bi ${replaced ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Replaced
             </button>
             <button class="act-btn print-move" data-bs-toggle="tooltip" title="Print Receipt" data-movement-id="${m.movementId}"><i class="bi bi-printer"></i></button>
@@ -1669,7 +1760,7 @@
         const tbody = document.getElementById(ids.tbody);
         tbody.innerHTML = '';
         if (pageItems.length === 0) {
-          const reason = (moveSearchQuery || moveCategoryFilter || stockTableQuery) ? 'match your search or filter' : 'yet';
+          const reason = (moveSearchQuery || moveCategoryFilter || moveDateFrom || moveDateTo) ? 'match your search or filter' : 'yet';
           tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="${colCount}" class="text-center text-muted-2 py-4">
             No ${emptyNoun} records ${reason}.</td></tr>`);
         }
@@ -1698,8 +1789,8 @@
 
       // Shared by renderMovements() (Stock In/Out) and renderBackOrders() -
       // both read from the same toolbar controls (search, category, date
-      // range, inline table search) even though they're two separate arrays
-      // (window.ALL_MOVEMENTS and window.ALL_BACKORDERS) now.
+      // range) even though they're two separate arrays (window.ALL_MOVEMENTS
+      // and window.ALL_BACKORDERS) now.
       function matchesMoveFilters(m){
         if (moveCategoryFilter && m.cat !== moveCategoryFilter) return false;
         if (moveSearchQuery) {
@@ -1712,11 +1803,6 @@
         const moveDate = (m.date || '').slice(0, 10);
         if (moveDateFrom && moveDate < moveDateFrom) return false;
         if (moveDateTo && moveDate > moveDateTo) return false;
-        if (stockTableQuery) {
-          const rec = [m.id, m.name, m.cat, m.date, m.qty, m.unit, m.remarks, m.recordedBy, m.backOrderBy]
-            .map(v => v == null ? '' : String(v)).join(' ').toLowerCase();
-          if (!rec.includes(stockTableQuery)) return false;
-        }
         return true;
       }
 
@@ -1807,20 +1893,122 @@
        than patching just the one row - keeping the Inventory table, Low
        Stock badges, and Stock Movement Summary all in sync with the new
        on-hand figure, not just the Back Orders table. */
-      async function setBackOrderDisposition(backOrderId, disposition){
+      async function setBackOrderDisposition(backOrderId, disposition, extra){
         try {
           const res = await fetch('/api/inventory/return/disposition', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ backOrderId, disposition }),
+            body: JSON.stringify(Object.assign({ backOrderId, disposition }, extra || {})),
           });
           const json = await res.json();
           if (!json.ok) throw new Error(json.error);
           if (typeof window.refreshInventory === 'function') await window.refreshInventory();
           showToast(json.disposition ? `Marked as ${json.disposition}` : 'Disposition cleared', 'success');
+          return true;
         } catch (err) {
           showToast(err.message, 'error', 'bi-exclamation-triangle');
+          return false;
         }
       }
+
+      /* Back Orders: the popup that confirms the details of a Replaced/
+       Reimbursed mark before it's persisted - item/supplier/receiver are
+       read-only (pulled straight from the back-order row and the item's
+       current record), only the qty actually replaced (capped at how much
+       was returned) or the peso amount reimbursed, plus a remarks note
+       about the disposition itself, are editable. Mirrors Record Return's
+       modal shape but for settling what happened to a returned item. */
+      const dispoModalEl = document.getElementById('dispositionModal');
+      const dispoModal = dispoModalEl ? new bootstrap.Modal(dispoModalEl) : null;
+      const dispo = {
+        form: document.getElementById('dispositionForm'),
+        title: document.getElementById('dispoTitle'),
+        itemName: document.getElementById('dispoItemName'),
+        itemId: document.getElementById('dispoItemId'),
+        supplier: document.getElementById('dispoSupplier'),
+        receivedBy: document.getElementById('dispoReceivedBy'),
+        qtyReturned: document.getElementById('dispoQtyReturned'),
+        date: document.getElementById('dispoDate'),
+        maxQtyHint: document.getElementById('dispoMaxQtyHint'),
+        replacedWrap: document.getElementById('dispoReplacedWrap'),
+        reimbursedWrap: document.getElementById('dispoReimbursedWrap'),
+        qtyInput: document.getElementById('dispoQtyInput'),
+        amountInput: document.getElementById('dispoAmountInput'),
+        notes: document.getElementById('dispoNotes'),
+        submitBtn: document.getElementById('dispoSubmitBtn'),
+      };
+      let dispoState = null;   // { backOrderId, disposition, maxQty }
+      let dispoBusy = false;
+
+      function setDispoBusy(busy, label){
+        dispoBusy = busy;
+        dispo.form?.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
+        if (dispo.submitBtn) {
+          dispo.submitBtn.disabled = busy;
+          dispo.submitBtn.innerHTML = busy
+            ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${label || 'Saving…'}`
+            : 'Confirm';
+        }
+      }
+
+      function openDispositionModal(m, disposition){
+        if (!dispoModal || !dispo.form) { setBackOrderDisposition(m.movementId, disposition); return; }
+        const item = inventoryStore.find(m.id) || {};
+        dispoState = { backOrderId: m.movementId, disposition, maxQty: Number(m.qty) || 0 };
+
+        dispo.title.innerHTML = disposition === 'Replaced'
+          ? '<i class="bi bi-check2-circle me-2" style="color:var(--primary)"></i>Mark as Replaced'
+          : '<i class="bi bi-check2-circle me-2" style="color:var(--primary)"></i>Mark as Reimbursed';
+        dispo.itemName.textContent = m.name;
+        dispo.itemId.textContent = m.id;
+        dispo.supplier.textContent = item.sup || '—';
+        dispo.receivedBy.textContent = m.backOrderBy || '—';
+        dispo.qtyReturned.textContent = `${NUM(m.qty)} ${m.unit}`;
+        dispo.date.textContent = m.date || '—';
+        dispo.maxQtyHint.textContent = `${NUM(m.qty)} ${m.unit}`;
+
+        const isReplaced = disposition === 'Replaced';
+        dispo.replacedWrap.style.display = isReplaced ? '' : 'none';
+        dispo.reimbursedWrap.style.display = isReplaced ? 'none' : '';
+        dispo.qtyInput.required = isReplaced;
+        dispo.amountInput.required = !isReplaced;
+
+        if (isReplaced) {
+          dispo.qtyInput.max = String(dispoState.maxQty);
+          dispo.qtyInput.value = m.replacedQty != null ? m.replacedQty : dispoState.maxQty;
+        } else {
+          const unitPrice = Number(item.price) || 0;
+          dispo.amountInput.value = m.reimbursedAmount != null
+            ? m.reimbursedAmount
+            : (dispoState.maxQty * unitPrice).toFixed(2);
+        }
+        dispo.notes.value = m.dispositionNotes || '';
+
+        setDispoBusy(false);
+        dispoModal.show();
+      }
+
+      dispo.form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!dispoState || dispoBusy) return;
+        const { backOrderId, disposition, maxQty } = dispoState;
+        const extra = { notes: dispo.notes.value.trim() };
+
+        if (disposition === 'Replaced') {
+          const qty = parseFloat(dispo.qtyInput.value);
+          if (!Number.isFinite(qty) || qty <= 0) return showToast('Enter how many units were replaced.', 'error', 'bi-exclamation-triangle');
+          if (qty > maxQty) return showToast(`Qty Replaced can’t exceed ${NUM(maxQty)} (the amount returned).`, 'error', 'bi-exclamation-triangle');
+          extra.qty = qty;
+        } else {
+          const amount = parseFloat(dispo.amountInput.value);
+          if (!Number.isFinite(amount) || amount <= 0) return showToast('Enter the amount reimbursed.', 'error', 'bi-exclamation-triangle');
+          extra.amount = amount;
+        }
+
+        setDispoBusy(true);
+        const ok = await setBackOrderDisposition(backOrderId, disposition, extra);
+        setDispoBusy(false);
+        if (ok) dispoModal.hide();
+      });
 
       /* ---------- Delegated row actions on the movement tables: View / Edit /
        Delete (they operate on the underlying MATERIAL, same as before -
@@ -1835,8 +2023,11 @@
           const backOrderId = parseInt(dispBtn.dataset.movementId, 10);
           const m = (window.ALL_BACKORDERS || []).find(x => x.movementId === backOrderId);
           const clicked = dispBtn.dataset.disposition;
-          const next = (m && m.disposition === clicked) ? '' : clicked;  // toggle off if already active
-          setBackOrderDisposition(backOrderId, next);
+          if (m && m.disposition === clicked) {
+            setBackOrderDisposition(backOrderId, '');   // already marked - clear instantly, no popup
+          } else if (m) {
+            openDispositionModal(m, clicked);            // newly marking - confirm details first
+          }
           return;
         }
 
@@ -1860,17 +2051,15 @@
       document.getElementById('stockOutBody').addEventListener('click', handleRowAction);
       document.getElementById('returnsBody')?.addEventListener('click', handleRowAction);
 
-      /* ---------- KPIs + attention lists + sidebar badge + item dropdowns
+      /* ---------- attention lists + sidebar badge + item dropdowns
        (unchanged - still computed from the MATERIALS list, not movement
        history) - and triggers the movement tables to re-render too, since
-       any mutation here (add/edit/delete/stock in/out) should refresh both. ---------- */
+       any mutation here (add/edit/delete/stock in/out) should refresh both.
+       The old KPI stat cards (Total Items / In Stock / Low Stock / Out of
+       Stock) and the Stock Summary card were removed from this page per
+       client request - Stock Summary now lives on Reports instead. ---------- */
       function renderInventory(){
         const items = inventoryStore.all();
-
-        set('invKpiTotal', items.length);
-        set('invKpiIn',  items.filter(i=>i.status==='In Stock').length);
-        set('invKpiLow', items.filter(i=>i.status==='Low Stock').length);
-        set('invKpiOut', items.filter(i=>i.status==='Out of Stock').length);
 
         const low = items.filter(i => i.status === 'Low Stock');
         const out = items.filter(i => i.status === 'Out of Stock');
@@ -1887,24 +2076,20 @@
           ? out.map(i => row(i, 'var(--primary)', `0 ${i.unit}`)).join('')
           : '<div class="stock-empty">No out-of-stock materials.</div>';
 
-        // Stock Summary: total value (qty x unit price) + on-hand stock,
-        // broken down per item (not per unit). i.qty is each item's
-        // current_stock, which only reflects actual Stock In / Stock Out
-        // plus any back order marked "Replaced" (see
-        // _set_back_order_disposition in app.py) - a pending or "Reimbursed"
-        // back order is never included here.
-        const totalValue = items.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
-        const totalQty   = items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
-        set('sumItemCount', `${items.length} item${items.length === 1 ? '' : 's'}`);
-        set('sumTotalValue', PESO(totalValue));
-        set('sumTotalQty', `${NUM(totalQty)} units`);
-        document.getElementById('sumByItem').innerHTML = items.length
-          ? items.slice().sort((a, b) => (Number(b.qty)||0)*(Number(b.price)||0) - (Number(a.qty)||0)*(Number(a.price)||0)).map(i => `
+        // New Stock Materials: today's Stock In (RECEIPT) movements, newest
+        // first - see the comment above the card's markup for why movement
+        // order (not a time-of-day sort) is what "sorted by time" means here.
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const newStock = (window.ALL_MOVEMENTS || [])
+          .filter(m => m.type === 'RECEIPT' && (m.date || '').slice(0, 10) === todayStr);
+        set('newStockCount', newStock.length);
+        document.getElementById('newStockList').innerHTML = newStock.length
+          ? newStock.map(m => `
             <div class="sl-item">
-              <div><div class="sl-name">${escapeHTML(i.name)}</div><div class="sl-sub">${escapeHTML(i.id)} · ${NUM(i.qty)} ${escapeHTML(i.unit)}</div></div>
-              <div class="sl-qty">${PESO((Number(i.qty)||0) * (Number(i.price)||0))}</div>
+              <div><div class="sl-name">${escapeHTML(m.name)}</div><div class="sl-sub">${escapeHTML(m.id)}${m.recordedBy && m.recordedBy !== '—' ? ' · ' + escapeHTML(m.recordedBy) : ''}</div></div>
+              <div class="sl-qty" style="color:var(--success)">+${NUM(m.qty)} ${escapeHTML(m.unit)}</div>
             </div>`).join('')
-          : '<div class="stock-empty">No inventory items yet.</div>';
+          : '<div class="stock-empty">No stock added yet today.</div>';
 
         // Sidebar badge stays in sync with live data
         const oos = out.length;

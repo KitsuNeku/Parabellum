@@ -169,7 +169,25 @@ CREATE TABLE back_orders (
     -- materials.current_stock (i.e. disposition = 'Replaced'). Tracked
     -- explicitly so toggling the disposition adds/removes that quantity
     -- exactly once, instead of re-deriving it from disposition alone.
-    restocked     BOOLEAN NOT NULL DEFAULT FALSE
+    restocked     BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Exact quantity CURRENTLY added into materials.current_stock for this
+    -- row (0 when not restocked). Not always equal to `quantity` - staff
+    -- can mark fewer units than were returned as actually replaced (e.g.
+    -- only 3 of 5 returned units were undamaged). Stored explicitly (not
+    -- re-derived from replaced_qty) so clearing/switching the disposition
+    -- always reverses exactly what was actually added, even if replaced_qty
+    -- is edited on a later pass.
+    restocked_qty      NUMERIC(12,2) NOT NULL DEFAULT 0,
+    -- How many of the returned units were marked "Replaced" (<= quantity).
+    -- NULL when disposition isn't currently 'Replaced'.
+    replaced_qty        NUMERIC(12,2) CHECK (replaced_qty IS NULL OR replaced_qty > 0),
+    -- Peso amount actually refunded when marked "Reimbursed". NULL when
+    -- disposition isn't currently 'Reimbursed'. Doesn't affect stock.
+    reimbursed_amount    NUMERIC(12,2) CHECK (reimbursed_amount IS NULL OR reimbursed_amount > 0),
+    -- Free-text note entered at the moment the disposition was set (e.g.
+    -- "repackaged and inspected" / "refunded in cash") - separate from
+    -- `remarks` above, which is the ORIGINAL reason the item came back.
+    disposition_notes    TEXT
 );
 CREATE INDEX idx_back_order_material_date
     ON back_orders (material_id, return_date);
@@ -265,3 +283,25 @@ INSERT INTO role_permissions (role, permissions) VALUES
     ('Inventory Personnel',  'dashboard,inventory,suppliers,profile'),
     ('Operations Personnel', 'dashboard,projects,transactions,profile'),
     ('Management/Owner',     'dashboard,projects,transactions,forecasting,reports,profile');
+
+-- =================================================================
+-- MIGRATION — run this instead on a database that already has data
+-- =================================================================
+-- Re-running everything above would DROP every table (see the top of this
+-- file) and wipe your existing data. If back_orders already exists and you
+-- just need the new "Replaced"/"Reimbursed" detail columns (added for the
+-- Back Order disposition popup - Qty Replaced / Amount Reimbursed /
+-- disposition remarks), run ONLY this block instead, once, in pgAdmin's
+-- Query Tool:
+--
+-- ALTER TABLE back_orders
+--     ADD COLUMN IF NOT EXISTS restocked_qty      NUMERIC(12,2) NOT NULL DEFAULT 0,
+--     ADD COLUMN IF NOT EXISTS replaced_qty        NUMERIC(12,2) CHECK (replaced_qty IS NULL OR replaced_qty > 0),
+--     ADD COLUMN IF NOT EXISTS reimbursed_amount    NUMERIC(12,2) CHECK (reimbursed_amount IS NULL OR reimbursed_amount > 0),
+--     ADD COLUMN IF NOT EXISTS disposition_notes    TEXT;
+--
+-- -- Back-fill restocked_qty for any back order already marked "Replaced"
+-- -- before this migration, so its exact restocked amount (= quantity, the
+-- -- only option that existed before this change) is tracked correctly:
+-- UPDATE back_orders SET restocked_qty = quantity
+--  WHERE disposition = 'Replaced' AND restocked = TRUE AND restocked_qty = 0;

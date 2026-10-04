@@ -275,6 +275,29 @@
         </div></div></div>
       </div>
 
+      <!-- Stock Summary card - moved here from the Inventory page per client
+           request. Total stock on hand + total value (qty x unit price),
+           then a per-item breakdown. Figures come straight from each item's
+           current_stock, which only ever reflects actual Stock In / Stock
+           Out plus any back order marked "Replaced" (the one disposition
+           that adds back to stock - see the Back Orders table on the
+           Inventory page). A pending or "Reimbursed" back order is never
+           included here. -->
+      <div class="row g-3 mb-4">
+        <div class="col-12"><div class="card h-100"><div class="card-body">
+          <div class="card-title-row">
+            <h3 class="panel-title mb-1"><i class="bi bi-calculator me-2" style="color:var(--primary)"></i>Stock Summary</h3>
+            <span class="badge b-neutral" id="sumItemCount">0 items</span>
+          </div>
+          <p class="panel-sub mb-2">On-hand stock per item and its value. Includes back orders marked Replaced.</p>
+          <div class="d-flex flex-wrap gap-2 column-gap-3 mb-2">
+            <div class="flex-fill"><div class="small text-muted-2">Total Stock Value</div><div class="fw-bold fs-5" style="color:var(--primary)" id="sumTotalValue">—</div></div>
+            <div class="flex-fill"><div class="small text-muted-2">Total Stock</div><div class="fw-bold fs-5" id="sumTotalQty">—</div></div>
+          </div>
+          <div class="stock-list" id="sumByItem"></div>
+        </div></div></div>
+      </div>
+
       <div class="card"><div class="card-body">
         <div class="card-title-row"><h3 class="panel-title">Recent Reports</h3>
           <div class="d-flex gap-2"><button class="btn btn-light-2 btn-sm" data-export="PDF"><i class="bi bi-filetype-pdf me-1"></i>PDF</button>
@@ -383,6 +406,32 @@
 
       const mv = { key: null, preset: 'all', movements: null, fallback: null, items: null, viewing: null };
 
+      /* ---------- Stock Summary card (moved here from the Inventory page) ----------
+       Loads independently of the report-preview flow above (that data only
+       loads lazily, when a report is generated) so the card has real figures
+       as soon as the page opens. */
+      async function loadStockSummary(){
+        let items = [];
+        try { const r = await fetch('/api/inventory'); const j = await r.json(); if (j.ok) items = j.data; } catch (_) {}
+        const totalValue = items.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+        const totalQty   = items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0);
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        set('sumItemCount', `${items.length} item${items.length === 1 ? '' : 's'}`);
+        set('sumTotalValue', PESO(totalValue));
+        set('sumTotalQty', `${NUM(totalQty)} units`);
+        document.getElementById('sumByItem').innerHTML = items.length
+          ? items.slice().sort((a, b) => (Number(b.qty)||0)*(Number(b.price)||0) - (Number(a.qty)||0)*(Number(a.price)||0)).map(i => `
+            <div class="sl-item">
+              <div><div class="sl-name">${escapeHTML(i.name)}</div><div class="sl-sub">${escapeHTML(i.id)} · ${NUM(i.qty)} ${escapeHTML(i.unit)}</div></div>
+              <div class="sl-qty">${PESO((Number(i.qty)||0) * (Number(i.price)||0))}</div>
+            </div>`).join('')
+          : '<div class="stock-empty">No inventory items yet.</div>';
+        // mv.items doubles as the receipt lookup cache (itemOf) above, so a
+        // generated report never needs to re-fetch /api/inventory itself.
+        if (items.length) mv.items = items;
+      }
+      loadStockSummary();
+
       async function loadMoveData(){
         // Item details (price / supplier / location) for receipts; optional.
         try { const r = await fetch('/api/inventory'); const j = await r.json(); if (j.ok) mv.items = j.data; } catch (_) {}
@@ -453,10 +502,18 @@
 
         const extraHead = cfg.type === 'RECEIPT' ? '<th>Supplier</th><th>Remarks</th>'
           : cfg.type === 'ISSUANCE' ? '<th>Project / Reference</th>' : '<th>Received By</th><th>Reason</th><th>Disposition</th>';
+        // Back Order disposition: "Replaced"/"Reimbursed" alone doesn't say
+        // how much - show the Qty Replaced or Amount Reimbursed collected
+        // by the Inventory page's disposition popup when it's there.
+        const dispositionCell = (m) => {
+          if (m.disposition === 'Replaced' && m.replacedQty != null) return `Replaced (${NUM(m.replacedQty)} ${m.unit})`;
+          if (m.disposition === 'Reimbursed' && m.reimbursedAmount != null) return `Reimbursed (${PESO(m.reimbursedAmount)})`;
+          return m.disposition || 'Pending';
+        };
         const extraCells = (m) => cfg.type === 'RECEIPT'
           ? `<td>${escapeHTML(dash(itemOf(m.id).sup))}</td><td class="text-muted-2">${escapeHTML(dash(m.remarks))}</td>`
           : cfg.type === 'ISSUANCE' ? `<td>${escapeHTML(dash(m.remarks))}</td>`
-          : `<td>${escapeHTML(dash(m.backOrderBy))}</td><td class="text-muted-2">${escapeHTML(dash(m.remarks))}</td><td>${escapeHTML(m.disposition || 'Pending')}</td>`;
+          : `<td>${escapeHTML(dash(m.backOrderBy))}</td><td class="text-muted-2">${escapeHTML(dash(m.remarks))}</td><td>${escapeHTML(dispositionCell(m))}</td>`;
         const cols = 7 + (cfg.type === 'ISSUANCE' ? 1 : cfg.type === 'RECEIPT' ? 2 : 3);
         rpBody.innerHTML = filterBar() + header + summaryCards(stats) + `
           <div class="table-wrap"><table class="table table-soft table-hover mb-1"><thead><tr>

@@ -290,6 +290,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!/sign out/i.test(a.textContent)) return;
     a.addEventListener('click', (e) => {
       e.preventDefault();
+      // Also clear the "already shown this session" flag for the dashboard's
+      // auto-popping Low Stock Materials modal, so it pops again right after
+      // the next login instead of staying silently dismissed for whoever
+      // logs in next on this browser tab (see dashboard.html).
+      try { sessionStorage.removeItem('parabellum.lowStockModalShown'); } catch (_) {}
       fetch('/api/logout', { method: 'POST' }).finally(() => {
         window.location.href = '/login';
       });

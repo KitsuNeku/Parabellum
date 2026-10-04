@@ -23,6 +23,7 @@ Setup order:
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from datetime import datetime, timezone
 import os
+import psycopg2.errors
 
 from config import DB_CONFIG, SECRET_KEY, DEBUG, AUTO_RETRAIN_ENABLED, AUTO_RETRAIN_HOUR, AUTO_AGGREGATE_BEFORE_RETRAIN
 from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history, generate_sql_backup, restore_sql_backup
@@ -507,28 +508,39 @@ def _record_back_order(material_code, quantity, remarks, back_order_by=None, rec
     return m["material_name"], result[0]["back_order_id"]
 
 
-def _set_back_order_disposition(back_order_id, disposition):
+def _set_back_order_disposition(back_order_id, disposition, replaced_qty=None,
+                                 reimbursed_amount=None, notes=None):
     """
     Set (or clear) a back order's disposition and apply the stock change
     that goes with it:
-      'Replaced' -> the item itself goes back on the shelf: ADD its
-                       quantity to materials.current_stock (once).
+      'Replaced' -> some or all of the returned units go back on the shelf:
+                       ADD replaced_qty to materials.current_stock. Doesn't
+                       have to equal the full quantity originally returned -
+                       e.g. only 3 of 5 returned units were undamaged.
       'Reimbursed' or cleared (None) -> does NOT sit in stock: if this
-                       record was previously restocked, REMOVE that
-                       quantity again (reversing the earlier add), clamped
-                       at 0 so a disposition change can never push stock
-                       negative.
+                       record was previously restocked by some amount,
+                       REMOVE that exact amount again (reversing the
+                       earlier add), clamped at 0 so a disposition change
+                       can never push stock negative.
 
-    back_orders.restocked tracks whether this row's quantity is CURRENTLY
-    included in current_stock, so switching dispositions back and forth
-    (or clicking the same checkmark twice to clear it) only ever applies
-    the quantity once in either direction - never double-counted.
+    back_orders.restocked_qty tracks exactly how much of this row's
+    quantity is CURRENTLY included in current_stock (restocked mirrors
+    whether that's > 0), so switching dispositions back and forth always
+    reverses precisely what was actually added - never double-counted,
+    and never dependent on replaced_qty staying the same across edits.
+
+    replaced_qty is required (and must be > 0 and <= the original returned
+    quantity) when disposition is 'Replaced'; reimbursed_amount is required
+    (and must be > 0) when disposition is 'Reimbursed'. Both are ignored
+    (stored as NULL) for any other disposition. notes is optional free text
+    describing the disposition itself (condition on return, how the refund
+    was paid, etc.), separate from the back order's original return reason.
 
     Returns (material_name, new_balance_or_None, stock_delta) for the
     audit log; stock_delta is 0 if nothing about current_stock changed.
     """
     rows = execute_query(DB_CONFIG, """
-        SELECT bo.material_id, bo.quantity, bo.restocked, m.material_name, m.current_stock, m.unit
+        SELECT bo.material_id, bo.quantity, bo.restocked_qty, m.material_name, m.current_stock, m.unit
           FROM back_orders bo JOIN materials m ON m.material_id = bo.material_id
          WHERE bo.back_order_id = %s;
     """, (back_order_id,), fetch=True)
@@ -537,26 +549,41 @@ def _set_back_order_disposition(back_order_id, disposition):
     row = rows[0]
     quantity = float(row["quantity"])
     balance = float(row["current_stock"])
-    was_restocked = bool(row["restocked"])
-    now_restocked = (disposition == "Replaced")
+    old_restocked_qty = float(row["restocked_qty"] or 0)
 
-    stock_delta = 0.0
-    new_balance = balance
-    if now_restocked and not was_restocked:
-        new_balance = balance + quantity
-        stock_delta = quantity
-    elif was_restocked and not now_restocked:
-        new_balance = max(0.0, balance - quantity)
-        stock_delta = new_balance - balance
+    if disposition == "Replaced":
+        if replaced_qty is None or replaced_qty <= 0:
+            raise ValueError("Qty Replaced must be greater than zero.")
+        if replaced_qty > quantity:
+            raise ValueError(f"Qty Replaced can't exceed the {quantity:g} {row['unit']} returned.")
+        new_restocked_qty = replaced_qty
+    else:
+        new_restocked_qty = 0.0
+        replaced_qty = None   # never stored against a non-Replaced row
+
+    if disposition != "Reimbursed":
+        reimbursed_amount = None   # never stored against a non-Reimbursed row
+    elif reimbursed_amount is None or reimbursed_amount <= 0:
+        raise ValueError("Amount Reimbursed must be greater than zero.")
+
+    stock_delta = new_restocked_qty - old_restocked_qty
+    new_balance = balance + stock_delta
+    if new_balance < 0:
+        stock_delta = -balance
+        new_balance = 0.0
 
     if stock_delta != 0.0:
         execute_query(DB_CONFIG,
             "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
             (new_balance, row["material_id"]))
 
-    execute_query(DB_CONFIG,
-        "UPDATE back_orders SET disposition=%s, restocked=%s WHERE back_order_id=%s;",
-        (disposition, now_restocked, back_order_id))
+    execute_query(DB_CONFIG, """
+        UPDATE back_orders
+           SET disposition=%s, restocked=%s, restocked_qty=%s,
+               replaced_qty=%s, reimbursed_amount=%s, disposition_notes=%s
+         WHERE back_order_id=%s;
+    """, (disposition, new_restocked_qty > 0, new_restocked_qty,
+          replaced_qty, reimbursed_amount, notes, back_order_id))
 
     return row["material_name"], new_balance, stock_delta
 
@@ -641,20 +668,46 @@ def api_inventory_return_disposition():
     is back-order-specific).
 
     Unlike before, this NOW changes materials.current_stock: marking a
-    back order "Replaced" adds its quantity back into stock (the item
-    goes back on the shelf); "Reimbursed" does not. See
+    back order "Replaced" adds its replaced quantity back into stock (the
+    item goes back on the shelf - not necessarily the full quantity
+    returned, see "qty" below); "Reimbursed" does not. See
     _set_back_order_disposition() for exactly how that's applied -
     idempotently, so clicking the same checkmark twice (clearing it back
     to "not yet marked") or switching between the two options always
     applies the quantity exactly once in the right direction.
+
+    Besides "disposition", the frontend's disposition popup sends:
+      "qty"    - Qty Replaced (required, > 0, <= the original quantity
+                 returned) when disposition is "Replaced".
+      "amount" - Amount Reimbursed in pesos (required, > 0) when
+                 disposition is "Reimbursed".
+      "notes"  - optional free text about the disposition itself.
+    Clearing a disposition (disposition omitted/empty) needs none of these.
     """
     d = request.get_json(silent=True) or {}
     back_order_id = d.get("backOrderId") or d.get("movementId")   # movementId kept for older clients
     disposition = (d.get("disposition") or "").strip() or None
     if disposition is not None and disposition not in ("Reimbursed", "Replaced"):
         return jsonify({"ok": False, "error": "Disposition must be 'Reimbursed' or 'Replaced'."}), 400
+
+    replaced_qty = None
+    reimbursed_amount = None
+    if disposition == "Replaced":
+        try:
+            replaced_qty = float(d.get("qty"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Qty Replaced is required."}), 400
+    elif disposition == "Reimbursed":
+        try:
+            reimbursed_amount = float(d.get("amount"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Amount Reimbursed is required."}), 400
+    notes = (d.get("notes") or "").strip() or None
+
     try:
-        name, new_balance, stock_delta = _set_back_order_disposition(back_order_id, disposition)
+        name, new_balance, stock_delta = _set_back_order_disposition(
+            back_order_id, disposition, replaced_qty=replaced_qty,
+            reimbursed_amount=reimbursed_amount, notes=notes)
         if stock_delta > 0:
             stock_note = f" {stock_delta:g} added back to stock (now {new_balance:g})."
         elif stock_delta < 0:
@@ -666,7 +719,13 @@ def api_inventory_return_disposition():
                   session["user"]["username"])
         return jsonify({"ok": True, "disposition": disposition or "", "newStock": new_balance})
     except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 404
+        # _set_back_order_disposition raises ValueError both for "no such
+        # record" (404 - the id itself is wrong) and for validation
+        # failures like an out-of-range Qty Replaced (400 - the id is
+        # fine, the submitted number isn't); its one "not found" message
+        # is the only one that means the former.
+        status = 404 if str(e) == "Back order record not found." else 400
+        return jsonify({"ok": False, "error": str(e)}), status
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -816,7 +875,8 @@ def api_inventory_backorders():
         rows = execute_query(DB_CONFIG, """
             SELECT bo.back_order_id, m.material_code, m.material_name, m.unit, m.category,
                    bo.quantity, bo.return_date, bo.stock_out_ref, bo.remarks,
-                   bo.back_order_by, bo.recorded_by, bo.disposition, bo.restocked
+                   bo.back_order_by, bo.recorded_by, bo.disposition, bo.restocked,
+                   bo.restocked_qty, bo.replaced_qty, bo.reimbursed_amount, bo.disposition_notes
               FROM back_orders bo
               JOIN materials m ON m.material_id = bo.material_id
              ORDER BY bo.return_date DESC, bo.back_order_id DESC;
@@ -837,11 +897,20 @@ def api_inventory_backorders():
             "backOrderBy":  r["back_order_by"] or "",
             # 'Reimbursed', 'Replaced', or "" if not yet marked. Set via
             # /api/inventory/return/disposition, which also updates
-            # restocked below.
+            # restocked/restockedQty below.
             "disposition":  r["disposition"] or "",
-            # True only while this row's quantity is currently added into
-            # materials.current_stock (disposition = 'Replaced').
+            # True only while some of this row's quantity is currently
+            # added into materials.current_stock (disposition = 'Replaced').
             "restocked":    bool(r["restocked"]),
+            # How much of it, exactly - see restocked_qty in schema.sql.
+            "restockedQty": float(r["restocked_qty"] or 0),
+            # Set only while disposition = 'Replaced' / 'Reimbursed'
+            # respectively; null otherwise. Entered via the disposition
+            # popup (see backOrderActionBtns / openDispositionModal in
+            # inventory.html).
+            "replacedQty":      float(r["replaced_qty"]) if r["replaced_qty"] is not None else None,
+            "reimbursedAmount": float(r["reimbursed_amount"]) if r["reimbursed_amount"] is not None else None,
+            "dispositionNotes": r["disposition_notes"] or "",
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:
@@ -953,17 +1022,38 @@ def api_suppliers_save():
             log_audit(DB_CONFIG, "SUPPLIER_UPDATED", f"Edited {edit_id} ({name}).",
                       session["user"]["username"])
         else:
-            row = execute_query(DB_CONFIG, """
-                SELECT COALESCE(MAX(CAST(SUBSTRING(supplier_code FROM 5) AS INTEGER)), 400) + 1 AS n
-                FROM suppliers WHERE supplier_code LIKE 'SUP-%';
-            """, fetch=True)
-            code = f"SUP-{row[0]['n']}"
-            execute_query(DB_CONFIG, """
-                INSERT INTO suppliers
-                    (supplier_code, name, contact_person, phone, email, address,
-                     category, terms, status, remarks)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-            """, (code,) + fields)
+            # The next code is "current max + 1", read and inserted as two
+            # separate statements - not atomic. Two saves landing close
+            # enough together (a double-click, or two people adding a
+            # supplier at once) can both read the same max before either
+            # has inserted, both compute the same code, and the second
+            # INSERT then collides with the supplier_code unique
+            # constraint. Retried here (new max, new code, try again)
+            # rather than prevented outright, since nothing short of a
+            # proper DB sequence fully closes that window - this just
+            # makes the rare collision self-heal instead of surfacing as
+            # a 500 error. The Add Supplier form also now disables its
+            # Save button while a save is in flight, which stops the most
+            # common cause (an actual double-click) before it gets here.
+            code = None
+            for attempt in range(5):
+                row = execute_query(DB_CONFIG, """
+                    SELECT COALESCE(MAX(CAST(SUBSTRING(supplier_code FROM 5) AS INTEGER)), 400) + 1 AS n
+                    FROM suppliers WHERE supplier_code LIKE 'SUP-%';
+                """, fetch=True)
+                code = f"SUP-{row[0]['n']}"
+                try:
+                    execute_query(DB_CONFIG, """
+                        INSERT INTO suppliers
+                            (supplier_code, name, contact_person, phone, email, address,
+                             category, terms, status, remarks)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                    """, (code,) + fields)
+                    break
+                except psycopg2.errors.UniqueViolation:
+                    if attempt == 4:
+                        raise
+                    continue
             log_audit(DB_CONFIG, "SUPPLIER_ADDED", f"Added {code} ({name}).",
                       session["user"]["username"])
         return jsonify({"ok": True})

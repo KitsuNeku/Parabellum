@@ -206,22 +206,25 @@ window.findNewMovement = function (type, code, beforeIds, preferId) {
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  /* ---------------- Dashboard: replace sample KPIs with REAL DB data ----------
- The dashboard page paints sample numbers first (instant, no flicker if the
- DB is slow). This runs right after and overwrites them with live figures
- from /api/dashboard. Nothing in dashboard.html changes - we just refill the
- existing element IDs. If the fetch fails, the sample values stay put. */
+  /* ---------------- Dashboard: fill KPIs, alert and usage chart from the DB ----------
+ Nothing on the dashboard is pre-filled with sample figures any more: the KPI
+ cards start as "-" and this fills them from /api/dashboard. The Forecast
+ Alert banner stays hidden unless a real forecast produced an alert, and the
+ usage chart starts empty and is filled for all three ranges. If the fetch
+ fails, the page shows dashes / an empty chart and a toast - never made-up
+ numbers. */
   if (document.getElementById('dashKpiProjects')) {
     (async () => {
       try {
         const res = await fetch('/api/dashboard');
         const json = await res.json();
-        if (!json.ok) return;                 // leave sample data visible
+        if (!json.ok) throw new Error(json.error || 'Dashboard request failed');
         const d = json.data;
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
 
         set('dashKpiProjects', d.kpi.activeProjects);
         set('dashKpiTxns',     d.kpi.monthlyTxns);
+        set('dashKpiTxnsLabel', d.kpi.monthlyLabel || 'No transactions yet');
         set('dashKpiItems',    d.kpi.totalItems);
         set('dashKpiLow',      d.kpi.lowStock);
 
@@ -242,24 +245,36 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Forecast alert banner (only if the page has one and we have data)
-        if (d.alert) {
-          const mat = document.getElementById('fcAlertMaterial');
-          const pct = document.getElementById('fcAlertPct');
-          const qty = document.getElementById('fcAlertQty');
-          if (mat) mat.textContent = d.alert.material;
-          if (pct) pct.textContent = Math.abs(d.alert.pct) + '%';
-          if (qty) qty.textContent = d.alert.reorder + ' ' + d.alert.unit;
-          // Flip "increase"/"decrease" to match the real direction.
-          const verb = document.getElementById('fcAlertVerb');
-          if (verb) verb.textContent = d.alert.pct < 0 ? 'decrease' : 'increase';
+        // Forecast alert banner: shown ONLY when a real forecast produced one.
+        const banner = document.getElementById('fcAlertBanner');
+        if (banner) {
+          if (d.alert) {
+            const mat = document.getElementById('fcAlertMaterial');
+            const pct = document.getElementById('fcAlertPct');
+            const qty = document.getElementById('fcAlertQty');
+            if (mat) mat.textContent = d.alert.material;
+            if (pct) pct.textContent = Math.abs(d.alert.pct) + '%';
+            if (qty) qty.textContent = d.alert.reorder + ' ' + d.alert.unit;
+            // Flip "increase"/"decrease" to match the real direction.
+            const verb = document.getElementById('fcAlertVerb');
+            if (verb) verb.textContent = d.alert.pct < 0 ? 'decrease' : 'increase';
+            banner.style.display = '';
+          } else {
+            banner.style.display = 'none';
+          }
         }
 
-        // Material usage chart - refresh with real monthly totals
-        if (d.usage && d.usage.length && typeof window.updateUsageData === 'function') {
-          window.updateUsageData(d.usage.map(u => u.label), d.usage.map(u => u.qty));
+        // Material usage chart: real totals for each of the three ranges.
+        if (typeof window.setUsageData === 'function') {
+          const split = (rows) => [(rows || []).map(u => u.label), (rows || []).map(u => u.qty)];
+          window.setUsageData('monthly', ...split(d.usage));
+          window.setUsageData('weekly',  ...split(d.usageWeekly));
+          window.setUsageData('daily',   ...split(d.usageDaily));
         }
-      } catch (_) { /* keep sample data on any error */ }
+      } catch (err) {
+        console.error('Dashboard load failed:', err);
+        showToast('Could not load dashboard figures from the database', 'error', 'bi-exclamation-triangle');
+      }
     })();
   }
 
@@ -301,14 +316,48 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* Sidebar inventory badge = live out-of-stock count (not hardcoded). */
-  if (typeof INVENTORY !== 'undefined') {
+  /* Sidebar inventory badge = live out-of-stock count. The server renders the
+ first value from the database (see _user_context in app.py), so every page
+ starts correct. Pages that load the full inventory list (Inventory,
+ Dashboard) call this again after each refresh so it follows stock changes
+ without a reload. It only recounts once inventory has really loaded - an
+ empty array means "not loaded yet", not "zero out of stock". */
+  window.updateInventoryBadge = () => {
+    if (typeof INVENTORY === 'undefined' || INVENTORY.length === 0) return;
     const oos = INVENTORY.filter(i => i.status === 'Out of Stock').length;
     document.querySelectorAll('.sidebar__nav a[href="/inventory"] .badge').forEach(b => {
       b.textContent = oos;
       b.classList.toggle('d-none', oos === 0);
     });
-  }
+  };
+
+  /* ---------------- Notifications bell: live feed from /api/notifications ----------------
+ Replaces the five identical hardcoded alerts every page used to carry. The
+ red dot only shows when there is something to report. */
+  (async () => {
+    const list = document.querySelector('[data-notif-list]');
+    if (!list) return;
+    const dot   = document.querySelector('[data-notif-dot]');
+    const count = document.querySelector('[data-notif-count]');
+    try {
+      const res  = await fetch('/api/notifications');
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || 'Notifications request failed');
+      const items = json.data.items || [];
+      list.innerHTML = items.length
+        ? items.map(n => `
+            <div class="dp-item">
+              <div class="dp-ic ${escapeHTML(n.tone)}"><i class="bi ${escapeHTML(n.ic)}"></i></div>
+              <div><div class="dp-title text-dark">${escapeHTML(n.title)}</div><div class="dp-time">${escapeHTML(n.time)}</div></div>
+            </div>`).join('')
+        : '<div class="text-center text-muted-2 small py-3">Nothing needs your attention right now.</div>';
+      if (count) count.textContent = items.length;
+      if (dot) dot.classList.toggle('d-none', items.length === 0);
+    } catch (err) {
+      console.error('Notifications load failed:', err);
+      list.innerHTML = '<div class="text-center text-danger small py-3">Could not load notifications.</div>';
+    }
+  })();
 
   /* ---------------- Sidebar toggle (mobile) ---------------- */
   const sidebar   = document.querySelector('.sidebar');
@@ -493,6 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         INVENTORY.length = 0;               // clear sample rows, keep the array reference
         invJson.data.forEach(r => INVENTORY.push(r));
+        if (typeof window.updateInventoryBadge === 'function') window.updateInventoryBadge();
         window.ALL_MOVEMENTS = moveJson.data;    // Stock In / Stock Out tables read this
         window.ALL_BACKORDERS = boJson.data;     // Back Orders table reads this (its own table now)
         window.STOCK_SUMMARY = sumJson.data;     // per-item In/Out/Back Order aggregate table
@@ -794,12 +844,11 @@ document.addEventListener('DOMContentLoaded', () => {
     renderName: 'renderProjects', formSelector: '[data-entity="projects"]',
     listUrl: '/api/projects', saveUrl: '/api/projects/save',
     deleteUrl: '/api/projects/delete', successMsg: 'Project saved',
-    // /api/projects returns custId/staffId as raw codes (e.g. "CUS-201",
-    // "EMP-01"); renderProjects() displays resolved names (p.cust, p.staff).
-    // custName()/staffName() (data.js) look those up from the live
-    // CUSTOMERS/EMPLOYEES arrays. Falls back to the raw code if the
-    // customer/employee list hasn't loaded yet (self-corrects on next render).
-    mapRow: (r) => ({ ...r, cust: custName(r.custId), staff: staffName(r.staffId) }),
+    // /api/projects already returns the resolved display names (cust, staff),
+    // looked up by the database from the real customers/employees tables, so
+    // rows are used as-is. (This used to resolve names from hardcoded sample
+    // arrays, which showed the wrong name whenever a real code matched one.)
+    mapRow: (r) => r,
   });
 
   // --------------------------------------------------------------
@@ -830,6 +879,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         arr.length = 0;
         json.data.forEach(r => arr.push(r));
+        (window.DASH_LOADED = window.DASH_LOADED || {})[label] = true;   // renderDashboard() waits on this
+        if (typeof window.updateInventoryBadge === 'function') window.updateInventoryBadge();
         if (typeof window.renderDashboard === 'function') window.renderDashboard();
       } catch (err) {
         console.error(`Dashboard ${label} fetch failed:`, err);
@@ -837,9 +888,30 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    loadDashboardData('/api/projects', PROJECTS, 'projects');
-    loadDashboardData('/api/transactions', TRANSACTIONS, 'transactions');
-    loadDashboardData('/api/inventory', INVENTORY, 'inventory');
+    // The KPI cards and the Recent Client Transactions table are filled
+    // from /api/dashboard above (aggregates + 5 latest rows), so the
+    // projects / transactions lists are NOT fetched here any more. They
+    // used to be, which (a) overwrote the monthly-transactions KPI with the
+    // all-time count and (b) threw "Could not load ... from the database"
+    // toasts for accounts without Projects / Transactions access (e.g.
+    // Inventory Personnel). The full inventory list is only needed for the
+    // Low Stock pop-up, so it is fetched only for accounts that may open
+    // the Inventory page.
+    const _allowed = window.ALLOWED_PAGES || [];
+    if (_allowed.includes('inventory')) loadDashboardData('/api/inventory', INVENTORY, 'inventory');
+  }
+
+  // On the projects page, fill the "Assigned Personnel" dropdown from the
+  // employees table (it used to come from a hardcoded 5-person array).
+  const projStaffSelect = document.getElementById('projStaffSelect');
+  if (projStaffSelect) {
+    fetch('/api/employees').then(r => r.json()).then(json => {
+      if (!json.ok) return;
+      EMPLOYEES.length = 0;
+      json.data.forEach(e => EMPLOYEES.push(e));
+      projStaffSelect.innerHTML = json.data.map(e =>
+        `<option value="${esc(e.id)}">${esc(e.name)}${e.status && e.status !== 'Active' ? ' (inactive)' : ''}</option>`).join('');
+    }).catch(() => {});
   }
 
   // On the projects page, fill the Customer dropdown from the REAL customer
@@ -1013,6 +1085,7 @@ document.addEventListener('DOMContentLoaded', () => {
        'fcWxTemp','fcWxRain','fcWxDays','fcWxIndex','fcWxSource'].forEach(id => set(id, '—'));
       setHTML('fcResReorder', `<span class="text-danger fw-semibold">${msg}</span>`);
       setHTML('fcWxInsight', '—');
+      if (!fcSelect.value) fcSelect.innerHTML = '<option value="">Unavailable</option>';
       const bar = document.getElementById('fcWxBar');
       if (bar) bar.style.width = '0%';
       const badge = document.getElementById('fcWxBadge');

@@ -41,7 +41,7 @@
       <div class="nav-section">MAIN</div>
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
-      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger{% if not inventory_oos_count %} d-none{% endif %}">{{ inventory_oos_count }}</span></a>{% endif %}
       {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
@@ -99,31 +99,11 @@
         <!-- Notifications -->
         <div class="dropdown">
           <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
-            <i class="bi bi-bell"></i><span class="dot"></span>
+            <i class="bi bi-bell"></i><span class="dot d-none" data-notif-dot></span>
           </button>
           <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
-            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
-          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
-          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
-          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
-          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
-          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
-        </a>
-            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+            <div class="dp-head"><h6>Notifications</h6><span class="badge b-neutral" data-notif-count>0</span></div>
+            <div data-notif-list><div class="text-center text-muted-2 small py-3">Loading…</div></div>
           </div>
         </div>
 
@@ -164,19 +144,19 @@
             <div class="avatar-gold mx-auto mb-3" style="width:92px;height:92px;font-size:2rem;overflow:hidden;" id="profileAvatar">{% if current_user.avatar_path %}<img src="{{ current_user.avatar_path }}" alt="Profile photo" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">{% else %}{{ current_user_initials }}{% endif %}</div>
             <h4 class="mb-0 profile-user-name">{{ current_user.name }}</h4>
             <span class="badge badge-soft mb-2 profile-role-field-badge">{{ current_user.role }}</span>
-            <p class="small text-muted-2 mb-3">admin@parabellumsteel.com.ph</p>
+            <p class="small text-muted-2 mb-3" id="profEmailLine">&nbsp;</p>
             <input type="file" id="photoInput" accept="image/*" class="d-none">
             <button class="btn btn-light-2 btn-sm w-100" id="changePhotoBtn"><i class="bi bi-camera me-1"></i>Change Photo</button>
             <hr>
             <div class="row text-center g-2">
-              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)">248</div><div class="small text-muted-2">Logins</div></div>
-              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)">86</div><div class="small text-muted-2">Reports</div></div>
-              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)">12</div><div class="small text-muted-2">Forecasts</div></div>
+              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)"id="profStatLogins">&mdash;</div><div class="small text-muted-2">Logins</div></div>
+              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)"id="profStatReports">&mdash;</div><div class="small text-muted-2">Reports</div></div>
+              <div class="col-4"><div class="h5 mb-0" style="color:var(--primary)"id="profStatForecasts">&mdash;</div><div class="small text-muted-2">Forecast runs</div></div>
             </div>
           </div></div>
 
           <div class="card"><div class="card-body">
-            <h3 class="panel-title mb-1">Weekly Activity</h3><p class="panel-sub mb-3">Actions performed.</p>
+            <h3 class="panel-title mb-1">Weekly Activity</h3><p class="panel-sub mb-3">Your actions per day, last 7 days.</p>
             <div class="chart-box chart-h-sm"><canvas id="chartActivity"></canvas></div>
           </div></div>
         </div>
@@ -186,11 +166,10 @@
             <h3 class="panel-title mb-1">Personal Information</h3><p class="panel-sub mb-3">Update your account details.</p>
             <form class="needs-validation row g-3" novalidate data-success-msg="Profile updated successfully">
               <div class="col-md-6"><label class="form-label">Full Name</label><input class="form-control" value="{{ current_user.name }}" required></div>
-              <div class="col-md-6"><label class="form-label">Employee ID</label><input class="form-control" value="EMP-00" disabled></div>
-              <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" value="admin@parabellumsteel.com.ph" required></div>
-              <div class="col-md-6"><label class="form-label">Phone</label><input class="form-control" value="0917-845-0000"></div>
+              <div class="col-md-6"><label class="form-label">User ID</label><input class="form-control" id="profUserCode" value="" disabled></div>
+              <div class="col-md-6"><label class="form-label">Email</label><input type="email" class="form-control" id="profEmail" value="" required></div>
               <div class="col-md-6"><label class="form-label">Role</label><input class="form-control profile-role-field" value="{{ current_user.role }}" disabled></div>
-              <div class="col-md-6"><label class="form-label">Department</label><input class="form-control" value="Management Information Systems"></div>
+              <div class="col-md-6"><label class="form-label">Department</label><input class="form-control" id="profDept" value=""></div>
               <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg me-1"></i>Save Changes</button></div>
             </form>
           </div></div>
@@ -207,10 +186,7 @@
 
           <div class="card"><div class="card-body">
             <h3 class="panel-title mb-1">Activity Log</h3><p class="panel-sub mb-3">Your recent actions.</p>
-            <div class="activity-item"><div class="activity-ic b-info"><i class="bi bi-box-arrow-in-right"></i></div><div class="flex-grow-1"><div class="fw-medium">Signed in</div><div class="small text-muted-2">Today, 9:14 AM · Chrome on Windows</div></div></div>
-            <div class="activity-item"><div class="activity-ic b-success"><i class="bi bi-graph-up-arrow"></i></div><div class="flex-grow-1"><div class="fw-medium">Generated forecast FC-091</div><div class="small text-muted-2">Yesterday, 5:40 PM</div></div></div>
-            <div class="activity-item"><div class="activity-ic b-gold"><i class="bi bi-file-earmark-text"></i></div><div class="flex-grow-1"><div class="fw-medium">Exported Inventory Report</div><div class="small text-muted-2">Yesterday, 2:08 PM</div></div></div>
-            <div class="activity-item"><div class="activity-ic b-neutral"><i class="bi bi-gear"></i></div><div class="flex-grow-1"><div class="fw-medium">Updated company settings</div><div class="small text-muted-2">Jun 25, 2026</div></div></div>
+            <div id="profActivityList"><div class="small text-muted-2 py-2">Loading&hellip;</div></div>
           </div></div>
         </div>
       </div>
@@ -230,6 +206,50 @@
   <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
   <script src="{{ url_for('static', filename='js/data.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script>
+    /* Everything here comes from /api/profile (users row + this user's audit
+       trail). Nothing on the page is sample data. */
+    document.addEventListener('DOMContentLoaded', () => {
+      const $ = (id) => document.getElementById(id);
+      const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const ICONS = {
+        LOGIN_SUCCESS:   ['b-info',    'bi-box-arrow-in-right', 'Signed in'],
+        LOGOUT:          ['b-neutral', 'bi-box-arrow-right',    'Signed out'],
+        RUN_FORECAST:    ['b-success', 'bi-graph-up-arrow',     'Ran demand forecast'],
+        REPORT_EXPORTED: ['b-gold',    'bi-file-earmark-text',  'Exported report'],
+      };
+      const look = (a) => ICONS[a] || (/DELETE|REMOVE/.test(a) ? ['b-danger','bi-trash','']
+                        : /SETTING|ROLE|PERMISSION|USER/.test(a) ? ['b-neutral','bi-gear','']
+                        : ['b-neutral','bi-activity','']);
+      const nice = (a) => a.toLowerCase().replace(/_/g,' ').replace(/^./, c => c.toUpperCase());
+
+      fetch('/api/profile', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(res => {
+          if (!res.ok) throw new Error(res.error || 'Failed');
+          const d = res.data;
+          $('profEmailLine').textContent = d.email || 'No email on file';
+          $('profEmail').value = d.email || '';
+          $('profUserCode').value = d.userCode;
+          $('profDept').value = d.department || '';
+          $('profStatLogins').textContent = d.stats.logins;
+          $('profStatReports').textContent = d.stats.reports;
+          $('profStatForecasts').textContent = d.stats.forecasts;
+          if (window.setActivityChart) window.setActivityChart(d.week.map(x => x.label), d.week.map(x => x.n));
+          $('profActivityList').innerHTML = d.recent.length
+            ? d.recent.map(r => {
+                const [tone, ic, label] = look(r.action);
+                const title = label || nice(r.action);
+                return `<div class="activity-item"><div class="activity-ic ${tone}"><i class="bi ${ic}"></i></div><div class="flex-grow-1"><div class="fw-medium">${esc(title)}</div><div class="small text-muted-2">${esc(r.details)}${r.details ? ' &middot; ' : ''}${esc(r.time)}</div></div></div>`;
+              }).join('')
+            : '<div class="small text-muted-2 py-2">No activity recorded yet.</div>';
+        })
+        .catch(() => {
+          $('profActivityList').innerHTML = '<div class="small text-muted-2 py-2">Could not load your activity.</div>';
+          if (typeof showToast === 'function') showToast('Could not load your profile details.', 'error', 'bi-exclamation-triangle');
+        });
+    });
+  </script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {

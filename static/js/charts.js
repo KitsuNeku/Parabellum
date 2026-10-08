@@ -34,86 +34,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const el = (id) => document.getElementById(id);
 
-  /* ---------- Inventory Status (doughnut) ---------- */
-  if (el('chartInventoryStatus')) {
-    new Chart(el('chartInventoryStatus'), {
-      type:'doughnut',
-      data:{ labels:['In Stock','Low Stock','Out of Stock'],
-        datasets:[{ data:[12,3,2], backgroundColor:[C.success, C.gold, C.primary], borderWidth:0, hoverOffset:6 }]},
-      options:{ responsive:true, maintainAspectRatio:false, cutout:'68%',
-        plugins:{ legend:{ position:'bottom' } } }
-    });
-  }
-
-  /* ---------- Inventory Usage (bar) - dashboard, gold current period + daily/weekly/monthly toggle ---------- */
+  /* ---------- Inventory Usage (bar) - dashboard, gold current period + daily/weekly/monthly toggle ----------
+   Starts EMPTY. app.js fills each range from /api/dashboard (real
+   stock_movements issuances) via window.setUsageData(range, labels, values).
+   It used to be pre-loaded with made-up "tons" figures, and the Daily and
+   Weekly buttons only ever showed sample arrays. The figures are total
+   QUANTITY issued across all materials - materials are counted in mixed
+   units (pcs, sheets, lengths...), so the honest label is "units", not tons. */
   if (el('chartMaterialUsage')) {
     const goldLast = (labels) => labels.map((_, i) => i === labels.length - 1 ? C.gold : C.primary);
-    const fallback = { labels:['Jan','Feb','Mar','Apr','May','Jun'], data:[182,205,231,198,256,243], note:'' };
-    const src = (typeof USAGE_MONTHLY !== 'undefined') ? USAGE_MONTHLY : fallback;
+    const NOTES = {
+      daily:   'Total quantity issued per day (last 7 days, all materials).',
+      weekly:  'Total quantity issued per week (last 6 weeks, all materials).',
+      monthly: 'Total quantity issued per month (latest months with activity, all materials).',
+    };
+    const sets = { daily: null, weekly: null, monthly: null };
+    let currentRange = 'monthly';
     const usageChart = new Chart(el('chartMaterialUsage'), {
       type:'bar',
-      data:{ labels:src.labels.slice(),
-        datasets:[{ label:'Tons used', data:src.data.slice(),
-          backgroundColor:goldLast(src.labels), borderRadius:6, barThickness:26, maxBarThickness:34 }]},
+      data:{ labels:[],
+        datasets:[{ label:'Units issued', data:[],
+          backgroundColor:[], borderRadius:6, barThickness:26, maxBarThickness:34 }]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:false } },
         scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
     });
-    // Daily / Weekly / Monthly toggle wired from app.js - swaps the dataset client-side.
-    window.updateUsageChart = (range) => {
-      const map = {
-        daily:   (typeof USAGE_DAILY  !== 'undefined') ? USAGE_DAILY  : src,
-        weekly:  (typeof USAGE_WEEKLY !== 'undefined') ? USAGE_WEEKLY : src,
-        monthly: src
-      };
-      const d = map[range] || src;
+    const paint = () => {
+      const d = sets[currentRange] || { labels: [], data: [] };
       usageChart.data.labels = d.labels.slice();
       usageChart.data.datasets[0].data = d.data.slice();
       usageChart.data.datasets[0].backgroundColor = goldLast(d.labels);
       usageChart.update();
-      return d.note || '';
     };
-    // Lets app.js push REAL monthly usage totals from /api/dashboard into the
-    // chart (labels + values straight from the database).
-    window.updateUsageData = (labels, values) => {
-      if (!labels || !labels.length) return;
-      usageChart.data.labels = labels.slice();
-      usageChart.data.datasets[0].data = values.slice();
-      usageChart.data.datasets[0].backgroundColor = goldLast(labels);
-      usageChart.update();
+    // Daily / Weekly / Monthly toggle (wired in app.js). Returns the caption for the range.
+    window.updateUsageChart = (range) => { currentRange = range; paint(); return NOTES[range] || ''; };
+    window.setUsageData = (range, labels, values) => {
+      sets[range] = { labels: labels || [], data: values || [] };
+      if (range === currentRange) paint();
     };
-  }
-
-  /* ---------- Transaction Trend (line) ---------- */
-  if (el('chartTxnTrend')) {
-    const ctx = el('chartTxnTrend').getContext('2d');
-    new Chart(ctx, {
-      type:'line',
-      data:{ labels:['Jan','Feb','Mar','Apr','May','Jun'],
-        datasets:[{ label:'Transactions', data:[42,55,49,63,58,71],
-          borderColor:C.primary, backgroundColor:grad(ctx,'rgb(177,18,23)'),
-          fill:true, tension:.38, pointRadius:3, pointBackgroundColor:C.primary, borderWidth:2.5 }]},
-      options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:false } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
-    });
-  }
-
-  /* ---------- Forecast Summary (line: actual vs predicted) ---------- */
-  if (el('chartForecastSummary')) {
-    new Chart(el('chartForecastSummary'), {
-      type:'line',
-      data:{ labels:['Jan','Feb','Mar','Apr','May','Jun','Jul*'],
-        datasets:[
-          { label:'Actual demand', data:[118,132,140,128,135,121,null],
-            borderColor:C.primary, backgroundColor:C.primary, tension:.35, borderWidth:2.5, pointRadius:3 },
-          { label:'Predicted', data:[120,128,140,124,140,128,150],
-            borderColor:C.gold, backgroundColor:C.gold, borderDash:[6,5], tension:.35, borderWidth:2.5, pointRadius:3 }
-        ]},
-      options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ position:'top', align:'end' } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:false }) } }
-    });
+    window.usageNote = (range) => NOTES[range] || '';
   }
 
   /* ---------- Forecasting page: Monthly Forecast Graph ---------- */
@@ -185,44 +144,67 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Reports: revenue (bar) ---------- */
+  /* ---------- Reports: monthly revenue (bar) ----------
+   Starts empty; the Reports page fills it from /api/reports/overview via
+   window.setRevenueChart(labels, pesos). (Was a fixed Jan-Jun series.) */
   if (el('chartRevenue')) {
-    new Chart(el('chartRevenue'), {
+    const revChart = new Chart(el('chartRevenue'), {
       type:'bar',
-      data:{ labels:['Jan','Feb','Mar','Apr','May','Jun'],
-        datasets:[{ label:'Revenue', data:[1.82,2.05,2.31,1.98,2.56,2.84],
+      data:{ labels:[],
+        datasets:[{ label:'Revenue', data:[],
           backgroundColor:C.primary, borderRadius:6, barThickness:28 }]},
       options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(c)=>'₱'+c.raw+'M' } } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:true, ticks:{ color:C.grayText, callback:(v)=>'₱'+v+'M' } }) } }
+        plugins:{ legend:{ display:false },
+          tooltip:{ callbacks:{ label:(c)=>'\u20b1'+Number(c.raw).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}) } } },
+        scales:{ x:noGridX, y:axis({ beginAtZero:true,
+          ticks:{ color:C.grayText, callback:(v)=> v >= 1e6 ? '\u20b1'+(v/1e6)+'M' : (v >= 1e3 ? '\u20b1'+(v/1e3)+'K' : '\u20b1'+v) } }) } }
     });
+    window.setRevenueChart = (labels, values) => {
+      revChart.data.labels = labels.slice();
+      revChart.data.datasets[0].data = values.slice();
+      revChart.update();
+    };
   }
 
-  /* ---------- Reports: category distribution (pie) ---------- */
+  /* ---------- Reports: inventory value by category (pie) ----------
+   Starts empty; filled from /api/reports/overview via
+   window.setCategoryChart(labels, pesoValues). (Was a made-up distribution.) */
   if (el('chartCategory')) {
-    new Chart(el('chartCategory'), {
+    const palette = [C.primary,'#c94a3f','#d97b34','#e6a817','#2b6cb0','#1f9d55','#9aa1ad','#7c3aed','#0f172a'];
+    const catChart = new Chart(el('chartCategory'), {
       type:'pie',
-      data:{ labels:['Bars','Plates','Sheets','Beams','Tubes/Pipes','Fasteners','Consumables'],
-        datasets:[{ data:[34,16,12,14,10,8,6],
-          backgroundColor:[C.primary,'#c94a3f','#d97b34','#e6a817','#2b6cb0','#1f9d55','#9aa1ad'], borderWidth:0 }]},
+      data:{ labels:[], datasets:[{ data:[], backgroundColor:palette, borderWidth:0 }]},
       options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ position:'right' } } }
+        plugins:{ legend:{ position:'right' },
+          tooltip:{ callbacks:{ label:(c)=> c.label + ': \u20b1' + Number(c.raw).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2}) } } } }
     });
+    window.setCategoryChart = (labels, values) => {
+      catChart.data.labels = labels.slice();
+      catChart.data.datasets[0].data = values.slice();
+      catChart.update();
+    };
   }
 
-  /* ---------- Profile / settings mini activity (line) ---------- */
+  /* ---------- Profile mini activity (line) ----------
+   Starts empty; the Profile page fills it from /api/profile (the user's own
+   audit-log entries per day, last 7 days) via window.setActivityChart. */
   if (el('chartActivity')) {
     const ctx = el('chartActivity').getContext('2d');
-    new Chart(ctx, {
+    const actChart = new Chart(ctx, {
       type:'line',
-      data:{ labels:['Mon','Tue','Wed','Thu','Fri','Sat'],
-        datasets:[{ label:'Actions', data:[12,18,9,22,16,7],
+      data:{ labels:[],
+        datasets:[{ label:'Actions', data:[],
           borderColor:C.primary, backgroundColor:grad(ctx,'rgb(177,18,23)'), fill:true,
           tension:.4, borderWidth:2.5, pointRadius:0 }]},
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:false } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
+        scales:{ x:noGridX, y:axis({ beginAtZero:true, ticks:{ color:C.grayText, precision:0 } }) } }
     });
+    window.setActivityChart = (labels, values) => {
+      actChart.data.labels = labels.slice();
+      actChart.data.datasets[0].data = values.slice();
+      actChart.update();
+    };
   }
 
 });

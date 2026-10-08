@@ -40,7 +40,7 @@
       <div class="nav-section">MAIN</div>
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
-      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger{% if not inventory_oos_count %} d-none{% endif %}">{{ inventory_oos_count }}</span></a>{% endif %}
       {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
@@ -98,31 +98,11 @@
         <!-- Notifications -->
         <div class="dropdown">
           <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
-            <i class="bi bi-bell"></i><span class="dot"></span>
+            <i class="bi bi-bell"></i><span class="dot d-none" data-notif-dot></span>
           </button>
           <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
-            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
-          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
-          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
-          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
-          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
-          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
-        </a>
-            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+            <div class="dp-head"><h6>Notifications</h6><span class="badge b-neutral" data-notif-count>0</span></div>
+            <div data-notif-list><div class="text-center text-muted-2 small py-3">Loading…</div></div>
           </div>
         </div>
 

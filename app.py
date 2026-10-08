@@ -36,20 +36,41 @@ from auth import (verify_login, login_required, permission_required,
 from security import apply_security
 
 
+def _allowed_pages():
+    """Pages the signed-in user may open. Prefers the per-user resolved set
+    stored at login time (honors any Settings > Users > Access override);
+    falls back to role defaults for sessions established before that field
+    existed."""
+    u = session.get("user") or {}
+    session_allowed = u.get("allowed_pages")
+    return set(session_allowed) if session_allowed else ROLE_PERMISSIONS.get(u.get("role"), set())
+
+
+def _out_of_stock_count():
+    """Live number behind the red badge on the sidebar's Inventory link.
+    Counted from the materials table on every page render, so the badge is
+    never a hardcoded or sample figure. Returns 0 if the database can't be
+    reached - a missing badge is better than a failed page."""
+    try:
+        rows = execute_query(DB_CONFIG,
+                             "SELECT COUNT(*) AS n FROM materials WHERE current_stock <= 0;",
+                             fetch=True)
+        return int(rows[0]["n"]) if rows else 0
+    except Exception:
+        return 0
+
+
 def _user_context():
     """Signed-in user + resolved page access, rendered server-side to avoid an identity flash."""
     u = session.get("user") or {}
     name = u.get("name", "")
     initials = "".join(w[0] for w in name.split()).upper()[:2] if name else "?"
-    # Prefer the per-user resolved set stored at login time (honors any
-    # Settings > Users > Access override); fall back to role defaults for
-    # sessions established before that field existed.
-    session_allowed = u.get("allowed_pages")
-    allowed = set(session_allowed) if session_allowed else ROLE_PERMISSIONS.get(u.get("role"), set())
+    allowed = _allowed_pages()
     return {
         "current_user": u,
         "current_user_initials": initials,
         "allowed_pages": allowed,
+        "inventory_oos_count": _out_of_stock_count() if "inventory" in allowed else 0,
     }
 
 app = Flask(__name__)
@@ -207,8 +228,15 @@ def api_dashboard():
         active_projects = scalar(
             "SELECT COUNT(*) FROM projects WHERE status = 'Ongoing';")
         total_items = scalar("SELECT COUNT(*) FROM materials;")
+        # Same rule as _inv_status() / the Inventory page: Low Stock means
+        # in stock but AT or below the reorder level. Out-of-stock items
+        # (qty 0) are a separate status and are NOT counted here - the old
+        # "current_stock < reorder_level" counted them AND missed items
+        # sitting exactly at their reorder level, so this card disagreed
+        # with the Low Stock list in the modal it opens.
         low_stock = scalar(
-            "SELECT COUNT(*) FROM materials WHERE current_stock < reorder_level;")
+            "SELECT COUNT(*) FROM materials "
+            "WHERE current_stock > 0 AND current_stock <= reorder_level;")
 
         # Transactions in the most recent month that has any records.
         monthly_txns = scalar("""
@@ -217,6 +245,13 @@ def api_dashboard():
                 SELECT date_trunc('month', MAX(txn_date)) FROM transactions
             );
         """)
+        # The month those transactions belong to, so the card's caption is
+        # real (it used to be a hardcoded "June 2026"). Empty if there are
+        # no transactions at all.
+        month_rows = execute_query(DB_CONFIG, """
+            SELECT to_char(MAX(txn_date), 'FMMonth YYYY') AS label FROM transactions;
+        """, fetch=True)
+        monthly_label = (month_rows[0]["label"] if month_rows and month_rows[0]["label"] else "")
 
         # --- Recent transactions (join customer name) ---
         recent = execute_query(DB_CONFIG, """
@@ -235,7 +270,7 @@ def api_dashboard():
             "date": str(r["txn_date"]),
             # A simple, defensible status derived from the linked project.
             "pay": "Paid" if (r["project_status"] == "Completed") else "Pending",
-        } for r in recent]
+        } for r in recent] if "transactions" in _allowed_pages() else []   # client transactions are only for accounts with that page
 
         # --- Latest forecast alert (top reorder need) ---
         alert = None
@@ -282,18 +317,183 @@ def api_dashboard():
         usage_list = [{"label": u["label"], "qty": float(u["qty"])}
                       for u in reversed(usage)]
 
+        # Daily (last 7 days) and weekly (last 6 weeks) totals for the
+        # chart's Daily / Weekly toggle. These used to be hardcoded sample
+        # arrays in data.js - the toggle only ever showed made-up numbers.
+        # generate_series guarantees a bar for every day/week even when
+        # nothing was issued, so a quiet day shows as 0, not a missing bar.
+        daily = execute_query(DB_CONFIG, """
+            SELECT CASE WHEN d::date = CURRENT_DATE THEN 'Today' ELSE to_char(d, 'Dy') END AS label,
+                   COALESCE(SUM(sm.quantity), 0) AS qty
+            FROM generate_series((CURRENT_DATE - 6)::timestamp, CURRENT_DATE::timestamp,
+                                 interval '1 day') AS d
+            LEFT JOIN stock_movements sm
+                   ON sm.movement_type = 'ISSUANCE' AND sm.movement_date = d::date
+            GROUP BY d ORDER BY d;
+        """, fetch=True)
+        daily_list = [{"label": r["label"], "qty": float(r["qty"])} for r in daily]
+
+        weekly = execute_query(DB_CONFIG, """
+            SELECT to_char(w, 'Mon FMDD') AS label, COALESCE(SUM(sm.quantity), 0) AS qty
+            FROM generate_series((date_trunc('week', CURRENT_DATE) - interval '35 days')::timestamp,
+                                 date_trunc('week', CURRENT_DATE)::timestamp,
+                                 interval '7 days') AS w
+            LEFT JOIN stock_movements sm
+                   ON sm.movement_type = 'ISSUANCE'
+                  AND sm.movement_date >= w::date AND sm.movement_date < w::date + 7
+            GROUP BY w ORDER BY w;
+        """, fetch=True)
+        weekly_list = [{"label": r["label"], "qty": float(r["qty"])} for r in weekly]
+
         return jsonify({"ok": True, "data": {
             "kpi": {
                 "activeProjects": int(active_projects),
                 "monthlyTxns": int(monthly_txns),
+                "monthlyLabel": monthly_label,
                 "totalItems": int(total_items),
                 "lowStock": int(low_stock),
             },
             "recent": recent_list,
             "alert": alert,
             "usage": usage_list,
+            "usageDaily": daily_list,
+            "usageWeekly": weekly_list,
         }})
 
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Notifications API (the bell in the top bar) ----------------
+@app.route("/api/notifications")
+@login_required
+def api_notifications():
+    """
+    Live notification feed, built from the real tables - never a fixed list.
+    Every page used to carry the same 5 hardcoded alerts ("Low stock: GI
+    Sheet Corrugated 0.5mm - 8 minutes ago" ...) whatever the database held.
+
+    What it reports, limited to modules the signed-in user can open:
+      - Materials that are out of stock / at or below reorder level (inventory)
+      - The most recent forecast run (forecasting)
+      - The latest client transactions (transactions)
+    Stock alerts are CURRENT conditions, so they carry the current quantity
+    instead of a made-up "x minutes ago".
+    """
+    try:
+        allowed = _allowed_pages()
+        items = []
+
+        if "inventory" in allowed:
+            rows = execute_query(DB_CONFIG, """
+                SELECT material_name, unit, current_stock, reorder_level
+                FROM materials
+                WHERE current_stock <= reorder_level
+                ORDER BY (current_stock > 0), current_stock, material_name
+                LIMIT 6;
+            """, fetch=True)
+            for r in rows:
+                qty, reorder = float(r["current_stock"]), float(r["reorder_level"])
+                if qty <= 0:
+                    items.append({"ic": "bi-x-octagon-fill", "tone": "b-danger",
+                                  "title": f"Out of stock: {r['material_name']}",
+                                  "time": f"Reorder level {reorder:g} {r['unit']}"})
+                else:
+                    items.append({"ic": "bi-exclamation-triangle-fill", "tone": "b-danger",
+                                  "title": f"Low stock: {r['material_name']}",
+                                  "time": f"{qty:g} {r['unit']} left (reorder at {reorder:g})"})
+
+        if "forecasting" in allowed:
+            rows = execute_query(DB_CONFIG, """
+                SELECT logged_at FROM audit_logs
+                WHERE action IN ('RUN_FORECAST', 'SCHEDULED_RETRAIN')
+                ORDER BY log_id DESC LIMIT 1;
+            """, fetch=True)
+            if rows and rows[0]["logged_at"]:
+                items.append({"ic": "bi-graph-up-arrow", "tone": "b-info",
+                              "title": "Forecast completed",
+                              "time": rows[0]["logged_at"].strftime("%b %d, %Y %H:%M")})
+
+        if "transactions" in allowed:
+            rows = execute_query(DB_CONFIG, """
+                SELECT transaction_id, customer_name, payment_status, txn_date
+                FROM transactions
+                ORDER BY txn_date DESC, transaction_id DESC LIMIT 3;
+            """, fetch=True)
+            for r in rows:
+                status = r["payment_status"] or "Pending"
+                customer = r["customer_name"] or "—"   # hoisted: no backslashes inside f-string {} before Python 3.12
+                items.append({"ic": "bi-receipt",
+                              "tone": "b-success" if status == "Paid" else "b-info",
+                              "title": f"Transaction TXN-{r['transaction_id']:04d} · {customer} · {status}",
+                              "time": r["txn_date"].strftime("%b %d, %Y") if r["txn_date"] else ""})
+
+        return jsonify({"ok": True, "data": {"items": items, "count": len(items)}})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+# ---------------- Profile API (My Profile page) ----------------
+@app.route("/api/profile")
+@login_required
+def api_profile():
+    """
+    The signed-in user's own details, activity counts and recent actions,
+    all read from the users and audit_logs tables. The Profile page used to
+    show a fixed email (admin@parabellumsteel.com.ph, even to non-admins), a
+    fixed phone/department, "248 Logins / 86 Reports / 12 Forecasts" and a
+    made-up activity log.
+    """
+    try:
+        uid = session["user"]["user_id"]
+        username = session["user"]["username"]
+
+        rows = execute_query(DB_CONFIG, """
+            SELECT user_id, username, full_name, email, department, role
+            FROM users WHERE user_id = %s;
+        """, (uid,), fetch=True)
+        if not rows:
+            return jsonify({"ok": False, "error": "Account not found."}), 404
+        u = rows[0]
+
+        counts = execute_query(DB_CONFIG, """
+            SELECT COUNT(*) FILTER (WHERE action = 'LOGIN_SUCCESS')   AS logins,
+                   COUNT(*) FILTER (WHERE action = 'REPORT_EXPORTED') AS reports,
+                   COUNT(*) FILTER (WHERE action = 'RUN_FORECAST')    AS forecasts
+            FROM audit_logs WHERE username = %s;
+        """, (username,), fetch=True)[0]
+
+        recent = execute_query(DB_CONFIG, """
+            SELECT action, details, logged_at FROM audit_logs
+            WHERE username = %s ORDER BY log_id DESC LIMIT 6;
+        """, (username,), fetch=True)
+
+        week = execute_query(DB_CONFIG, """
+            SELECT to_char(d, 'Dy') AS label, COUNT(a.log_id) AS n
+            FROM generate_series((CURRENT_DATE - 6)::timestamp, CURRENT_DATE::timestamp,
+                                 interval '1 day') AS d
+            LEFT JOIN audit_logs a
+                   ON a.username = %s AND a.logged_at::date = d::date
+            GROUP BY d ORDER BY d;
+        """, (username,), fetch=True)
+
+        return jsonify({"ok": True, "data": {
+            "userCode": f"USR-{u['user_id']:02d}",
+            "username": u["username"],
+            "name": u["full_name"] or u["username"],
+            "email": u["email"] or "",
+            "department": u["department"] or "",
+            "role": u["role"],
+            "stats": {"logins": int(counts["logins"]), "reports": int(counts["reports"]),
+                      "forecasts": int(counts["forecasts"])},
+            "recent": [{
+                "action": r["action"], "details": r["details"] or "",
+                "time": r["logged_at"].strftime("%b %d, %Y %H:%M") if r["logged_at"] else "",
+            } for r in recent],
+            "week": [{"label": r["label"], "n": int(r["n"])} for r in week],
+        }})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -1174,9 +1374,11 @@ def api_projects():
         rows = execute_query(DB_CONFIG, """
             SELECT p.project_code, p.project_name, p.status, p.budget, p.priority,
                    p.progress, p.staff, p.start_date, p.end_date,
-                   c.customer_code
+                   c.customer_code, c.name AS customer_name,
+                   e.name AS staff_name
             FROM projects p
             LEFT JOIN customers c ON c.customer_id = p.customer_id
+            LEFT JOIN employees e ON e.employee_code = p.staff
             WHERE p.project_code IS NOT NULL
             ORDER BY p.start_date DESC;
         """, fetch=True)
@@ -1185,6 +1387,12 @@ def api_projects():
         data = [{
             "id": r["project_code"], "name": r["project_name"],
             "custId": r["customer_code"] or "", "staffId": r["staff"] or "",
+            # Display names resolved here, by the database, from the real
+            # customers/employees rows. The page used to look these up in
+            # hardcoded sample arrays (data.js), which would show the WRONG
+            # name whenever a real customer's code matched a sample code.
+            "cust": r["customer_name"] or "—",
+            "staff": r["staff_name"] or r["staff"] or "—",
             "budget": float(r["budget"] or 0),
             "start": str(r["start_date"]) if r["start_date"] else "",
             "due": str(r["end_date"]) if r["end_date"] else "",
@@ -1192,6 +1400,27 @@ def api_projects():
             "priority": r["priority"] or "Medium", "progress": int(r["progress"] or 0),
         } for r in rows]
         return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/employees")
+@permission_required("projects")
+def api_employees():
+    """Staff directory (the `employees` table) - fills the Projects page's
+    "Assigned" dropdown. This used to be a hardcoded 5-person array in
+    data.js that didn't match the database (which has a sixth employee and
+    whatever else gets added)."""
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT employee_code, name, role, status
+            FROM employees ORDER BY employee_code;
+        """, fetch=True)
+        return jsonify({"ok": True, "data": [{
+            "id": r["employee_code"], "name": r["name"],
+            "role": r["role"] or "", "status": r["status"] or "Active",
+        } for r in rows]})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
@@ -1482,10 +1711,10 @@ def api_users_permissions():
                 }), 400
 
             # Order the CSV for stable, human-readable rows in the DB.
-            _order = ["dashboard", "inventory", "customers", "projects",
-                      "transactions", "forecasting", "reports", "settings",
-                      "profile"]
-            new_value = ",".join(p for p in _order if p in cleaned)
+            # Uses the master PAGES list so no page can be silently dropped
+            # (this used to be a hand-typed list that left out "suppliers",
+            # so every Apply quietly removed Supplier access).
+            new_value = ",".join(p for p in PAGES if p in cleaned)
             log_detail = (f"Set custom permissions for {target['username']} "
                           f"to [{new_value or '(none)'}].")
 
@@ -1573,9 +1802,7 @@ def api_roles_permissions_toggle():
         if not current:
             return jsonify({"ok": False, "error": f"{role} can't be left with zero modules."}), 400
 
-        _order = ["dashboard", "inventory", "customers", "projects",
-                  "transactions", "forecasting", "reports", "settings", "profile"]
-        new_value = ",".join(p for p in _order if p in current)
+        new_value = ",".join(p for p in PAGES if p in current)
 
         execute_query(DB_CONFIG, """
             INSERT INTO role_permissions (role, permissions) VALUES (%s, %s)
@@ -1898,6 +2125,111 @@ REPORT_FILE_SLUGS = {
 }
 
 
+# Report title (as stored in the audit trail's "<title> exported as PDF.")
+# -> the report key the export routes use. Lets the "Recent Reports" table
+# offer a working re-download for each row it lists.
+REPORT_TITLE_KEYS = {
+    "Inventory Report": "inventory", "Customer Report": "customer",
+    "Project Report": "project", "Client Transaction Report": "transaction",
+    "Stock In Report": "stock-in", "Stock Out Report": "stock-out",
+    "Back Order Report": "back-order", "Demand Forecast Report": "forecast",
+}
+
+
+@app.route("/api/reports/overview")
+@permission_required("reports")
+def api_reports_overview():
+    """
+    Everything the Reports page shows ABOVE the generator, from the real
+    tables: the four headline cards, the Monthly Revenue and Inventory by
+    Category charts, and the Recent Reports list. All of it used to be
+    hardcoded ("124 reports", "YTD Revenue P13.6M", a fixed Jan-Jun revenue
+    series, a made-up category pie, and five invented report rows).
+
+    "Year to date" is measured against the year of the LATEST transaction
+    on record (the same convention /api/dashboard uses for its monthly
+    count), so it stays meaningful whatever dates the data carries.
+    """
+    try:
+        import re as _re
+
+        exported = execute_query(DB_CONFIG, """
+            SELECT COUNT(*) AS n FROM audit_logs
+            WHERE action = 'REPORT_EXPORTED'
+              AND logged_at >= date_trunc('year', CURRENT_DATE);
+        """, fetch=True)[0]["n"]
+
+        inv_value = execute_query(DB_CONFIG, """
+            SELECT COALESCE(SUM(current_stock * unit_cost), 0) AS v FROM materials;
+        """, fetch=True)[0]["v"]
+
+        rev = execute_query(DB_CONFIG, """
+            WITH l AS (SELECT MAX(txn_date) AS d FROM transactions)
+            SELECT l.d AS latest,
+                   COALESCE(SUM(t.amount) FILTER (
+                       WHERE t.txn_date >= date_trunc('year', l.d)::date
+                         AND t.txn_date <= l.d), 0) AS ytd,
+                   COALESCE(SUM(t.amount) FILTER (
+                       WHERE t.txn_date >= (date_trunc('year', l.d) - interval '1 year')::date
+                         AND t.txn_date <= (l.d - interval '1 year')::date), 0) AS prev
+            FROM l LEFT JOIN transactions t ON TRUE
+            GROUP BY l.d;
+        """, fetch=True)
+        latest = rev[0]["latest"] if rev else None
+        ytd = float(rev[0]["ytd"]) if rev else 0.0
+        prev = float(rev[0]["prev"]) if rev else 0.0
+        growth = round((ytd - prev) / prev * 100) if prev > 0 else None
+        ytd_label = (f"Jan–{latest.strftime('%b')} {latest.year}" if latest
+                     else "No transactions yet")
+
+        months = execute_query(DB_CONFIG, """
+            WITH l AS (SELECT date_trunc('month', MAX(txn_date)::timestamp) AS m FROM transactions)
+            SELECT to_char(g, 'Mon') AS label, COALESCE(SUM(t.amount), 0) AS amt
+            FROM l,
+                 generate_series(l.m - interval '5 months', l.m, interval '1 month') AS g
+            LEFT JOIN transactions t ON date_trunc('month', t.txn_date::timestamp) = g
+            GROUP BY g ORDER BY g;
+        """, fetch=True)
+
+        cats = execute_query(DB_CONFIG, """
+            SELECT COALESCE(NULLIF(category, ''), 'Uncategorized') AS cat,
+                   SUM(current_stock * unit_cost) AS val
+            FROM materials
+            GROUP BY 1 HAVING SUM(current_stock * unit_cost) > 0
+            ORDER BY val DESC;
+        """, fetch=True)
+
+        recent_rows = execute_query(DB_CONFIG, """
+            SELECT a.log_id, a.details, a.logged_at,
+                   COALESCE(u.full_name, a.username, 'System') AS by_name
+            FROM audit_logs a LEFT JOIN users u ON u.username = a.username
+            WHERE a.action = 'REPORT_EXPORTED'
+            ORDER BY a.log_id DESC LIMIT 8;
+        """, fetch=True)
+        recent = []
+        for r in recent_rows:
+            m = _re.match(r"^(.*) exported as (PDF|Excel)\.?$", r["details"] or "")
+            title, fmt = (m.group(1), m.group(2)) if m else (r["details"] or "Report", "")
+            recent.append({
+                "ref": f"RPT-{r['log_id']:04d}", "type": title, "by": r["by_name"],
+                "date": r["logged_at"].strftime("%Y-%m-%d") if r["logged_at"] else "",
+                "format": fmt, "key": REPORT_TITLE_KEYS.get(title, ""),
+            })
+
+        return jsonify({"ok": True, "data": {
+            "exportedThisYear": int(exported),
+            "ytdRevenue": ytd, "ytdLabel": ytd_label,
+            "inventoryValue": float(inv_value),
+            "growthPct": growth,
+            "revenueByMonth": [{"label": r["label"], "amount": float(r["amt"])} for r in months],
+            "valueByCategory": [{"label": r["cat"], "value": float(r["val"])} for r in cats],
+            "recent": recent,
+        }})
+    except Exception as e:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
 @app.route("/api/reports/<key>/data")
 @permission_required("reports")
 @limiter.limit("30 per minute")
@@ -2008,7 +2340,11 @@ def api_forecast():
 
     try:
         aggregate_monthly_demand(DB_CONFIG)
-        return jsonify({"ok": True, "data": run_forecast(DB_CONFIG, overrides=overrides)})
+        # username= so the audit trail (and the Profile page's activity
+        # log / forecast count) attributes the run to whoever triggered it,
+        # instead of defaulting every run to "system".
+        return jsonify({"ok": True, "data": run_forecast(
+            DB_CONFIG, overrides=overrides, username=session["user"]["username"])})
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:

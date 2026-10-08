@@ -40,7 +40,7 @@
       <div class="nav-section">MAIN</div>
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
-      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger{% if not inventory_oos_count %} d-none{% endif %}">{{ inventory_oos_count }}</span></a>{% endif %}
       {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link active" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
@@ -98,31 +98,11 @@
         <!-- Notifications -->
         <div class="dropdown">
           <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
-            <i class="bi bi-bell"></i><span class="dot"></span>
+            <i class="bi bi-bell"></i><span class="dot d-none" data-notif-dot></span>
           </button>
           <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
-            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
-          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
-          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
-          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
-          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
-          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
-        </a>
-            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+            <div class="dp-head"><h6>Notifications</h6><span class="badge b-neutral" data-notif-count>0</span></div>
+            <div data-notif-list><div class="text-center text-muted-2 small py-3">Loading…</div></div>
           </div>
         </div>
 
@@ -167,19 +147,16 @@
           <div class="stat-label">Total Budget</div><div class="stat-value" style="font-size:1.55rem" id="projStatBudget">&mdash;</div><div class="stat-desc">Combined value</div></div></div>
       </div>
 
-      <!-- Project Timeline (moved up & highlighted as a featured panel) -->
-      <div class="card accent-card gold mb-3" style="background:var(--accent-soft);"><div class="card-body">
+      <!-- Featured project: the largest ACTIVE project by budget, built from the
+           real projects table (see renderFeatured() below). Hidden when there
+           is none. There is no milestones table, so only real fields are shown. -->
+      <div class="card accent-card gold mb-3" id="projFeatured" style="background:var(--accent-soft);display:none"><div class="card-body">
         <div class="card-title-row">
-          <h2 class="panel-title"><i class="bi bi-flag-fill me-2" style="color:var(--accent-dark)"></i>Project Timeline — Warehouse Structural Frame (PRJ-301)</h2>
+          <h2 class="panel-title"><i class="bi bi-flag-fill me-2" style="color:var(--accent-dark)"></i><span id="projFeatTitle">Featured Project</span></h2>
           <span class="badge b-gold">Featured Project</span>
         </div>
-        <p class="panel-sub mb-3">Milestone overview of the company's largest active fabrication project.</p>
-        <div class="timeline">
-          <div class="timeline-item done"><div class="fw-medium">Material Procurement</div><div class="small text-muted-2">Mar 10 – Mar 28, 2026 · Completed</div></div>
-          <div class="timeline-item done"><div class="fw-medium">Steel Cutting &amp; Fabrication</div><div class="small text-muted-2">Mar 29 – Apr 30, 2026 · Completed</div></div>
-          <div class="timeline-item"><div class="fw-medium">On-site Assembly &amp; Welding</div><div class="small text-muted-2">May 1 – Jun 25, 2026 · In Progress (68%)</div></div>
-          <div class="timeline-item gold"><div class="fw-medium">Quality Inspection &amp; Turnover</div><div class="small text-muted-2">Jul 1 – Jul 15, 2026 · Upcoming</div></div>
-        </div>
+        <p class="panel-sub mb-3" id="projFeatSub">The largest active project by budget.</p>
+        <div class="timeline" id="projFeatTimeline"></div>
       </div></div>
 
       <!-- Projects list: Table / Gallery views -->
@@ -226,7 +203,7 @@
           <div class="col-md-5"><label class="form-label">Customer</label><select class="form-select" name="custId" id="projCustSelect" required><option value="">Select…</option></select></div>
           <div class="col-md-6"><label class="form-label">Assigned Personnel</label><select class="form-select" name="staffId" id="projStaffSelect"></select></div>
           <div class="col-md-6"><label class="form-label">Budget (₱)</label><input type="number" class="form-control" name="budget" placeholder="0.00" step="0.01" required></div>
-          <div class="col-md-4"><label class="form-label">Start Date</label><input type="date" class="form-control" name="start" value="2026-06-26"></div>
+          <div class="col-md-4"><label class="form-label">Start Date</label><input type="date" class="form-control" name="start"></div>
           <div class="col-md-4"><label class="form-label">Expected Completion</label><input type="date" class="form-control" name="due"></div>
           <div class="col-md-4"><label class="form-label">Priority</label><select class="form-select" name="priority"><option>High</option><option selected>Medium</option><option>Low</option></select></div>
         </div></div>
@@ -325,9 +302,32 @@
         document.getElementById('projTableView')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
 
+      /* Featured card: largest active project by budget, real fields only. */
+      function renderFeatured(fullList){
+        const box = document.getElementById('projFeatured');
+        if (!box) return;
+        const active = fullList.filter(p => p.status === 'In Progress');
+        if (!active.length) { box.style.display = 'none'; return; }
+        const p = active.reduce((a, b) => (Number(b.budget) || 0) > (Number(a.budget) || 0) ? b : a);
+        const fmt = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { year:'numeric', month:'short', day:'numeric' }) : 'Not set';
+        let dueLine = fmt(p.due), dueCls = 'gold';
+        if (p.due) {
+          const days = Math.ceil((new Date(p.due + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
+          dueLine += days >= 0 ? ` \u00b7 ${days} day${days === 1 ? '' : 's'} left` : ` \u00b7 ${-days} day${days === -1 ? '' : 's'} overdue`;
+        }
+        document.getElementById('projFeatTitle').textContent = `Project Timeline \u2014 ${p.name} (${p.id})`;
+        document.getElementById('projFeatSub').textContent = `${p.cust} \u00b7 Assigned: ${p.staff} \u00b7 Budget ${PESO(Number(p.budget) || 0)}`;
+        document.getElementById('projFeatTimeline').innerHTML = `
+          <div class="timeline-item done"><div class="fw-medium">Project Start</div><div class="small text-muted-2">${escapeHTML(fmt(p.start))}</div></div>
+          <div class="timeline-item"><div class="fw-medium">Current Progress</div><div class="small text-muted-2">${Number(p.progress) || 0}% complete \u00b7 In Progress</div></div>
+          <div class="timeline-item ${dueCls}"><div class="fw-medium">Target Completion</div><div class="small text-muted-2">${escapeHTML(dueLine)}</div></div>`;
+        box.style.display = '';
+      }
+
       /* Renders BOTH views from the same array so they always stay in sync. */
       function renderProjects(){
         const fullList = projectStore.all();
+        renderFeatured(fullList);
         const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
         const totalBudget = fullList.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
         const compactPeso = (n) => n >= 1e6 ? `\u20b1${(n/1e6).toFixed(1)}M`

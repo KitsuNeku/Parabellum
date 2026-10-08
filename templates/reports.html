@@ -41,7 +41,7 @@
       <div class="nav-section">MAIN</div>
       {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
       <div class="nav-section">INVENTORY &amp; SALES</div>
-      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger">2</span></a>{% endif %}
+      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger{% if not inventory_oos_count %} d-none{% endif %}">{{ inventory_oos_count }}</span></a>{% endif %}
       {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
       {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
       {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
@@ -99,31 +99,11 @@
         <!-- Notifications -->
         <div class="dropdown">
           <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
-            <i class="bi bi-bell"></i><span class="dot"></span>
+            <i class="bi bi-bell"></i><span class="dot d-none" data-notif-dot></span>
           </button>
           <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
-            <div class="dp-head"><h6>Notifications</h6><a href="#" class="small text-decoration-none" style="color:var(--primary)">Mark all read</a></div>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-exclamation-triangle-fill"></i></div>
-          <div><div class="dp-title text-dark">Low stock: GI Sheet Corrugated 0.5mm</div><div class="dp-time">8 minutes ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-info"><i class="bi bi-graph-up-arrow"></i></div>
-          <div><div class="dp-title text-dark">Forecast completed for Deformed Steel Bar</div><div class="dp-time">1 hour ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-success"><i class="bi bi-receipt"></i></div>
-          <div><div class="dp-title text-dark">Transaction TXN-4501 marked as Paid</div><div class="dp-time">3 hours ago</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-gold"><i class="bi bi-kanban"></i></div>
-          <div><div class="dp-title text-dark">Project PRJ-302 progress updated to 54%</div><div class="dp-time">Yesterday</div></div>
-        </a>
-        <a href="notifications-#" class="dp-item text-decoration-none" onclick="return false">
-          <div class="dp-ic b-danger"><i class="bi bi-x-octagon-fill"></i></div>
-          <div><div class="dp-title text-dark">Out of stock: Square Tube 2x2 (1.5mm)</div><div class="dp-time">Yesterday</div></div>
-        </a>
-            <div class="text-center py-2 border-top"><a href="#" class="small text-decoration-none" style="color:var(--primary)">View all notifications</a></div>
+            <div class="dp-head"><h6>Notifications</h6><span class="badge b-neutral" data-notif-count>0</span></div>
+            <div data-notif-list><div class="text-center text-muted-2 small py-3">Loading…</div></div>
           </div>
         </div>
 
@@ -159,13 +139,13 @@
       </div>
       <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-file-earmark-text"></i></div>
-          <div class="stat-label">Reports Generated</div><div class="stat-value">124</div><div class="stat-desc">This year</div></div></div>
+          <div class="stat-label">Reports Exported</div><div class="stat-value" id="rpStatExported">&mdash;</div><div class="stat-desc">This year</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-cash-stack"></i></div>
-          <div class="stat-label">YTD Revenue</div><div class="stat-value" style="font-size:1.5rem">₱13.6M</div><div class="stat-desc">Jan–Jun 2026</div></div></div>
+          <div class="stat-label">YTD Revenue</div><div class="stat-value" style="font-size:1.5rem" id="rpStatRevenue">&mdash;</div><div class="stat-desc" id="rpStatRevenueLbl">Year to date</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-box-seam"></i></div>
-          <div class="stat-label">Inventory Value</div><div class="stat-value" style="font-size:1.5rem">₱8.4M</div><div class="stat-desc">Current stock</div></div></div>
+          <div class="stat-label">Inventory Value</div><div class="stat-value" style="font-size:1.5rem" id="rpStatInvValue">&mdash;</div><div class="stat-desc">Current stock</div></div></div>
         <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-graph-up"></i></div>
-          <div class="stat-label">Growth</div><div class="stat-value">+18%</div><div class="stat-desc">vs last year</div></div></div>
+          <div class="stat-label">Growth</div><div class="stat-value" id="rpStatGrowth">&mdash;</div><div class="stat-desc" id="rpStatGrowthLbl">vs same period last year</div></div></div>
       </div>
 
       <div class="card mb-4"><div class="card-body">
@@ -266,11 +246,11 @@
 
       <div class="row g-3 mb-4">
         <div class="col-lg-7"><div class="card h-100"><div class="card-body">
-          <h3 class="panel-title mb-1">Monthly Revenue</h3><p class="panel-sub mb-3">Revenue performance (₱ millions).</p>
+          <h3 class="panel-title mb-1">Monthly Revenue</h3><p class="panel-sub mb-3">Revenue per month, from recorded transactions.</p>
           <div class="chart-box chart-h-md"><canvas id="chartRevenue"></canvas></div>
         </div></div></div>
         <div class="col-lg-5"><div class="card h-100"><div class="card-body">
-          <h3 class="panel-title mb-1">Inventory by Category</h3><p class="panel-sub mb-3">Stock distribution.</p>
+          <h3 class="panel-title mb-1">Inventory by Category</h3><p class="panel-sub mb-3">Share of current stock value (qty &times; unit cost).</p>
           <div class="chart-box chart-h-md"><canvas id="chartCategory"></canvas></div>
         </div></div></div>
       </div>
@@ -300,17 +280,11 @@
 
       <div class="card"><div class="card-body">
         <div class="card-title-row"><h3 class="panel-title">Recent Reports</h3>
-          <div class="d-flex gap-2"><button class="btn btn-light-2 btn-sm" data-export="PDF"><i class="bi bi-filetype-pdf me-1"></i>PDF</button>
-          <button class="btn btn-light-2 btn-sm" data-export="Excel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
-          <button class="btn btn-light-2 btn-sm" data-print><i class="bi bi-printer me-1"></i>Print</button></div></div>
+          <div class="d-flex gap-2"><button class="btn btn-light-2 btn-sm" data-print><i class="bi bi-printer me-1"></i>Print</button></div></div>
         <div class="table-wrap mt-2"><table class="table">
           <thead><tr><th>Report</th><th>Type</th><th>Generated By</th><th>Date</th><th>Format</th><th class="text-center">Action</th></tr></thead>
-          <tbody>
-            <tr><td class="fw-id">RPT-0124</td><td>Inventory Summary</td><td>Admin User</td><td class="text-muted-2">2026-06-24</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="inventory" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0123</td><td>Sales &amp; Transactions</td><td>M. Santos</td><td class="text-muted-2">2026-06-22</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="transaction" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0122</td><td>Forecast Report</td><td>Admin User</td><td class="text-muted-2">2026-06-20</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="forecast" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0121</td><td>Stock Out Report</td><td>P. Reyes</td><td class="text-muted-2">2026-06-18</td><td><span class="badge b-success">Excel</span></td><td class="text-center"><button class="act-btn" data-export="Excel" data-report="stock-out" data-format="excel" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
-            <tr><td class="fw-id">RPT-0120</td><td>Project Status</td><td>C. Mendoza</td><td class="text-muted-2">2026-06-15</td><td><span class="badge b-danger">PDF</span></td><td class="text-center"><button class="act-btn" data-export="PDF" data-report="project" data-format="pdf" data-bs-toggle="tooltip" title="Download"><i class="bi bi-download"></i></button></td></tr>
+          <tbody id="rpRecentBody">
+            <tr><td colspan="6" class="text-center text-muted-2 py-3">Loading&hellip;</td></tr>
           </tbody>
         </table></div>
       </div></div>
@@ -342,6 +316,64 @@
   <script src="{{ url_for('static', filename='js/data.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script>document.addEventListener('DOMContentLoaded', () => initTooltips());</script>
+  <script>
+    /* Headline cards, both charts and Recent Reports all come from the real
+       tables via /api/reports/overview (no sample figures in this page). */
+    document.addEventListener('DOMContentLoaded', () => {
+      const peso = (n) => '\u20b1' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const short = (n) => {
+        n = Number(n);
+        if (Math.abs(n) >= 1e6) return '\u20b1' + (n / 1e6).toFixed(2) + 'M';
+        if (Math.abs(n) >= 1e3) return '\u20b1' + (n / 1e3).toFixed(1) + 'K';
+        return '\u20b1' + n.toFixed(2);
+      };
+      const $ = (id) => document.getElementById(id);
+      const body = $('rpRecentBody');
+      const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+      fetch('/api/reports/overview', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(res => {
+          if (!res.ok) throw new Error(res.error || 'Failed');
+          const d = res.data;
+          $('rpStatExported').textContent = d.exportedThisYear;
+          $('rpStatRevenue').textContent = short(d.ytdRevenue);
+          $('rpStatRevenueLbl').textContent = d.ytdLabel || 'Year to date';
+          $('rpStatInvValue').textContent = short(d.inventoryValue);
+          if (d.growthPct == null) {
+            $('rpStatGrowth').textContent = '\u2014';
+            $('rpStatGrowthLbl').textContent = 'No prior-year data to compare';
+          } else {
+            $('rpStatGrowth').textContent = (d.growthPct >= 0 ? '+' : '') + Math.round(Number(d.growthPct)) + '%';
+          }
+          if (window.setRevenueChart)  window.setRevenueChart(d.revenueByMonth.map(x => x.label), d.revenueByMonth.map(x => x.amount));
+          if (window.setCategoryChart) window.setCategoryChart(d.valueByCategory.map(x => x.label), d.valueByCategory.map(x => x.value));
+
+          if (!d.recent.length) {
+            body.innerHTML = '<tr><td colspan="6" class="text-center text-muted-2 py-3">No reports exported yet.</td></tr>';
+            return;
+          }
+          body.innerHTML = d.recent.map(r => {
+            const isPdf = r.format === 'PDF';
+            const badge = r.format ? `<span class="badge ${isPdf ? 'b-danger' : 'b-success'}">${esc(r.format)}</span>` : '<span class="text-muted-2">&mdash;</span>';
+            const dl = (r.key && r.format)
+              ? `<button class="act-btn" data-recent-dl="${esc(r.key)}" data-fmt="${isPdf ? 'pdf' : 'excel'}" title="Download again"><i class="bi bi-download"></i></button>`
+              : '<span class="text-muted-2">&mdash;</span>';
+            return `<tr><td class="fw-id">${esc(r.ref)}</td><td>${esc(r.type)}</td><td>${esc(r.by)}</td><td class="text-muted-2">${esc(r.date)}</td><td>${badge}</td><td class="text-center">${dl}</td></tr>`;
+          }).join('');
+        })
+        .catch(() => {
+          body.innerHTML = '<tr><td colspan="6" class="text-center text-muted-2 py-3">Could not load recent reports.</td></tr>';
+          if (typeof showToast === 'function') showToast('Could not load the report overview.', 'error', 'bi-exclamation-triangle');
+        });
+
+      body.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-recent-dl]');
+        if (!b) return;
+        window.location.href = `/api/reports/${b.dataset.recentDl}/${b.dataset.fmt}`;
+      });
+    });
+  </script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       /* Generate = fetch REAL data from the server and render an on-screen

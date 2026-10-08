@@ -1682,19 +1682,24 @@
       function backOrderActionBtns(m){
         const reimbursed = m.disposition === 'Reimbursed';
         const replaced = m.disposition === 'Replaced';
+        // Once Replaced or Reimbursed, the decision is final: both buttons
+        // lock (the server refuses any change too).
+        const locked = reimbursed || replaced;
+        const lockCls = locked ? ' is-locked' : '';
+        const lockAttr = locked ? ' aria-disabled="true"' : '';
         const reimbursedTitle = reimbursed
-          ? `Marked Reimbursed (${PESO(m.reimbursedAmount || 0)}) — click to clear`
-          : 'Mark as Reimbursed';
+          ? `Reimbursed (${PESO(m.reimbursedAmount || 0)}) \u2014 final, can\u2019t be changed`
+          : (locked ? 'Already marked Replaced \u2014 can\u2019t be changed' : 'Mark as Reimbursed');
         const replacedTitle = replaced
-          ? `Marked Replaced (${NUM(m.replacedQty != null ? m.replacedQty : m.qty)} ${m.unit}) — click to clear`
-          : 'Mark as Replaced';
+          ? `Replaced (${NUM(m.replacedQty != null ? m.replacedQty : m.qty)} ${m.unit}) \u2014 final, can\u2019t be changed`
+          : (locked ? 'Already marked Reimbursed \u2014 can\u2019t be changed' : 'Mark as Replaced');
         return `<div class="d-inline-flex gap-1">
-            <button type="button" class="disposition-btn${reimbursed ? ' is-active is-reimbursed' : ''}"
+            <button type="button" class="disposition-btn${reimbursed ? ' is-active is-reimbursed' : ''}${lockCls}"${lockAttr}
                     data-disposition-btn data-disposition="Reimbursed" data-movement-id="${m.movementId}"
                     data-bs-toggle="tooltip" title="${reimbursedTitle}">
               <i class="bi ${reimbursed ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Reimbursed
             </button>
-            <button type="button" class="disposition-btn${replaced ? ' is-active is-replaced' : ''}"
+            <button type="button" class="disposition-btn${replaced ? ' is-active is-replaced' : ''}${lockCls}"${lockAttr}
                     data-disposition-btn data-disposition="Replaced" data-movement-id="${m.movementId}"
                     data-bs-toggle="tooltip" title="${replacedTitle}">
               <i class="bi ${replaced ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Replaced
@@ -1865,8 +1870,8 @@
       window.renderStockSummary = renderStockSummary;
 
       /* Back Orders only: persists a disposition click (Reimbursed /
-       Replaced) to the server. Clicking the already-active option sends ''
-       (clears it) - same toggle either way. Unlike before, this CAN now
+       Replaced) to the server. Once set it is final (no clearing or switching),
+       enforced on the server too. Unlike before, this CAN now
        change the item's on-hand stock ("Replaced" adds it back - see
        _set_back_order_disposition in app.py), so a full refreshInventory()
        re-fetches materials/movements/back-orders/summary together, rather
@@ -2003,11 +2008,8 @@
           const backOrderId = parseInt(dispBtn.dataset.movementId, 10);
           const m = (window.ALL_BACKORDERS || []).find(x => x.movementId === backOrderId);
           const clicked = dispBtn.dataset.disposition;
-          if (m && m.disposition === clicked) {
-            setBackOrderDisposition(backOrderId, '');   // already marked - clear instantly, no popup
-          } else if (m) {
-            openDispositionModal(m, clicked);            // newly marking - confirm details first
-          }
+          if (m && m.disposition) return;                // already Replaced/Reimbursed - final, nothing to do
+          if (m) openDispositionModal(m, clicked);       // newly marking - confirm details first
           return;
         }
 

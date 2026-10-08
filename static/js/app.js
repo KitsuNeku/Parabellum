@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <td class="text-muted-2">${t.date}</td></tr>`);
           });
           if (!d.recent.length) {
-            tb.innerHTML = '<tr><td colspan="5" class="text-center text-muted-2 py-3">No transactions recorded yet.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="5" class="text-center text-muted-2 py-3">No recent transactions.</td></tr>';
           }
         }
 
@@ -273,6 +273,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (err) {
         console.error('Dashboard load failed:', err);
+        // Don't leave "Loading..." on screen forever when the request fails.
+        const tbFail = document.getElementById('dashTxnBody');
+        if (tbFail) tbFail.innerHTML = '<tr><td colspan="5" class="text-center text-muted-2 py-3">Could not load recent transactions.</td></tr>';
         showToast('Could not load dashboard figures from the database', 'error', 'bi-exclamation-triangle');
       }
     })();
@@ -1080,7 +1083,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let RESULT = null;   // the last full forecast run
 
     const showError = (msg) => {
-      ['fcResPredicted','fcResMonth','fcResStock','fcResTrend','fcResConf',
+      ['kpiMaterial','kpiPredicted','kpiReorder','fcResMaterial',
+       'fcResPredicted','fcResMonth','fcResStock','fcResTrend','fcResConf',
        'fcMAE','fcRMSE','fcMAPE','fcR2',
        'fcWxTemp','fcWxRain','fcWxDays','fcWxIndex','fcWxSource'].forEach(id => set(id, '—'));
       setHTML('fcResReorder', `<span class="text-danger fw-semibold">${msg}</span>`);

@@ -409,7 +409,7 @@ def aggregate_monthly_demand(db_config):
         fetch=True,
     ))
     if materials.empty or movements.empty:
-        raise ValueError("No materials or stock movements found. Run schema.sql, then seed_data.py.")
+        raise ValueError("No materials or stock movements recorded yet.")
 
     transactions = pd.DataFrame(execute_query(
         db_config, "SELECT txn_date FROM transactions;", fetch=True))

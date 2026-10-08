@@ -740,13 +740,18 @@ def _set_back_order_disposition(back_order_id, disposition, replaced_qty=None,
     audit log; stock_delta is 0 if nothing about current_stock changed.
     """
     rows = execute_query(DB_CONFIG, """
-        SELECT bo.material_id, bo.quantity, bo.restocked_qty, m.material_name, m.current_stock, m.unit
+        SELECT bo.material_id, bo.quantity, bo.restocked_qty, bo.disposition, m.material_name, m.current_stock, m.unit
           FROM back_orders bo JOIN materials m ON m.material_id = bo.material_id
          WHERE bo.back_order_id = %s;
     """, (back_order_id,), fetch=True)
     if not rows:
         raise ValueError("Back order record not found.")
     row = rows[0]
+    # Final once set: a back order that is already Replaced or Reimbursed
+    # can't be switched or cleared (enforced here, not just in the UI, so a
+    # stale page or a direct request can't undo it and re-run the stock change).
+    if row["disposition"]:
+        raise ValueError(f"This back order is already marked {row['disposition']} and can't be changed.")
     quantity = float(row["quantity"])
     balance = float(row["current_stock"])
     old_restocked_qty = float(row["restocked_qty"] or 0)

@@ -386,6 +386,12 @@ a { text-decoration: none; }
 .disposition-btn:hover { border-color: var(--primary); color: var(--primary); }
 .disposition-btn.is-active.is-reimbursed { border-color: var(--success); background: rgba(31,157,85,.1); color: var(--success); }
 .disposition-btn.is-active.is-replaced { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+/* Final once Replaced/Reimbursed: no hover/pointer; the unchosen option is dimmed. */
+.disposition-btn.is-locked { cursor: not-allowed; }
+.disposition-btn.is-locked:hover { border-color: var(--border); color: var(--text-muted); }
+.disposition-btn.is-locked.is-active.is-reimbursed:hover { border-color: var(--success); color: var(--success); }
+.disposition-btn.is-locked.is-active.is-replaced:hover { border-color: var(--primary); color: var(--primary); }
+.disposition-btn.is-locked:not(.is-active) { opacity: .4; }
 
 /* ----------------------------- Forms ----------------------------- */
 .form-label { font-weight: 600; font-size: .82rem; color: var(--text); margin-bottom: 5px; }

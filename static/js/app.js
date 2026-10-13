@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // auto-popping Low Stock Materials modal, so it pops again right after
       // the next login instead of staying silently dismissed for whoever
       // logs in next on this browser tab (see dashboard.html).
-      try { sessionStorage.removeItem('parabellum.lowStockModalShown'); } catch (_) {}
+      try { sessionStorage.removeItem('parabellum.lowStockModalShown'); sessionStorage.removeItem('parabellum.outStockModalShown'); } catch (_) {}
       fetch('/api/logout', { method: 'POST' }).finally(() => {
         window.location.href = '/login';
       });

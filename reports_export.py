@@ -17,7 +17,8 @@ import io
 from datetime import datetime
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
+from xml.sax.saxutils import escape
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer,
@@ -76,19 +77,109 @@ def build_customer_report(db_config):
 
 
 def build_project_report(db_config):
-    rows = execute_query(db_config, """
-        SELECT p.project_name, c.name AS customer_name, p.status,
+    """
+    One row per project: its status and budget, PLUS what was stocked out to
+    it, what came back as back orders, and what that does to the budget.
+
+    How materials are tied to a project: a Stock Out stores the project code
+    (e.g. PRJ-301) in stock_movements.remarks, and a Record Return stores it
+    in back_orders.stock_out_ref - so both are matched on project_code.
+
+    "Stocked Out (less Back Orders)": per material, quantity stocked out minus
+    quantity back-ordered, e.g. "Angle Bar: 50 - 5 = 45 pcs". Every back order
+    reduces the net quantity (the material did physically come back).
+
+    Budget liquidation: Budget Used = cost of everything stocked out (qty x
+    the material's CURRENT unit cost - cost history isn't stored) MINUS what
+    was credited back for returns that have been decided:
+      * Replaced   -> the replaced quantity (it went back on the shelf)
+                      x unit cost is credited back;
+      * Reimbursed -> the peso amount actually refunded is credited back;
+      * Pending    -> nothing is credited yet (noted as "Pending decision").
+    Budget Left = Budget - Budget Used (can go negative if over budget).
+    The Return Note column says, per back order, whether it was Replaced or
+    Reimbursed.
+    """
+    projects = execute_query(db_config, """
+        SELECT p.project_code, p.project_name, c.name AS customer_name, p.status,
                p.progress, p.budget, p.end_date
         FROM projects p LEFT JOIN customers c ON c.customer_id = p.customer_id
         WHERE p.project_code IS NOT NULL
         ORDER BY p.start_date DESC;
     """, fetch=True)
+
+    issued = execute_query(db_config, """
+        SELECT sm.remarks AS ref, m.material_id, m.material_name, m.unit, m.unit_cost,
+               SUM(sm.quantity) AS qty
+        FROM stock_movements sm JOIN materials m ON m.material_id = sm.material_id
+        WHERE sm.movement_type = 'ISSUANCE' AND sm.remarks IS NOT NULL
+        GROUP BY sm.remarks, m.material_id, m.material_name, m.unit, m.unit_cost;
+    """, fetch=True)
+
+    returns = execute_query(db_config, """
+        SELECT bo.stock_out_ref AS ref, m.material_id, m.material_name, m.unit, m.unit_cost,
+               bo.quantity, bo.disposition, bo.replaced_qty, bo.reimbursed_amount
+        FROM back_orders bo JOIN materials m ON m.material_id = bo.material_id
+        WHERE bo.stock_out_ref IS NOT NULL
+        ORDER BY bo.return_date, bo.back_order_id;
+    """, fetch=True)
+
+    out_by_proj, ret_by_proj = {}, {}
+    for r in issued:
+        out_by_proj.setdefault(r["ref"], []).append(r)
+    for r in returns:
+        ret_by_proj.setdefault(r["ref"], []).append(r)
+
     status_map = {"Ongoing": "In Progress", "Completed": "Completed"}
-    out = [[r["project_name"], r["customer_name"] or "\u2014",
-            status_map.get(r["status"], r["status"]), f"{int(r['progress'] or 0)}%",
-            _peso(r["budget"]), str(r["end_date"]) if r["end_date"] else "\u2014"] for r in rows]
-    return ("Project Report", "Status and budgets",
-            ["Project", "Customer", "Status", "Progress", "Budget", "Due"], out)
+    out = []
+    for p in projects:
+        code = p["project_code"]
+        items = {}   # material_id -> [name, unit, stocked_out, back_ordered]
+        issued_cost = 0.0
+        for r in out_by_proj.get(code, []):
+            qty = float(r["qty"])
+            issued_cost += qty * float(r["unit_cost"] or 0)
+            items[r["material_id"]] = [r["material_name"], r["unit"], qty, 0.0]
+
+        credit = 0.0
+        notes = []
+        for r in ret_by_proj.get(code, []):
+            qty = float(r["quantity"])
+            entry = items.setdefault(r["material_id"], [r["material_name"], r["unit"], 0.0, 0.0])
+            entry[3] += qty
+            label = f"{r['material_name']} {qty:g} {r['unit']}"
+            if r["disposition"] == "Replaced":
+                rq = float(r["replaced_qty"] if r["replaced_qty"] is not None else qty)
+                amt = rq * float(r["unit_cost"] or 0)
+                credit += amt
+                notes.append(f"{label}: Replaced ({rq:g} {r['unit']} back to stock, {_peso(amt)} credited)")
+            elif r["disposition"] == "Reimbursed":
+                amt = float(r["reimbursed_amount"] or 0)
+                credit += amt
+                notes.append(f"{label}: Reimbursed ({_peso(amt)} refunded)")
+            else:
+                notes.append(f"{label}: Pending decision")
+
+        lines = []
+        for name, unit, so, bo in items.values():
+            if bo:
+                lines.append(f"{name}: {so:g} \u2212 {bo:g} = {so - bo:g} {unit}")
+            else:
+                lines.append(f"{name}: {so:g} {unit}")
+
+        budget = float(p["budget"] or 0)
+        used = issued_cost - credit
+        out.append([
+            p["project_name"], p["customer_name"] or "\u2014",
+            status_map.get(p["status"], p["status"]), f"{int(p['progress'] or 0)}%",
+            _peso(budget), str(p["end_date"]) if p["end_date"] else "\u2014",
+            "\n".join(lines) if lines else "None stocked out",
+            _peso(used), _peso(budget - used),
+            "\n".join(notes) if notes else "No returns",
+        ])
+    return ("Project Report", "Status, budgets, materials stocked out and returns",
+            ["Project", "Customer", "Status", "Progress", "Budget", "Due",
+             "Stocked Out (less Back Orders)", "Budget Used", "Budget Left", "Return Note"], out)
 
 
 def build_transaction_report(db_config):
@@ -244,7 +335,12 @@ REPORT_BUILDERS = {
 # =================================================================
 def generate_pdf(title, subtitle, columns, rows, generated_by="System"):
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter,
+    # Wide reports (many columns) or cells with several lines (the Project
+    # Report lists items per project) need wrapped text, proportional column
+    # widths and a landscape page; everything else keeps the original layout.
+    wide = len(columns) > 7 or any("\n" in str(c) for row in rows for c in row)
+    page = landscape(letter) if wide else letter
+    doc = SimpleDocTemplate(buf, pagesize=page,
                              topMargin=0.6 * inch, bottomMargin=0.6 * inch,
                              leftMargin=0.6 * inch, rightMargin=0.6 * inch)
     styles = getSampleStyleSheet()
@@ -264,8 +360,24 @@ def generate_pdf(title, subtitle, columns, rows, generated_by="System"):
     ]
 
     table_data = [columns] + rows if rows else [columns, ["No records found."] + [""] * (len(columns) - 1)]
-    col_width = (letter[0] - 1.2 * inch) / len(columns)
-    tbl = Table(table_data, colWidths=[col_width] * len(columns), repeatRows=1)
+    if wide:
+        cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=7, leading=9)
+        head_style = ParagraphStyle("HeadCell", parent=cell_style, textColor=colors.white,
+                                    fontName="Helvetica-Bold")
+        def _p(v, st):
+            return Paragraph(escape(str(v)).replace("\n", "<br/>"), st)
+        table_data = [[_p(c, head_style) for c in columns]] + \
+                     [[_p(c, cell_style) for c in row] for row in (table_data[1:])]
+    usable = page[0] - 1.2 * inch
+    if wide:
+        weights = []
+        for i, col in enumerate(columns):
+            longest = max([len(col)] + [len(line) for row in rows for line in str(row[i]).split("\n")])
+            weights.append(min(max(longest, 6), 34) ** 0.7)
+        col_widths = [usable * w / sum(weights) for w in weights]
+    else:
+        col_widths = [usable / len(columns)] * len(columns)
+    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
     tbl.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(f"#{PRIMARY_HEX}")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -273,7 +385,7 @@ def generate_pdf(title, subtitle, columns, rows, generated_by="System"):
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F1E8")]),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E4D9C4")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP" if wide else "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
@@ -316,10 +428,11 @@ def generate_excel(title, subtitle, columns, rows, generated_by="System"):
     display_rows = rows if rows else [["No records found."] + [""] * (len(columns) - 1)]
     for r, row in enumerate(display_rows, start=header_row + 1):
         for c, val in enumerate(row, start=1):
-            ws.cell(row=r, column=c, value=val)
+            cell = ws.cell(row=r, column=c, value=val)
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
 
     for i, col in enumerate(columns, start=1):
-        width = max(len(col), *(len(str(row[i - 1])) for row in display_rows)) + 3
+        width = max(len(col), *(len(line) for row in display_rows for line in str(row[i - 1]).split("\n"))) + 3
         ws.column_dimensions[get_column_letter(i)].width = min(width, 40)
 
     buf = io.BytesIO()

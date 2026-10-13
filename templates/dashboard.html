@@ -244,6 +244,18 @@
         {% if 'inventory' in allowed_pages %}<a href="/inventory" class="btn btn-primary"><i class="bi bi-box-seam me-1"></i>Go to Inventory</a>{% endif %}</div>
       </div></div></div>
 
+      <!-- Out of Stock pop-up: opens by itself each time the dashboard is opened when any material is at 0 stock. -->
+      <div class="modal fade" id="dashOutStockModal" tabindex="-1" aria-labelledby="dashOutStockTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="dashOutStockTitle"><i class="bi bi-x-octagon me-2" style="color:var(--primary)"></i>Out of Stock Materials</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body">
+          <p class="panel-sub mb-2">These materials have no stock left.</p>
+          <div class="stock-list" id="dashOutStockList"><div class="stock-empty">Loading…</div></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button>
+        {% if 'inventory' in allowed_pages %}<a href="/inventory" class="btn btn-primary"><i class="bi bi-box-seam me-1"></i>Go to Inventory</a>{% endif %}</div>
+      </div></div></div>
+
     </main>
       <footer class="app-footer">
         <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
@@ -271,15 +283,9 @@
     // INVENTORY finishes loading from the server (see app.js), so this flag
     // makes sure the auto-popup below fires exactly once per page load -
     // the moment real inventory data is actually in, not on every re-render.
-    // A plain in-memory flag would reset on every page load/navigation,
-    // which is exactly the bug being fixed here (the modal was popping up
-    // every time the dashboard was opened, not just right after logging
-    // in) - so this is tracked in sessionStorage instead, which survives
-    // navigating away and back but is cleared on sign-out (see app.js) and
-    // whenever the browser tab/session actually ends.
-    const LOW_STOCK_MODAL_KEY = 'parabellum.lowStockModalShown';
-    let autoShownLowStockModal = false;
-    try { autoShownLowStockModal = sessionStorage.getItem(LOW_STOCK_MODAL_KEY) === '1'; } catch (_) {}
+    // It is a plain in-memory flag on purpose: it resets on every navigation,
+    // so the pop-up appears each time the dashboard is opened.
+    let autoShownOutStockModal = false;   // per page load
     function renderDashboard(){
       // app.js sets window.DASH_LOADED.<name> = true once that dataset has
       // really arrived from the server. Until then the cards keep their
@@ -306,15 +312,25 @@
           </div>`).join('')
         : '<div class="stock-empty">No low-stock materials.</div>';
 
-      // Pop the modal open automatically the moment real inventory data has
-      // loaded (INVENTORY.length > 0 means the /api/inventory fetch below
-      // actually finished), so the admin sees it right when they land on
-      // the dashboard, no click needed. Only once per login - see
-      // autoShownLowStockModal above.
-      if (!autoShownLowStockModal && INVENTORY.length > 0) {
-        autoShownLowStockModal = true;
-        try { sessionStorage.setItem(LOW_STOCK_MODAL_KEY, '1'); } catch (_) {}
-        if (low.length) bootstrap.Modal.getOrCreateInstance('#dashLowStockModal').show();
+      // Out of Stock list for the pop-up (materials at 0 stock).
+      const out = INVENTORY.filter(i => i.status === 'Out of Stock')
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      const outList = document.getElementById('dashOutStockList');
+      if (outList && L.inventory) outList.innerHTML = out.length
+        ? out.map(i => `
+          <div class="sl-item">
+            <div><div class="sl-name">${escapeHTML(i.name)}</div><div class="sl-sub">${i.loc} · Reorder at ${NUM(i.reorder)} ${i.unit}</div></div>
+            <div class="text-end"><div class="sl-qty" style="color:var(--primary)">0 ${i.unit}</div>
+              <div class="sl-sub">Back ordered: ${NUM(i.backOrdered || 0)} ${i.unit}</div></div>
+          </div>`).join('')
+        : '<div class="stock-empty">No out-of-stock materials.</div>';
+
+      // Pop the Out of Stock window open by itself every time the dashboard
+      // is opened (once per page load), as soon as real inventory data has
+      // loaded and at least one material is at 0.
+      if (!autoShownOutStockModal && L.inventory && out.length) {
+        autoShownOutStockModal = true;
+        bootstrap.Modal.getOrCreateInstance('#dashOutStockModal').show();
       }
     }
     window.renderDashboard = renderDashboard;

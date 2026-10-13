@@ -527,6 +527,8 @@ def _material_row(r):
         "loc": r["location"] or "",
         "added": str(r["added_date"]) if r["added_date"] else "",
         "status": _inv_status(qty, reorder),
+        # Total units of this material that came back as back orders (all dispositions).
+        "backOrdered": float(r.get("back_ordered") or 0),
     }
 
 
@@ -537,7 +539,9 @@ def api_inventory():
     try:
         rows = execute_query(DB_CONFIG, """
             SELECT material_id, material_code, material_name, unit, unit_cost,
-                   current_stock, reorder_level, category, supplier, location, added_date
+                   current_stock, reorder_level, category, supplier, location, added_date,
+                   COALESCE((SELECT SUM(bo.quantity) FROM back_orders bo
+                              WHERE bo.material_id = materials.material_id), 0) AS back_ordered
             FROM materials ORDER BY material_name;
         """, fetch=True)
         return jsonify({"ok": True, "data": [_material_row(r) for r in rows]})

@@ -175,7 +175,7 @@
           <div class="col-md-6 col-xl-4"><div class="card h-100" style="border:1px solid var(--border)"><div class="card-body">
             <div class="d-flex align-items-start gap-3">
               <div style="background:var(--primary-soft);color:var(--primary);width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:1.35rem;flex:0 0 46px"><i class="bi bi-kanban"></i></div>
-              <div class="flex-grow-1"><div class="fw-medium">Project Report</div><div class="small text-muted-2 mb-2">Status, budget, completion rate</div>
+              <div class="flex-grow-1"><div class="fw-medium">Project Report</div><div class="small text-muted-2 mb-2">Status, budget, materials stocked out &amp; returns</div>
                 <div class="d-flex gap-1">
                   <button class="btn btn-soft btn-sm" data-export="Project Report (PDF)" data-report="project" data-format="pdf" data-bs-toggle="tooltip" title="Export PDF"><i class="bi bi-filetype-pdf"></i></button>
                   <button class="btn btn-soft btn-sm" data-export="Project Report (Excel)" data-report="project" data-format="excel" data-bs-toggle="tooltip" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></button>
@@ -391,7 +391,7 @@
       const wrap = (subtitle, columns, rows) => {
         const head = `<thead><tr>${columns.map(c=>`<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>`;
         const body = rows.length
-          ? rows.map(row => `<tr>${row.map(cell=>`<td>${escapeHTML(String(cell))}</td>`).join('')}</tr>`).join('')
+          ? rows.map(row => `<tr>${row.map(cell=>{ const t = String(cell); const st = t.includes('\n') ? 'white-space:pre-line;min-width:210px' : (t.length <= 14 ? 'white-space:nowrap' : 'white-space:pre-line'); return `<td style="${st}">${escapeHTML(t)}</td>`; }).join('')}</tr>`).join('')
           : `<tr><td colspan="${columns.length}" class="text-center text-muted-2 py-3">No records found.</td></tr>`;
         return `
           <div class="d-flex justify-content-between align-items-start mb-2">
@@ -603,6 +603,7 @@
         mv.key = MOVE_REPORTS[key] ? key : null;
         mv.preset = 'all'; mv.movements = null; mv.fallback = null; mv.viewing = null;
         currentRange = { from: '', to: '' };
+        { const dlg = document.querySelector('#reportPreviewModal .modal-dialog'); dlg.classList.remove('modal-xl'); dlg.style.maxWidth = ''; }
         rpTitle.textContent = 'Loading\u2026';
         rpBody.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm"></span></div>';
         modal.show();
@@ -613,6 +614,8 @@
           if (!json.ok) throw new Error(json.error);
           const d = json.data;
           rpTitle.textContent = d.title;
+          // Wide reports (e.g. Project Report) get the larger window.
+          { const dlg = document.querySelector('#reportPreviewModal .modal-dialog'); dlg.classList.toggle('modal-xl', d.columns.length > 7); dlg.style.maxWidth = d.columns.length > 7 ? 'min(1400px, 96vw)' : ''; }
           rpBody.innerHTML = wrap(d.subtitle, d.columns, d.rows);
         } catch (err) {
           rpTitle.textContent = 'Report Preview';

@@ -625,10 +625,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ? { itemId: d.itemId, qty: d.qty, remarks: d.remarks }
         // Stock In's "new item" path no longer asks for Reorder Level (it's
         // still set explicitly via Add Item, or editable afterward from the
-        // item's own Edit form) - 50 is the same default Add Item's own
-        // Reorder Level field starts at, so a new item registered this way
-        // still gets sensible Low Stock alerting out of the box.
-        : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: 50, loc: d.loc }),
+        // item's own Edit form) - 0 is the same default Add Item's own
+        // Reorder Level field starts at.
+        : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: 0, loc: d.loc }),
       { successMsg: (d) => d.itemId ? 'Stock added to inventory' : 'New item added to inventory and stocked',
         // Stock In receipt: exactly the item + quantity just received.
         onSuccess: (d, form, { json, beforeIds, itemBefore }) => {

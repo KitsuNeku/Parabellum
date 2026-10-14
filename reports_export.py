@@ -85,9 +85,9 @@ def build_project_report(db_config):
     (e.g. PRJ-301) in stock_movements.remarks, and a Record Return stores it
     in back_orders.stock_out_ref - so both are matched on project_code.
 
-    "Stocked Out (less Back Orders)": per material, quantity stocked out minus
-    quantity back-ordered, e.g. "Angle Bar: 50 - 5 = 45 pcs". Every back order
-    reduces the net quantity (the material did physically come back).
+    "Ordered": per material, the quantity stocked out to the project, e.g.
+    "Angle Bar: 50 pcs". Back orders are NOT subtracted here; they only
+    affect the budget and the Return Note.
 
     Budget liquidation: Budget Used = cost of everything stocked out (qty x
     the material's CURRENT unit cost - cost history isn't stored) MINUS what
@@ -160,12 +160,7 @@ def build_project_report(db_config):
             else:
                 notes.append(f"{label}: Pending decision")
 
-        lines = []
-        for name, unit, so, bo in items.values():
-            if bo:
-                lines.append(f"{name}: {so:g} \u2212 {bo:g} = {so - bo:g} {unit}")
-            else:
-                lines.append(f"{name}: {so:g} {unit}")
+        lines = [f"{name}: {so:g} {unit}" for name, unit, so, bo in items.values() if so]
 
         budget = float(p["budget"] or 0)
         used = issued_cost - credit
@@ -179,7 +174,7 @@ def build_project_report(db_config):
         ])
     return ("Project Report", "Status, budgets, materials stocked out and returns",
             ["Project", "Customer", "Status", "Progress", "Budget", "Due",
-             "Stocked Out (less Back Orders)", "Budget Used", "Budget Left", "Return Note"], out)
+             "Ordered", "Budget Used", "Budget Left", "Return Note"], out)
 
 
 def build_transaction_report(db_config):

@@ -164,11 +164,11 @@
           <div class="stat-value" id="dashKpiItems">&mdash;</div>
           <div class="stat-desc">Active materials in catalog</div>
         </div></div>
-        <!-- Clickable: opens #dashLowStockModal for a quick look (the
+        <!-- Clickable: opens #dashStockModal for a quick look (the
              always-visible table that used to sit below this was removed -
              the modal is now the only on-dashboard way to see the list). -->
         <div class="col-md-6 col-xl-3"><div class="stat-card is-gold"{% if 'inventory' in allowed_pages %} role="button" tabindex="0" style="cursor:pointer"
-             data-bs-toggle="modal" data-bs-target="#dashLowStockModal" aria-label="View low stock materials" title="View low stock materials"{% endif %}>
+             data-bs-toggle="modal" data-bs-target="#dashStockModal" aria-label="View low stock materials" title="View low stock materials"{% endif %}>
           <div class="stat-ic"><i class="bi bi-exclamation-triangle"></i></div>
           <div class="stat-label">Low Stock Materials</div>
           <div class="stat-value" id="dashKpiLow">&mdash;</div>
@@ -229,28 +229,19 @@
         </div></div></div>
       </div>
 
-      <!-- Low Stock Materials modal (opened from the KPI card above) - the
-           only place on the dashboard that lists low-stock items; the full
-           detail (stock level bar, needed-to-reorder) lives on the
-           Inventory page's own low-stock view. -->
-      <div class="modal fade" id="dashLowStockModal" tabindex="-1" aria-labelledby="dashLowStockTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title" id="dashLowStockTitle"><i class="bi bi-exclamation-triangle me-2" style="color:var(--accent-dark)"></i>Low Stock Materials</h5>
+      <!-- Stock Alerts modal: Out of Stock and Low Stock in one window. Opens by
+           itself each time the dashboard loads when anything is out of / low on
+           stock, and from the Low Stock KPI card above. -->
+      <div class="modal fade" id="dashStockModal" tabindex="-1" aria-labelledby="dashStockTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="dashStockTitle"><i class="bi bi-exclamation-triangle me-2" style="color:var(--accent-dark)"></i>Stock Alerts</h5>
           <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
         <div class="modal-body">
+          <div class="fw-semibold mb-1" style="color:var(--primary)"><i class="bi bi-x-octagon me-1"></i>Out of Stock <span class="text-muted-2 fw-normal small" id="dashOutStockCount"></span></div>
+          <p class="panel-sub mb-2">These materials have no stock left.</p>
+          <div class="stock-list mb-3" id="dashOutStockList"><div class="stock-empty">Loading…</div></div>
+          <div class="fw-semibold mb-1" style="color:var(--accent-dark)"><i class="bi bi-exclamation-triangle me-1"></i>Low Stock <span class="text-muted-2 fw-normal small" id="dashLowStockCount"></span></div>
           <p class="panel-sub mb-2">Items at or below their reorder level.</p>
           <div class="stock-list" id="dashLowStockList"><div class="stock-empty">Loading…</div></div>
-        </div>
-        <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
-        {% if 'inventory' in allowed_pages %}<a href="/inventory" class="btn btn-primary"><i class="bi bi-box-seam me-1"></i>Go to Inventory</a>{% endif %}</div>
-      </div></div></div>
-
-      <!-- Out of Stock pop-up: opens by itself each time the dashboard is opened when any material is at 0 stock. -->
-      <div class="modal fade" id="dashOutStockModal" tabindex="-1" aria-labelledby="dashOutStockTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
-        <div class="modal-header"><h5 class="modal-title" id="dashOutStockTitle"><i class="bi bi-x-octagon me-2" style="color:var(--primary)"></i>Out of Stock Materials</h5>
-          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-        <div class="modal-body">
-          <p class="panel-sub mb-2">These materials have no stock left.</p>
-          <div class="stock-list" id="dashOutStockList"><div class="stock-empty">Loading…</div></div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button>
         {% if 'inventory' in allowed_pages %}<a href="/inventory" class="btn btn-primary"><i class="bi bi-box-seam me-1"></i>Go to Inventory</a>{% endif %}</div>
@@ -285,7 +276,7 @@
     // the moment real inventory data is actually in, not on every re-render.
     // It is a plain in-memory flag on purpose: it resets on every navigation,
     // so the pop-up appears each time the dashboard is opened.
-    let autoShownOutStockModal = false;   // per page load
+    let autoShownStockModal = false;   // per page load
     function renderDashboard(){
       // app.js sets window.DASH_LOADED.<name> = true once that dataset has
       // really arrived from the server. Until then the cards keep their
@@ -325,12 +316,20 @@
           </div>`).join('')
         : '<div class="stock-empty">No out-of-stock materials.</div>';
 
-      // Pop the Out of Stock window open by itself every time the dashboard
-      // is opened (once per page load), as soon as real inventory data has
-      // loaded and at least one material is at 0.
-      if (!autoShownOutStockModal && L.inventory && out.length) {
-        autoShownOutStockModal = true;
-        bootstrap.Modal.getOrCreateInstance('#dashOutStockModal').show();
+      // Counts next to each section heading.
+      const outCount = document.getElementById('dashOutStockCount');
+      const lowCount = document.getElementById('dashLowStockCount');
+      if (L.inventory) {
+        if (outCount) outCount.textContent = '(' + out.length + ')';
+        if (lowCount) lowCount.textContent = '(' + low.length + ')';
+      }
+
+      // Pop the Stock Alerts window open by itself every time the dashboard is
+      // opened (once per page load), as soon as real inventory data has loaded
+      // and at least one material is out of stock or low.
+      if (!autoShownStockModal && L.inventory && (out.length || low.length)) {
+        autoShownStockModal = true;
+        bootstrap.Modal.getOrCreateInstance('#dashStockModal').show();
       }
     }
     window.renderDashboard = renderDashboard;
@@ -339,10 +338,10 @@
 
     // Keyboard access for the clickable Low Stock card: Enter/Space opens the modal.
     document.addEventListener('keydown', (e) => {
-      const card = e.target.closest?.('.stat-card[data-bs-target="#dashLowStockModal"]');
+      const card = e.target.closest?.('.stat-card[data-bs-target="#dashStockModal"]');
       if (!card || (e.key !== 'Enter' && e.key !== ' ')) return;
       e.preventDefault();
-      bootstrap.Modal.getOrCreateInstance('#dashLowStockModal').show();
+      bootstrap.Modal.getOrCreateInstance('#dashStockModal').show();
     });
   </script>
 </body>

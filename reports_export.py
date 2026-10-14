@@ -85,9 +85,9 @@ def build_project_report(db_config):
     (e.g. PRJ-301) in stock_movements.remarks, and a Record Return stores it
     in back_orders.stock_out_ref - so both are matched on project_code.
 
-    "Ordered": per material, the quantity stocked out to the project, e.g.
-    "Angle Bar: 50 pcs". Back orders are NOT subtracted here; they only
-    affect the budget and the Return Note.
+    "Ordered": per material, the quantity stocked out to the project minus
+    what was back-ordered, e.g. 55 stocked out - 5 back-ordered shows
+    "Angle Bar: 50 pcs". Every back order reduces it, whatever its status.
 
     Budget liquidation: Budget Used = cost of everything stocked out (qty x
     the material's CURRENT unit cost - cost history isn't stored) MINUS what
@@ -160,7 +160,7 @@ def build_project_report(db_config):
             else:
                 notes.append(f"{label}: Pending decision")
 
-        lines = [f"{name}: {so:g} {unit}" for name, unit, so, bo in items.values() if so]
+        lines = [f"{name}: {so - bo:g} {unit}" for name, unit, so, bo in items.values() if so]
 
         budget = float(p["budget"] or 0)
         used = issued_cost - credit

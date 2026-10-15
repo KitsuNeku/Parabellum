@@ -618,17 +618,36 @@ def api_inventory_save():
             # this only records the movement - it must NOT also add qty
             # again (that's what _apply_movement would do).
             if qty > 0 and new_row:
+                temp_c, rain_mm, wind_kmh = _weather_for_today()
                 execute_query(DB_CONFIG, """
                     INSERT INTO stock_movements
-                        (material_id, movement_type, quantity, movement_date, remarks, recorded_by)
-                    VALUES (%s, 'RECEIPT', %s, CURRENT_DATE, %s, %s);
+                        (material_id, movement_type, quantity, movement_date, remarks, recorded_by,
+                         weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
+                    VALUES (%s, 'RECEIPT', %s, CURRENT_DATE, %s, %s, %s, %s, %s);
                 """, (new_row[0]["material_id"], qty, "Initial stock (new item)",
-                      session["user"]["name"]))
+                      session["user"]["name"], temp_c, rain_mm, wind_kmh))
 
         return jsonify({"ok": True, "code": edit_id or code})
     except Exception as e:
         app.logger.exception("Database error")
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+def _weather_for_today():
+    """
+    (avg temp C, rainfall mm, max wind km/h) for today's date in the database,
+    to be stored on a Stock In / Stock Out row for the forecasting model. Not
+    shown anywhere in the app. Returns (None, None, None) if the weather
+    service can't be reached - the movement itself is saved regardless.
+    """
+    try:
+        day = execute_query(DB_CONFIG, "SELECT CURRENT_DATE AS d;", fetch=True)[0]["d"]
+        w = weather_api.fetch_weather_for_day(day)
+    except Exception:
+        w = None
+    if not w:
+        return None, None, None
+    return w["temp_c"], w["rainfall_mm"], w["wind_kmh"]
 
 
 def _apply_movement(material_code, quantity, kind, remarks, project_id=None, recorded_by=None):
@@ -668,11 +687,14 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
 
     new_balance = balance - quantity if kind == "ISSUANCE" else balance + quantity
 
+    temp_c, rain_mm, wind_kmh = _weather_for_today()
     execute_query(DB_CONFIG, """
         INSERT INTO stock_movements
-            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by)
-        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s);
-    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by))
+            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by,
+             weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
+        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s);
+    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by,
+          temp_c, rain_mm, wind_kmh))
 
     execute_query(DB_CONFIG,
         "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
@@ -1596,11 +1618,13 @@ def api_transactions_save():
             if qty > balance:
                 return jsonify({"ok": False,
                     "error": f"Cannot sell {qty:g} {m['unit']} of {material_name} — only {balance:g} in stock."}), 400
+            temp_c, rain_mm, wind_kmh = _weather_for_today()
             execute_query(DB_CONFIG, """
                 INSERT INTO stock_movements
-                    (material_id, movement_type, quantity, movement_date, project_id, remarks)
-                VALUES (%s, 'ISSUANCE', %s, CURRENT_DATE, %s, %s);
-            """, (m["material_id"], qty, proj_id, "Sold via transaction"))
+                    (material_id, movement_type, quantity, movement_date, project_id, remarks,
+                     weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
+                VALUES (%s, 'ISSUANCE', %s, CURRENT_DATE, %s, %s, %s, %s, %s);
+            """, (m["material_id"], qty, proj_id, "Sold via transaction", temp_c, rain_mm, wind_kmh))
             execute_query(DB_CONFIG,
                 "UPDATE materials SET current_stock = current_stock - %s WHERE material_id=%s;",
                 (qty, m["material_id"]))

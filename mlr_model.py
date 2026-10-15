@@ -84,6 +84,12 @@ MIN_TRAINING_ROWS = 20        # pooled model
 MIN_PER_MATERIAL_ROWS = 15    # per-material model (needs 13 usable rows after lag dropna)
 SAMPLE_SIZE_WARN_THRESHOLD = 24
 
+# A month's weather is taken from the weather recorded on its Stock In /
+# Stock Out days (stock_movements.weather_*) only when at least this many
+# different days of that month have it; otherwise the month keeps the
+# Open-Meteo monthly figures from monthly_weather.
+MIN_MOVEMENT_WEATHER_DAYS = 3
+
 
 # =================================================================
 # Database helpers
@@ -482,6 +488,53 @@ def aggregate_monthly_demand(db_config):
 # =================================================================
 # Feature engineering
 # =================================================================
+def _movement_weather_by_month(db_config):
+    """
+    Weather as recorded on the Stock In / Stock Out days themselves
+    (stock_movements.weather_*, stamped by the app when each movement was
+    saved), turned into the same three monthly figures the model uses:
+
+      avg_temp_c         mean of those days' temperatures
+      total_rainfall_mm  mean daily rain x days in the month
+      rainy_days         share of those days with >= 1 mm rain x days in the month
+
+    i.e. the movement days are treated as a sample of the month. Only months
+    with at least MIN_MOVEMENT_WEATHER_DAYS such days are returned.
+    Returns {} if there is none, or if the weather columns don't exist yet
+    (migration not run) - the forecast then just uses monthly_weather.
+    """
+    try:
+        rows = execute_query(
+            db_config,
+            """WITH d AS (
+                   SELECT movement_date,
+                          MAX(weather_temp_c)      AS t,
+                          MAX(weather_rainfall_mm) AS r
+                     FROM stock_movements
+                    WHERE weather_temp_c IS NOT NULL OR weather_rainfall_mm IS NOT NULL
+                    GROUP BY movement_date)
+               SELECT date_trunc('month', movement_date)::date AS period_month,
+                      COUNT(*)                                  AS n_days,
+                      AVG(t)                                    AS avg_temp,
+                      AVG(r)                                    AS avg_rain,
+                      AVG(CASE WHEN r IS NULL THEN NULL WHEN r >= 1 THEN 1.0 ELSE 0.0 END) AS wet_share
+                 FROM d GROUP BY 1 ORDER BY 1;""",
+            fetch=True)
+    except Exception:
+        return {}
+    out = {}
+    for r in rows or []:
+        if int(r["n_days"]) < MIN_MOVEMENT_WEATHER_DAYS:
+            continue
+        pm = pd.Timestamp(r["period_month"])
+        dim = pm.days_in_month
+        temp = None if r["avg_temp"] is None else float(r["avg_temp"])
+        rain = None if r["avg_rain"] is None else float(r["avg_rain"]) * dim
+        wet = None if r["wet_share"] is None else float(r["wet_share"]) * dim
+        out[pm] = (temp, rain, wet)
+    return out
+
+
 def _load_panel(db_config):
     """Panel: monthly_demand LEFT JOIN monthly_weather, with materials info."""
     rows = execute_query(
@@ -504,6 +557,23 @@ def _load_panel(db_config):
     df["inventory_balance"] = df["inventory_balance"].astype(float)
     for col in WEATHER_FEATURES:
         df[col] = df[col].astype(float)
+
+    # Prefer the weather recorded on the Stock In / Stock Out days themselves;
+    # months without enough of it keep the monthly_weather figures.
+    mv_weather = _movement_weather_by_month(db_config)
+    months_from_movements = 0
+    for pm, (t, r, w) in mv_weather.items():
+        mask = df["period_month"] == pm
+        if not mask.any():
+            continue
+        months_from_movements += 1
+        for col, val in (("avg_temp_c", t), ("total_rainfall_mm", r), ("rainy_days", w)):
+            if val is not None:
+                df.loc[mask, col] = val
+    df.attrs["movement_weather_months"] = months_from_movements
+    df.attrs["total_months"] = int(df["period_month"].nunique())
+
+    for col in WEATHER_FEATURES:
         if df[col].notna().any():
             df[col] = df[col].fillna(df[col].mean())
         else:
@@ -597,6 +667,8 @@ def run_forecast(db_config, overrides=None, test_ratio=None, username="system"):
     tiers automatically fall back to a lag-free feature set.
     """
     panel = _load_panel(db_config)
+    weather_months_from_movements = int(panel.attrs.get("movement_weather_months", 0))
+    weather_months_total = int(panel.attrs.get("total_months", 0))
     df = prepare_mlr_dataset(panel)
 
     if len(df) < MIN_TRAINING_ROWS:
@@ -854,5 +926,12 @@ def run_forecast(db_config, overrides=None, test_ratio=None, username="system"):
             "favorability_label":  weather_favorability_label(fm_features[MODEL_WEATHER_FEATURE]),
             "source": "override" if not weather_is_estimated
                       else "seasonal estimate (avg of this calendar month in past years)",
+        },
+        # Where the weather the model was TRAINED on came from: months whose
+        # weather was taken from the Stock In / Stock Out days themselves
+        # (stock_movements.weather_*) versus the rest, which use monthly_weather.
+        "training_weather": {
+            "months_from_stock_movements": weather_months_from_movements,
+            "months_total": weather_months_total,
         },
     }

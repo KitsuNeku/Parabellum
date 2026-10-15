@@ -1375,13 +1375,21 @@
       // Items stocked out under one project, aggregated by material (an
       // item issued more than once under the same reference becomes a
       // single row with the combined quantity).
+      // "Stocked Out" here is what is still out with the project: everything
+      // issued under it MINUS what has already been returned against it
+      // (back orders with that project as their Stock Out reference). An item
+      // that has been returned in full no longer appears.
       function itemsForStockOutRef(ref){
         const byItem = new Map();
         (window.ALL_MOVEMENTS || []).filter(m => m.type === 'ISSUANCE' && m.remarks === ref).forEach(m => {
           if (!byItem.has(m.id)) byItem.set(m.id, { itemId: m.id, name: m.name, unit: m.unit, stockedOut: 0 });
           byItem.get(m.id).stockedOut += Number(m.qty) || 0;
         });
-        return [...byItem.values()];
+        (window.ALL_BACKORDERS || []).filter(b => b.stockOutRef === ref).forEach(b => {
+          const row = byItem.get(b.id);
+          if (row) row.stockedOut -= Number(b.qty) || 0;
+        });
+        return [...byItem.values()].filter(r => r.stockedOut > 0);
       }
 
       function renderReturnItems(){

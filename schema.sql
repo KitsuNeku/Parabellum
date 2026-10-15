@@ -135,7 +135,13 @@ CREATE TABLE stock_movements (
     movement_date DATE NOT NULL,
     project_id    INT REFERENCES projects(project_id),
     remarks       TEXT,
-    recorded_by   VARCHAR(80)  -- display name of the user who performed this movement
+    recorded_by   VARCHAR(80), -- display name of the user who performed this movement
+    -- Weather in Lipa City on the day of this movement (Open-Meteo), stored for
+    -- the forecasting model to read. Never shown in the app; NULL if the
+    -- weather service couldn't be reached when the movement was recorded.
+    weather_temp_c       NUMERIC(5,2),
+    weather_rainfall_mm  NUMERIC(8,2),
+    weather_wind_kmh     NUMERIC(6,2)
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);

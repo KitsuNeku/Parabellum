@@ -20,6 +20,11 @@ LONGITUDE = 121.1622
 TIMEZONE = "Asia/Manila"
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+# The archive API trails real time by several days, so a movement recorded
+# today (or in the last few weeks) is looked up on the forecast API instead,
+# which serves recent days and today.
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+MOVEMENT_WEATHER_TIMEOUT_SECONDS = 4   # a stock movement must never wait long on the weather
 DEFAULT_START_DATE = "2024-01-01"
 
 DAILY_VARS = ["temperature_2m_mean", "precipitation_sum", "rain_sum", "wind_speed_10m_max"]
@@ -49,6 +54,47 @@ def fetch_daily_weather(start_date=DEFAULT_START_DATE, end_date=None,
         "rain_sum_mm":   daily.get("rain_sum"),
         "wind_max_kmh":  daily.get("wind_speed_10m_max"),
     })
+
+
+_day_weather_cache = {}        # date -> weather dict (successes only)
+_day_weather_failed_at = {}    # date -> time of last failure, to avoid retrying on every row
+
+
+def fetch_weather_for_day(day):
+    """
+    Weather for one day in Lipa City: {"temp_c", "rainfall_mm", "wind_kmh"}, or
+    None if it can't be had. Used to stamp each Stock In / Stock Out. This is
+    best-effort on purpose - it never raises, so a weather outage can't stop
+    a stock movement from being saved. Cached per day, and a failed lookup
+    isn't retried for 60 seconds (a Stock Out request with several items would
+    otherwise wait on the network once per item).
+    """
+    import time
+    day = str(day)
+    if day in _day_weather_cache:
+        return _day_weather_cache[day]
+    if time.time() - _day_weather_failed_at.get(day, 0) < 60:
+        return None
+    try:
+        resp = requests.get(FORECAST_URL, params={
+            "latitude": LATITUDE, "longitude": LONGITUDE,
+            "start_date": day, "end_date": day,
+            "daily": "temperature_2m_mean,rain_sum,wind_speed_10m_max",
+            "timezone": TIMEZONE,
+        }, timeout=MOVEMENT_WEATHER_TIMEOUT_SECONDS)
+        resp.raise_for_status()
+        daily = resp.json().get("daily") or {}
+        temp = (daily.get("temperature_2m_mean") or [None])[0]
+        rain = (daily.get("rain_sum") or [None])[0]
+        wind = (daily.get("wind_speed_10m_max") or [None])[0]
+        if temp is None and rain is None and wind is None:
+            raise ValueError("no weather values returned for " + day)
+        result = {"temp_c": temp, "rainfall_mm": rain, "wind_kmh": wind}
+        _day_weather_cache[day] = result
+        return result
+    except Exception:
+        _day_weather_failed_at[day] = time.time()
+        return None
 
 
 def aggregate_monthly(daily_df):

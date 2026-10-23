@@ -85,7 +85,9 @@ function buildPageWindow(current, total, maxNeighbors = 1) {
  items: one row per material in the transaction:
         [{ movementId, id, name, cat, qty, unit, price }]
         (several items = one receipt with several rows, never one receipt each)
- info:  { when, fields: [[label, value], ...], recordedBy, counterparty, note }
+ info:  { when, fields: [[label, value], ...], recordedBy, counterparty, note,
+          weather: { temp, rain, wind } (optional - Stock Out receipts),
+          delivery: { delivered, at, weather: {temp, rain, wind} } (optional - Stock Out receipts) }
  The modal footer has Close + Print (the app's existing [data-print] button),
  so printing is always optional. */
 const RECEIPT_KINDS = {
@@ -147,6 +149,33 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
   const sig = (label, name) => `<div class="col-6"><div style="border-bottom:1px solid #999;height:34px" class="d-flex align-items-end justify-content-center pb-1 fw-medium">${_rcEsc(name || '')}</div>
       <div class="small text-muted-2 text-center mt-1">${_rcEsc(label)}</div></div>`;
 
+  // Weather line (Stock Out receipts), top right under the date.
+  const wxLine = (wx, title, label) => {
+    if (!wx || (wx.temp == null && wx.rain == null)) return '';
+    const rainy = wx.rain != null && Number(wx.rain) >= 1;
+    const icon = rainy ? 'bi-cloud-rain-fill' : 'bi-sun-fill';
+    const parts = [];
+    if (wx.temp != null) parts.push(`${Number(wx.temp).toFixed(1)}\u00b0C`);
+    if (wx.rain != null) parts.push(rainy ? `${Number(wx.rain).toFixed(1)} mm rain` : 'No rain');
+    if (wx.wind != null) parts.push(`${Number(wx.wind).toFixed(0)} km/h wind`);
+    return `<div class="small mt-1" title="${_rcEsc(title)}">
+      <i class="bi ${icon} me-1" style="color:${rainy ? '#2b6cb0' : '#e6a817'}"></i>${label ? `<span class="text-muted-2">${_rcEsc(label)}: </span>` : ''}<span class="fw-medium">${_rcEsc(parts.join(' \u00b7 '))}</span></div>`;
+  };
+  // Weather on the day of the movement.
+  let weatherHTML = wxLine(info.weather, 'Weather in Lipa City on the day of this Stock Out', info.delivery ? 'Order day' : '');
+
+  // Delivery confirmation (Stock Out receipts only; TEMPORARY): Pending, or
+  // Delivered + when + the weather on the delivery day.
+  let deliveryHTML = '';
+  const dv = info.delivery;
+  if (dv) {
+    deliveryHTML = dv.delivered
+      ? `<div class="small mt-2"><i class="bi bi-truck me-1 text-success"></i><span class="fw-medium text-success">Delivered</span>
+          ${dv.at ? `<span class="text-muted-2"> \u00b7 ${_rcEsc(dv.at)}</span>` : ''}</div>
+         ${wxLine(dv.weather, 'Weather in Lipa City on the delivery day', 'Delivery day')}`
+      : `<div class="small mt-2"><i class="bi bi-hourglass-split me-1 text-warning"></i><span class="fw-medium text-warning-emphasis">Delivery pending</span></div>`;
+  }
+
   return `
     <div class="receipt-doc">
       <div class="d-flex justify-content-between align-items-start mb-3">
@@ -155,7 +184,8 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
           <div class="small text-muted-2">Inventory &amp; Service Optimization System</div></div></div>
         <div class="text-end"><div class="h5 mb-0">${k.title}</div>
           <div class="small text-muted-2">Receipt No. <span class="fw-medium text-dark">${_rcEsc(receiptNo)}</span></div>
-          <div class="small text-muted-2">${_rcEsc(info.when || '')}</div></div>
+          <div class="small text-muted-2">${_rcEsc(info.when || '')}</div>
+          ${weatherHTML}${deliveryHTML}</div>
       </div><hr class="mt-0">
       <div class="row small mb-2">${fieldHTML}</div>
       <div class="table-responsive"><table class="table table-soft table-sm mb-2" style="font-size:.86rem"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
@@ -294,6 +324,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const json = await res.json();
       if (!json.ok) throw new Error('not signed in');
       CURRENT_USER = json.data;
+      // Floating chat button + panel on every signed-in page (not on the login page).
+      if (!location.pathname.startsWith('/login') && !document.getElementById('chatScript')) {
+        const cs = document.createElement('script');
+        cs.id = 'chatScript'; cs.src = '/static/js/chat.js';
+        document.body.appendChild(cs);
+      }
     } catch {
       if (!location.pathname.startsWith('/login') && location.pathname !== '/') {
         window.location.href = '/login';
@@ -309,10 +345,10 @@ document.addEventListener('DOMContentLoaded', () => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
       // Also clear the "already shown this session" flag for the dashboard's
-      // auto-popping Low Stock Materials modal, so it pops again right after
+      // auto-popping Stock Alerts modal, so it pops again right after
       // the next login instead of staying silently dismissed for whoever
       // logs in next on this browser tab (see dashboard.html).
-      try { sessionStorage.removeItem('parabellum.lowStockModalShown'); sessionStorage.removeItem('parabellum.outStockModalShown'); } catch (_) {}
+      try { sessionStorage.removeItem('parabellum.stockAlertsShown'); sessionStorage.removeItem('parabellum.lowStockModalShown'); sessionStorage.removeItem('parabellum.outStockModalShown'); } catch (_) {}
       fetch('/api/logout', { method: 'POST' }).finally(() => {
         window.location.href = '/login';
       });
@@ -922,7 +958,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (projCustSelect) {
     fetch('/api/customers').then(r => r.json()).then(json => {
       if (!json.ok) return;
-      projCustSelect.innerHTML = '<option value="">Select…</option>' +
+      projCustSelect.innerHTML = ''+
         json.data.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     }).catch(() => {});
   }
@@ -1056,6 +1092,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const json = await res.json();
         if (!json.ok) throw new Error(json.error || 'Invalid username or password.');
+        // A fresh login: let the dashboard show its Stock Alerts pop-up once.
+        try { sessionStorage.removeItem('parabellum.stockAlertsShown'); } catch (_) {}
         window.location.href = '/dashboard';
       } catch (err) {
         if (errorBox) {
@@ -1172,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (typeof window.updateForecastChart === 'function')
         window.updateForecastChart(history, fcLabel, f.predicted_demand);
       if (typeof window.updateHistoricalChart === 'function')
-        window.updateHistoricalChart(history);
+        window.updateHistoricalChart(RESULT.forecasts);   // all materials, not just the selected one
       if (typeof window.updateInventoryChart === 'function')
         window.updateInventoryChart(history);
     };

@@ -278,7 +278,7 @@
           <div class="table-wrap"><table class="table" id="stockOutTable">
             <thead><tr>
               <th>Item</th><th>Category</th><th class="text-end">Qty Issued</th>
-              <th>Date</th><th>Project</th><th>Recorded By</th><th class="text-center">Actions</th>
+              <th>Date</th><th>Project</th><th>Recorded By</th><th>Delivery</th><th class="text-center">Actions</th>
             </tr></thead>
             <tbody id="stockOutBody"></tbody>
           </table></div>
@@ -346,7 +346,7 @@
                that item's own record (see wireItemSearch's onSelect/onClear
                below) - purely informational, since stocking an existing item
                never touches those fields on the server either way. -->
-          <div class="col-md-6"><label class="form-label">Category <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="cat"><option value="">Select…</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
+          <div class="col-md-6"><label class="form-label">Category <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="cat"><option value="" selected disabled hidden>Select&hellip;</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
           <div class="col-md-6 position-relative">
             <div class="d-flex justify-content-between align-items-end">
               <label class="form-label mb-0">Supplier</label>
@@ -383,9 +383,9 @@
             <input class="form-control" name="name" required>
             <div class="invalid-feedback">Item name is required.</div></div>
           <div class="col-md-6"><label class="form-label">Category</label>
-            <select class="form-select" name="cat"><option value="">Select…</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
+            <select class="form-select" name="cat"><option value="" selected disabled hidden>Select&hellip;</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
           <div class="col-md-6"><label class="form-label">Supplier</label>
-            <select class="form-select" name="sup" id="addItemSupplier" required><option value="">Select a supplier…</option></select>
+            <select class="form-select" name="sup" id="addItemSupplier" required></select>
             <div class="invalid-feedback">Choose the supplier for this item.</div>
             <div class="form-text" id="addItemNoSuppliersHint" style="display:none">No suppliers yet - <a href="#" data-modal-nav="addSupplierModal">add one first</a>.</div></div>
           <div class="col-md-4"><label class="form-label">Unit</label>
@@ -441,7 +441,7 @@
           <div class="col-12"><div class="section-label text-muted-2 small fw-semibold">1 · Client / Project</div></div>
           <div class="col-md-6">
             <label class="form-label" for="stockOutProject">Project</label>
-            <select class="form-select" name="projectId" id="stockOutProject" required><option value="">Select a project…</option></select>
+            <select class="form-select" name="projectId" id="stockOutProject" required></select>
             <div class="invalid-feedback">Choose the project these materials are for.</div>
             <div class="form-text d-none" id="stockOutProjectLockHint">Locked while this request has items in it - remove them all to pick a different project.</div>
           </div>
@@ -772,6 +772,10 @@
       // supplier/price instead of sitting blank or stale. Typing a
       // different, unmatched name (back to "new item" mode) clears and
       // unlocks them again.
+      // Category drop-down inside the Stock In form. Looked up by name once
+      // and kept so onClear can rebuild the original option list.
+      const stockInCatSel = document.querySelector('#stockInModal select[name="cat"]');
+      const stockInCatOrigHTML = stockInCatSel ? stockInCatSel.innerHTML : '';
       wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', {
         allowUnmatched: true,
         allowOthers: true,
@@ -782,6 +786,20 @@
           if (sup)   { sup.value = material.sup || ''; sup.readOnly = true; }
           if (price) { price.value = material.price != null ? Number(material.price).toFixed(2) : '0.00'; price.readOnly = true; }
           if (hint)  hint.textContent = 'Filled in automatically from this item’s record.';
+          // Category: lock to this item's own category. If the item's
+          // category isn't one of the standard options (e.g. a legacy
+          // "Uncategorized"), add it so the field still shows the real
+          // value instead of silently falling back to the first option.
+          if (stockInCatSel) {
+            const cat = material.cat || '';
+            if (cat && ![...stockInCatSel.options].some(o => o.value === cat || o.textContent === cat)) {
+              const extra = document.createElement('option');
+              extra.textContent = cat;
+              stockInCatSel.appendChild(extra);
+            }
+            if (cat) stockInCatSel.value = cat;
+            stockInCatSel.disabled = true;
+          }
         },
         onClear: () => {
           const sup = document.getElementById('stockInSupplier');
@@ -790,6 +808,11 @@
           if (sup)   { sup.readOnly = false; sup.value = ''; }
           if (price) { price.readOnly = false; price.value = '0.00'; }
           if (hint)  hint.textContent = 'New item only - search an existing supplier, type a new one, or use Add Supplier above to fill out its full details.';
+          if (stockInCatSel) {
+            stockInCatSel.disabled = false;
+            stockInCatSel.innerHTML = stockInCatOrigHTML;
+            stockInCatSel.selectedIndex = 0;
+          }
         },
       });
       wireItemSearch('stockOutCartItemSearch', 'stockOutCartItemId', 'stockOutCartItemResults', { flagOutOfStock: true });
@@ -813,8 +836,7 @@
         const hint = document.getElementById('addItemNoSuppliersHint');
         if (!sel) return;
         const current = sel.value;
-        sel.innerHTML = '<option value="">Select a supplier…</option>' +
-          SUPPLIERS_CACHE.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
+        sel.innerHTML = SUPPLIERS_CACHE.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
         if (current && SUPPLIERS_CACHE.some(s => s.name === current)) sel.value = current;
         if (hint) hint.style.display = SUPPLIERS_CACHE.length ? 'none' : '';
       }
@@ -903,8 +925,7 @@
         if (!form) return;
         const catSel = document.getElementById('addSupplierCategory');
         const termsSel = document.getElementById('addSupplierTerms');
-        if (catSel) catSel.innerHTML = '<option value="">Select…</option>' +
-          SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
+        if (catSel) catSel.innerHTML = SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
         if (termsSel) termsSel.innerHTML =
           SUPPLIER_TERMS.map(t => `<option ${t === 'Net 30' ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('');
 
@@ -1067,8 +1088,7 @@
         const eligible = PROJECTS.filter(p => p.status !== 'Completed');
         const active = eligible.filter(p => p.status === 'In Progress');
         const other  = eligible.filter(p => p.status !== 'In Progress');
-        so.project.innerHTML = '<option value="">Select a project\u2026</option>'
-          + (active.length ? `<optgroup label="Active projects">${active.map(opt).join('')}</optgroup>` : '')
+        so.project.innerHTML = (active.length ? `<optgroup label="Active projects">${active.map(opt).join('')}</optgroup>` : '')
           + (other.length  ? `<optgroup label="Other projects">${other.map(opt).join('')}</optgroup>` : '');
         so.project.value = eligible.some(p => p.id === keep) ? keep : '';
         onStockOutProjectChange();
@@ -1236,8 +1256,13 @@
                    qty: r.requestedQty, unit: r.unit || i.unit, price: Number(i.price) || 0 };
         });
         const locs = [...new Set(stockOutIssued.map(r => (inventoryStore.find(r.itemId) || {}).loc).filter(Boolean))].join(', ');
+        // Weather of the day, from the movements just saved (server stamps it).
+        const wmv = stockOutIssued.map(r => (window.ALL_MOVEMENTS || []).find(m => String(m.movementId) === String(r.movementId)))
+                                  .find(m => m && (m.weatherTemp != null || m.weatherRain != null));
         window.showTransactionReceipt('ISSUANCE', items, {
           when: info.when,
+          weather: wmv ? { temp: wmv.weatherTemp, rain: wmv.weatherRain, wind: wmv.weatherWind } : null,
+          delivery: { delivered: false },   // a new Stock Out always starts Pending
           fields: [['Client / Customer', info.client], ['Project', info.project], ['Delivery Address', info.address],
                    ['Contact', info.contact], ['Purpose / Reference', info.projectId], ['Location', locs], ['Released by', info.user]],
           recordedBy: info.user, counterparty: '',
@@ -1688,6 +1713,45 @@
         return clampedPage;
       }
 
+      /* Delivery confirmation (Stock Out only - TEMPORARY). A Stock Out is
+       Pending until "Mark as Delivered" is clicked; that saves the time and
+       the delivery-day weather (server side). */
+      function fmtDeliveredAt(iso){
+        const d = new Date(iso);
+        if (isNaN(d)) return '';
+        return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
+          + ' \u00b7 ' + d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+      }
+      function deliveryInfo(m){
+        return { delivered: !!m.deliveredAt, at: m.deliveredAt ? fmtDeliveredAt(m.deliveredAt) : '',
+                 weather: { temp: m.deliveryTemp, rain: m.deliveryRain, wind: m.deliveryWind } };
+      }
+      function deliveryCell(m){
+        if (m.deliveredAt) {
+          return `<td><span class="badge b-success"><i class="bi bi-check-circle-fill me-1"></i>Delivered</span>
+            <div class="small text-muted-2 mt-1">${escapeHTML(fmtDeliveredAt(m.deliveredAt))}</div></td>`;
+        }
+        return `<td><span class="badge b-warning me-1">Pending</span>
+          <button type="button" class="btn btn-sm btn-light-2 py-0 px-2" data-deliver data-movement-id="${m.movementId}">
+            <i class="bi bi-truck me-1"></i>Mark as Delivered</button></td>`;
+      }
+      async function markDelivered(movementId, btn){
+        if (btn) btn.disabled = true;
+        try {
+          const res = await fetch('/api/inventory/stock-out/deliver', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ movementId }),
+          });
+          const json = await res.json();
+          if (!json.ok) throw new Error(json.error);
+          if (typeof window.refreshInventory === 'function') await window.refreshInventory();
+          showToast('Stock Out marked as Delivered', 'success', 'bi-truck');
+        } catch (err) {
+          if (btn) btn.disabled = false;
+          showToast(err.message, 'error', 'bi-exclamation-triangle');
+        }
+      }
+
       /* Movement rows get their own action buttons - View / Edit / Print /
        Delete - kept separate from the shared actionBtns() helper (used on
        Customers/Projects/etc.) so adding Print here doesn't affect those
@@ -1760,18 +1824,21 @@
         window.showTransactionReceipt(m.type, [{
           movementId: m.movementId, id: m.id, name: m.name, cat: m.cat, qty: m.qty, unit: m.unit, price: Number(item.price) || 0,
         }], {
-          when: m.date, fields, recordedBy: m.recordedBy && m.recordedBy !== '\u2014' ? m.recordedBy : '',
+          when: m.date, fields,
+          weather: m.type === 'ISSUANCE' ? { temp: m.weatherTemp, rain: m.weatherRain, wind: m.weatherWind } : null,
+          delivery: m.type === 'ISSUANCE' ? deliveryInfo(m) : null,
+          recordedBy: m.recordedBy && m.recordedBy !== '\u2014' ? m.recordedBy : '',
           counterparty: m.type === 'RECEIPT' ? (item.sup || '') : (m.type === 'RETURN' ? (m.backOrderBy || '') : ''),
           note: 'Reprint of a recorded movement. Unit price shown is the item\u2019s current price.',
         });
       }
 
-      function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun, showBackOrderedBy){
+      function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun, showBackOrderedBy, showDelivery){
         const totalPages = Math.max(1, Math.ceil(rows.length / MOVE_PAGE_SIZE));
         const clampedPage = Math.min(currentPage, totalPages);
         const start = (clampedPage - 1) * MOVE_PAGE_SIZE;
         const pageItems = rows.slice(start, start + MOVE_PAGE_SIZE);
-        const colCount = showBackOrderedBy ? 8 : 7;
+        const colCount = (showBackOrderedBy || showDelivery) ? 8 : 7;
 
         const tbody = document.getElementById(ids.tbody);
         tbody.innerHTML = '';
@@ -1793,6 +1860,7 @@
             <td class="text-muted-2">${escapeHTML(m.remarks || '\u2014')}</td>
             ${backOrderedByCell}
             <td class="text-muted-2">${escapeHTML(m.recordedBy || '\u2014')}</td>
+            ${showDelivery ? deliveryCell(m) : ''}
             <td class="text-center">${showBackOrderedBy ? backOrderActionBtns(m) : moveActionBtns(m)}</td></tr>`);
         });
         initTooltips(tbody);
@@ -1833,7 +1901,7 @@
 
         stockOutPage = renderMoveSection(outRows, stockOutPage,
           { tbody: 'stockOutBody', count: 'stockOutCount', nav: 'stockOutPaginationNav', ul: 'stockOutPagination' },
-          (p) => { stockOutPage = p; renderMovements(); }, 'stock-out');
+          (p) => { stockOutPage = p; renderMovements(); }, 'stock-out', false, true);
       }
       window.renderMovements = renderMovements;
 
@@ -2031,6 +2099,9 @@
        just triggered from a movement row instead of a snapshot row); Back
        Orders also delegates its Reimbursed/Replaced checkmarks here. ---------- */
       function handleRowAction(e){
+        const delBtn = e.target.closest('[data-deliver]');
+        if (delBtn) { markDelivered(parseInt(delBtn.dataset.movementId, 10), delBtn); return; }
+
         const printBtn = e.target.closest('.print-move');
         if (printBtn) { showMoveSlip(parseInt(printBtn.dataset.movementId, 10)); return; }
 

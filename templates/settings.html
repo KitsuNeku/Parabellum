@@ -178,7 +178,7 @@
               <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-6">
                   <label class="form-label" for="permUserSelect">Account</label>
-                  <select class="form-select" id="permUserSelect"><option value="">Select a user…</option></select>
+                  <select class="form-select" id="permUserSelect"></select>
                 </div>
                 <div class="col-md-6">
                   <div class="small text-muted-2" id="permUserMeta">Pick a user to see their current access.</div>
@@ -316,7 +316,6 @@
           <div class="col-md-6"><label class="form-label">Username</label><input class="form-control" name="username" required><div class="invalid-feedback">Required.</div></div>
           <div class="col-md-6"><label class="form-label" id="userPasswordLabel">Password</label><input type="password" class="form-control" name="password" id="userPasswordInput" placeholder="Leave blank to keep current password"></div>
           <div class="col-md-6"><label class="form-label">Role</label><select class="form-select" name="role" required>
-            <option value="">Select…</option>
             <option>System Administrator</option><option>Inventory Personnel</option>
             <option>Operations Personnel</option><option>Management/Owner</option>
           </select></div>
@@ -478,7 +477,7 @@
       function populatePermUserSelect(){
         if (!permUserSelect) return;
         const prevValue = permUserSelect.value;
-        permUserSelect.innerHTML = '<option value="">Select a user…</option>' +
+        permUserSelect.innerHTML = ''+
           usersCache.map(u => `<option value="${u.id}">${escapeHTML(u.name)} (${escapeHTML(u.username)})</option>`).join('');
         if (prevValue && usersCache.some(u => u.id === prevValue)) {
           permUserSelect.value = prevValue;

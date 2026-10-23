@@ -324,11 +324,17 @@
         if (lowCount) lowCount.textContent = '(' + low.length + ')';
       }
 
-      // Pop the Stock Alerts window open by itself every time the dashboard is
-      // opened (once per page load), as soon as real inventory data has loaded
-      // and at least one material is out of stock or low.
-      if (!autoShownStockModal && L.inventory && (out.length || low.length)) {
+      // Pop the Stock Alerts window open by itself only right after signing in
+      // (once per login), as soon as real inventory data has loaded and at
+      // least one material is out of stock or low. The flag below is cleared
+      // by a successful login and by Sign Out (app.js), so later visits to the
+      // dashboard in the same session don't pop it again; the Low Stock card
+      // still opens it on demand.
+      let alertsAlreadyShown = false;
+      try { alertsAlreadyShown = sessionStorage.getItem('parabellum.stockAlertsShown') === '1'; } catch (_) {}
+      if (!autoShownStockModal && !alertsAlreadyShown && L.inventory && (out.length || low.length)) {
         autoShownStockModal = true;
+        try { sessionStorage.setItem('parabellum.stockAlertsShown', '1'); } catch (_) {}
         bootstrap.Modal.getOrCreateInstance('#dashStockModal').show();
       }
     }

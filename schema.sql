@@ -5,7 +5,7 @@
 -- Run in pgAdmin:  right-click your database > Query Tool > paste > F5
 -- =================================================================
 
-DROP TABLE IF EXISTS audit_logs, model_metrics, forecast_results,
+DROP TABLE IF EXISTS chat_messages, audit_logs, model_metrics, forecast_results,
                      monthly_weather, monthly_demand, stock_movements, transactions,
                      projects, customers, suppliers, employees, materials, users CASCADE;
 
@@ -141,7 +141,14 @@ CREATE TABLE stock_movements (
     -- weather service couldn't be reached when the movement was recorded.
     weather_temp_c       NUMERIC(5,2),
     weather_rainfall_mm  NUMERIC(8,2),
-    weather_wind_kmh     NUMERIC(6,2)
+    weather_wind_kmh     NUMERIC(6,2),
+    -- Delivery confirmation (Stock Out rows only). delivered_at stays NULL
+    -- while the Stock Out is Pending; "Mark as Delivered" fills it in along
+    -- with the weather in Lipa City on the delivery day.
+    delivered_at           TIMESTAMPTZ,
+    delivery_temp_c        NUMERIC(5,2),
+    delivery_rainfall_mm   NUMERIC(8,2),
+    delivery_wind_kmh      NUMERIC(6,2)
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);
@@ -268,6 +275,20 @@ CREATE TABLE audit_logs (
     details   TEXT,
     logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ---- Chat: one-to-one messages between accounts ------------------
+-- Deleting an account also deletes its conversations.
+CREATE TABLE chat_messages (
+    message_id   SERIAL PRIMARY KEY,
+    sender_id    INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    recipient_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    body         TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
+    sent_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at      TIMESTAMPTZ,                 -- NULL until the recipient opens the conversation
+    CHECK (sender_id <> recipient_id)
+);
+CREATE INDEX idx_chat_pair   ON chat_messages (sender_id, recipient_id, message_id);
+CREATE INDEX idx_chat_unread ON chat_messages (recipient_id) WHERE read_at IS NULL;
 
 -- ---- Role default permissions (Settings > Roles & Permissions) ---
 -- Lets an admin edit which modules each ROLE gets by default, from the

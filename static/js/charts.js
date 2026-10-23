@@ -34,6 +34,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const el = (id) => document.getElementById(id);
 
+  // For charts whose categories run down the LEFT side (indexAxis:'y'): make sure
+  // the FIRST category is at the top and the last at the bottom, whichever way
+  // this Chart.js build orders a vertical category axis by default.
+  const firstOnTop = (chart) => {
+    const sy = chart.scales && chart.scales.y;
+    const n = chart.data.labels.length;
+    if (!sy || n < 2) return;
+    if (sy.getPixelForValue(0) > sy.getPixelForValue(n - 1)) {
+      chart.options.scales.y.reverse = !chart.options.scales.y.reverse;
+      chart.update();
+    }
+  };
+
   /* ---------- Inventory Usage (bar) - dashboard, gold current period + daily/weekly/monthly toggle ----------
    Starts EMPTY. app.js fills each range from /api/dashboard (real
    stock_movements issuances) via window.setUsageData(range, labels, values).
@@ -87,9 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
           { label:'Forecast', data:[],
             borderColor:C.gold, backgroundColor:C.goldSoft, borderDash:[6,5], tension:.35, borderWidth:2.5, pointRadius:4, fill:true }
         ]},
-      options:{ responsive:true, maintainAspectRatio:false,
+      // indexAxis:'y' swaps the axes: the months run down the LEFT side
+      // (oldest at the top, forecast month at the bottom) and the units sit
+      // along the BOTTOM.
+      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
         plugins:{ legend:{ position:'top', align:'end' } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
+        scales:{ x:axis({ beginAtZero:true }),
+                 y:{ grid:{ display:false }, ticks:{ color:C.grayText } } } }
     });
     window.updateForecastChart = (historyPoints, forecastLabel, predicted) => {
       const labels = historyPoints.map(p => p.month).concat([forecastLabel]);
@@ -101,25 +118,58 @@ document.addEventListener('DOMContentLoaded', () => {
       forecastChart.data.datasets[0].data = histSeries;
       forecastChart.data.datasets[1].data = fcSeries;
       forecastChart.update();
+      firstOnTop(forecastChart);          // oldest month at the top, forecast month at the bottom
     };
   }
 
-  /* ---------- Forecasting page: Historical Demand (bar) ---------- */
+  /* ---------- Forecasting page: Historical Demand (month picker) ----------
+   Pick a month (#histMonthSelect, newest by default); the bars show how many
+   units of each MATERIAL were consumed that month, most consumed at the top.
+   Source: the per-material `history` the forecast returns (its last months).
+   Materials are counted in their own units (pcs, sheets, kg ...), so the
+   ranking compares raw numbers across different units - the tooltip shows
+   each bar's unit. Materials with no consumption that month are left out. */
   let historicalChart;
   if (el('chartHistoricalDemand')) {
+    let histForecasts = [];
     historicalChart = new Chart(el('chartHistoricalDemand'), {
       type:'bar',
-      data:{ labels:[],
-        datasets:[{ label:'Units', data:[],
-          backgroundColor:C.primary, borderRadius:6, barThickness:24 }]},
-      options:{ responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:false } },
-        scales:{ x:noGridX, y:axis({ beginAtZero:true }) } }
+      data:{ labels:[], datasets:[{ label:'Units consumed', data:[], units:[],
+        backgroundColor:C.primary, borderRadius:4, maxBarThickness:26 }] },
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ display:false },
+          tooltip:{ callbacks:{ label:(c)=> ' ' + Number(c.raw).toLocaleString('en-PH') + ' ' + ((c.dataset.units || [])[c.dataIndex] || '') } } },
+        scales:{ x:axis({ beginAtZero:true }), y:{ grid:{ display:false } } } }
     });
-    window.updateHistoricalChart = (historyPoints) => {
-      historicalChart.data.labels          = historyPoints.map(p => p.month);
-      historicalChart.data.datasets[0].data = historyPoints.map(p => p.demand);
+    const draw = () => {
+      const sel = el('histMonthSelect');
+      const month = sel ? sel.value : '';
+      const rows = [];
+      histForecasts.forEach(f => {
+        const p = (f.history || []).find(h => h.month === month);
+        const v = p ? Number(p.demand) || 0 : 0;
+        if (v > 0) rows.push({ name: f.material_name, unit: f.unit, v });
+      });
+      rows.sort((a, b) => b.v - a.v);                      // most consumed first (top)
+      const ds = historicalChart.data.datasets[0];
+      historicalChart.data.labels = rows.map(r => r.name);
+      ds.data = rows.map(r => r.v);
+      ds.units = rows.map(r => r.unit);
       historicalChart.update();
+    };
+    el('histMonthSelect')?.addEventListener('change', draw);
+    window.updateHistoricalChart = (forecasts) => {
+      histForecasts = forecasts || [];
+      const months = [];                                   // month labels, oldest first
+      histForecasts.forEach(f => (f.history || []).forEach(p => { if (!months.includes(p.month)) months.push(p.month); }));
+      const sel = el('histMonthSelect');
+      if (sel) {
+        const keep = sel.value;
+        sel.innerHTML = months.slice().reverse().map(m => `<option value="${m}">${m}</option>`).join('');
+        sel.value = months.includes(keep) ? keep : (months[months.length - 1] || '');
+        sel.disabled = !months.length;
+      }
+      draw();
     };
   }
 

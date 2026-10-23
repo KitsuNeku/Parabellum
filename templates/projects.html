@@ -200,7 +200,7 @@
         <form class="needs-validation" novalidate data-reset data-entity="projects" id="projForm" data-success-msg="Project saved">
         <div class="modal-body"><div class="row g-3">
           <div class="col-md-7"><label class="form-label">Project Name</label><input class="form-control" name="name" placeholder="e.g. Warehouse Structural Frame" required></div>
-          <div class="col-md-5"><label class="form-label">Customer</label><select class="form-select" name="custId" id="projCustSelect" required><option value="">Select…</option></select></div>
+          <div class="col-md-5"><label class="form-label">Customer</label><select class="form-select" name="custId" id="projCustSelect" required></select></div>
           <div class="col-md-6"><label class="form-label">Assigned Personnel</label><select class="form-select" name="staffId" id="projStaffSelect"></select></div>
           <div class="col-md-6"><label class="form-label">Budget (₱)</label><input type="number" class="form-control" name="budget" placeholder="0.00" step="0.01" required></div>
           <div class="col-md-4"><label class="form-label">Start Date</label><input type="date" class="form-control" name="start"></div>
@@ -263,7 +263,7 @@
       });
 
       /* Customer & personnel dropdowns come from the same relational data (FK ids as values). */
-      document.getElementById('projCustSelect').innerHTML = '<option value="">Select…</option>' +
+      document.getElementById('projCustSelect').innerHTML = ''+
         CUSTOMERS.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
       document.getElementById('projStaffSelect').innerHTML =
         EMPLOYEES.map(e2 => `<option value="${e2.id}">${escapeHTML(e2.name)}</option>`).join('');

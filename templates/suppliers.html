@@ -243,7 +243,7 @@
       document.getElementById('supCategoryFilter').innerHTML =
         '<option value="">All Categories</option>' + SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
       document.getElementById('supFormCategory').innerHTML =
-        '<option value="">Select…</option>' + SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
+        SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
       document.getElementById('supFormTerms').innerHTML =
         SUPPLIER_TERMS.map(t => `<option ${t === 'Net 30' ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('');
 

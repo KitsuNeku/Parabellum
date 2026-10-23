@@ -435,6 +435,162 @@ def api_notifications():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
+# ---------------- Chat API (floating chat button, every page) ----------------
+# One-to-one messages between any two active accounts. Every query is scoped to
+# the signed-in user's own id (taken from the session, never from the request),
+# so nobody can read a conversation they are not part of. Message text is
+# stored as-is and shown as plain text by the browser (never as HTML).
+CHAT_MAX_LEN = 500
+
+
+def _chat_rate_key():
+    """Rate-limit chat per ACCOUNT (not per IP), so several people sharing one
+    office connection don't use up each other's allowance."""
+    u = session.get("user") or {}
+    return f"chat:{u.get('user_id', request.remote_addr)}"
+
+
+def _chat_iso(v):
+    return v.isoformat() if hasattr(v, "isoformat") else (None if v is None else str(v))
+
+
+def _chat_failure(e):
+    app.logger.exception("Chat error")
+    if "chat_messages" in str(e) and "does not exist" in str(e):
+        return jsonify({"ok": False, "error":
+            "Chat is not set up yet. Run demo_data/add_chat_messages.sql once on the database."}), 503
+    return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
+@app.route("/api/chat/unread")
+@login_required
+@limiter.limit("30 per minute", key_func=_chat_rate_key)
+def api_chat_unread():
+    """Total unread messages for the signed-in user (drives the badge)."""
+    try:
+        me = int(session["user"]["user_id"])
+        rows = execute_query(DB_CONFIG,
+            "SELECT COUNT(*) AS n FROM chat_messages WHERE recipient_id = %s AND read_at IS NULL;",
+            (me,), fetch=True)
+        return jsonify({"ok": True, "data": {"unread": int(rows[0]["n"]) if rows else 0}})
+    except Exception as e:
+        return _chat_failure(e)
+
+
+@app.route("/api/chat/contacts")
+@login_required
+@limiter.limit("30 per minute", key_func=_chat_rate_key)
+def api_chat_contacts():
+    """Every other active account, with unread count and the latest message of
+    the conversation. People you have talked to most recently come first."""
+    try:
+        me = int(session["user"]["user_id"])
+        rows = execute_query(DB_CONFIG, """
+            SELECT u.user_id, COALESCE(NULLIF(u.full_name, ''), u.username) AS name,
+                   u.role, u.department,
+                   COALESCE(un.n, 0) AS unread,
+                   lm.body AS last_body, lm.sent_at AS last_at, lm.sender_id AS last_sender
+              FROM users u
+              LEFT JOIN (SELECT sender_id, COUNT(*) AS n
+                           FROM chat_messages
+                          WHERE recipient_id = %s AND read_at IS NULL
+                          GROUP BY sender_id) un ON un.sender_id = u.user_id
+              LEFT JOIN LATERAL (SELECT body, sent_at, sender_id
+                                   FROM chat_messages
+                                  WHERE (sender_id = u.user_id AND recipient_id = %s)
+                                     OR (sender_id = %s AND recipient_id = u.user_id)
+                                  ORDER BY message_id DESC LIMIT 1) lm ON TRUE
+             WHERE u.is_active AND u.user_id <> %s
+             ORDER BY lm.sent_at DESC NULLS LAST, name;
+        """, (me, me, me, me), fetch=True)
+        data = [{
+            "id":         r["user_id"],
+            "name":       r["name"],
+            "role":       r["role"],
+            "department": r["department"] or "",
+            "unread":     int(r["unread"] or 0),
+            "lastBody":   (r["last_body"] or "")[:120],
+            "lastAt":     _chat_iso(r["last_at"]),
+            "lastMine":   r["last_sender"] == me if r["last_sender"] is not None else False,
+        } for r in rows]
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        return _chat_failure(e)
+
+
+@app.route("/api/chat/messages")
+@login_required
+@limiter.limit("60 per minute", key_func=_chat_rate_key)
+def api_chat_messages():
+    """The conversation with ?with=<user id>. First call returns the latest 100
+    messages; later calls pass ?after=<last message id> and get only newer ones.
+    Opening a conversation marks the other person's messages as read."""
+    try:
+        me = int(session["user"]["user_id"])
+        other = request.args.get("with", type=int)
+        after = request.args.get("after", default=0, type=int) or 0
+        if not other or other == me:
+            return jsonify({"ok": False, "error": "Choose someone to chat with."}), 400
+        if not execute_query(DB_CONFIG,
+                "SELECT 1 FROM users WHERE user_id = %s AND is_active;", (other,), fetch=True):
+            return jsonify({"ok": False, "error": "That account is not available."}), 404
+
+        rows = execute_query(DB_CONFIG, """
+            SELECT * FROM (
+                SELECT message_id, sender_id, body, sent_at
+                  FROM chat_messages
+                 WHERE ((sender_id = %s AND recipient_id = %s) OR (sender_id = %s AND recipient_id = %s))
+                   AND message_id > %s
+                 ORDER BY message_id DESC LIMIT 100) latest
+            ORDER BY message_id;
+        """, (me, other, other, me, after), fetch=True)
+
+        execute_query(DB_CONFIG, """
+            UPDATE chat_messages SET read_at = CURRENT_TIMESTAMP
+             WHERE recipient_id = %s AND sender_id = %s AND read_at IS NULL;
+        """, (me, other))
+
+        data = [{"id": r["message_id"], "mine": r["sender_id"] == me,
+                 "body": r["body"], "sentAt": _chat_iso(r["sent_at"])} for r in rows]
+        return jsonify({"ok": True, "data": data})
+    except Exception as e:
+        return _chat_failure(e)
+
+
+@app.route("/api/chat/send", methods=["POST"])
+@login_required
+@limiter.limit("30 per minute", key_func=_chat_rate_key)
+def api_chat_send():
+    """Send a message: JSON {"to": <user id>, "body": "text"}."""
+    try:
+        me = int(session["user"]["user_id"])
+        d = request.get_json(silent=True) or {}
+        try:
+            to = int(d.get("to"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Choose someone to message."}), 400
+        body = d.get("body")
+        body = body.strip() if isinstance(body, str) else ""
+        if not body:
+            return jsonify({"ok": False, "error": "Type a message first."}), 400
+        if len(body) > CHAT_MAX_LEN:
+            return jsonify({"ok": False, "error": f"Messages can be up to {CHAT_MAX_LEN} characters."}), 400
+        if to == me:
+            return jsonify({"ok": False, "error": "You can't message yourself."}), 400
+        if not execute_query(DB_CONFIG,
+                "SELECT 1 FROM users WHERE user_id = %s AND is_active;", (to,), fetch=True):
+            return jsonify({"ok": False, "error": "That account is not available."}), 404
+
+        row = execute_query(DB_CONFIG, """
+            INSERT INTO chat_messages (sender_id, recipient_id, body)
+            VALUES (%s, %s, %s) RETURNING message_id, sent_at;
+        """, (me, to, body), fetch=True)[0]
+        return jsonify({"ok": True, "data": {"id": row["message_id"], "mine": True,
+                                             "body": body, "sentAt": _chat_iso(row["sent_at"])}})
+    except Exception as e:
+        return _chat_failure(e)
+
+
 # ---------------- Profile API (My Profile page) ----------------
 @app.route("/api/profile")
 @login_required
@@ -856,6 +1012,43 @@ def api_stock_out():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
+@app.route("/api/inventory/stock-out/deliver", methods=["POST"])
+@permission_required("inventory")
+def api_stock_out_deliver():
+    """
+    Mark one Stock Out as Delivered (TEMPORARY - delivery confirmation).
+    Stamps the time and the weather in Lipa City on the delivery day. Only
+    ISSUANCE rows; a row that is already Delivered is left as it is. Does
+    NOT touch stock levels or the forecast (every Stock Out still counts).
+    """
+    d = request.get_json(silent=True) or {}
+    try:
+        movement_id = int(d.get("movementId"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid Stock Out record."}), 400
+    try:
+        rows = execute_query(DB_CONFIG, """
+            SELECT movement_type, delivered_at FROM stock_movements WHERE movement_id = %s;
+        """, (movement_id,), fetch=True)
+        if not rows or rows[0]["movement_type"] != "ISSUANCE":
+            return jsonify({"ok": False, "error": "Stock Out record not found."}), 404
+        if rows[0]["delivered_at"] is not None:
+            return jsonify({"ok": False, "error": "This Stock Out is already marked as Delivered."}), 400
+        temp, rain, wind = _weather_for_today()
+        execute_query(DB_CONFIG, """
+            UPDATE stock_movements
+               SET delivered_at = CURRENT_TIMESTAMP,
+                   delivery_temp_c = %s, delivery_rainfall_mm = %s, delivery_wind_kmh = %s
+             WHERE movement_id = %s AND delivered_at IS NULL;
+        """, (temp, rain, wind, movement_id))
+        log_audit(DB_CONFIG, "STOCK_OUT_DELIVERED", f"Stock Out MOV-{movement_id:04d} marked as Delivered.",
+                  session["user"]["username"])
+        return jsonify({"ok": True})
+    except Exception:
+        app.logger.exception("Database error")
+        return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
+
+
 @app.route("/api/inventory/return", methods=["POST"])
 @permission_required("inventory")
 def api_inventory_return():
@@ -1063,11 +1256,15 @@ def api_inventory_movements():
         rows = execute_query(DB_CONFIG, """
             SELECT sm.movement_id, m.material_code, m.material_name, m.unit,
                    m.category, sm.movement_type, sm.quantity, sm.movement_date,
-                   sm.remarks, sm.recorded_by
+                   sm.remarks, sm.recorded_by,
+                   sm.weather_temp_c, sm.weather_rainfall_mm, sm.weather_wind_kmh,
+                   sm.delivered_at, sm.delivery_temp_c, sm.delivery_rainfall_mm,
+                   sm.delivery_wind_kmh
               FROM stock_movements sm
               JOIN materials m ON m.material_id = sm.material_id
              ORDER BY sm.movement_date DESC, sm.movement_id DESC;
         """, fetch=True)
+        _f = lambda v: None if v is None else float(v)
         data = [{
             "id":         r["material_code"],
             "movementId": r["movement_id"],
@@ -1079,6 +1276,15 @@ def api_inventory_movements():
             "date":       str(r["movement_date"]),
             "remarks":    r["remarks"] or "",
             "recordedBy": r["recorded_by"] or "\u2014",
+            # Weather stamped when the movement was saved (shown on the Stock Out receipt).
+            "weatherTemp": None if r.get("weather_temp_c") is None else float(r["weather_temp_c"]),
+            "weatherRain": None if r.get("weather_rainfall_mm") is None else float(r["weather_rainfall_mm"]),
+            "weatherWind": None if r.get("weather_wind_kmh") is None else float(r["weather_wind_kmh"]),
+            # Delivery confirmation (Stock Out only): NULL deliveredAt = Pending.
+            "deliveredAt":  r["delivered_at"].isoformat() if r.get("delivered_at") else None,
+            "deliveryTemp": _f(r.get("delivery_temp_c")),
+            "deliveryRain": _f(r.get("delivery_rainfall_mm")),
+            "deliveryWind": _f(r.get("delivery_wind_kmh")),
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:

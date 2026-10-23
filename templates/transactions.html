@@ -177,9 +177,9 @@
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-lg me-2" style="color:var(--primary)"></i>Create Transaction</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate data-reset data-entity="transactions" id="txnForm" data-success-msg="Transaction created successfully">
         <div class="modal-body"><div class="row g-3">
-          <div class="col-md-6"><label class="form-label">Customer</label><select class="form-select" name="custId" id="txnCustSelect" required><option value="">Select…</option></select></div>
+          <div class="col-md-6"><label class="form-label">Customer</label><select class="form-select" name="custId" id="txnCustSelect" required></select></div>
           <div class="col-md-6"><label class="form-label">Project</label><select class="form-select" name="proj" id="txnProjSelect"><option value="">None</option></select></div>
-          <div class="col-md-6"><label class="form-label">Material</label><select class="form-select" name="material" id="txnMatSelect" required><option value="">Select…</option></select></div>
+          <div class="col-md-6"><label class="form-label">Material</label><select class="form-select" name="material" id="txnMatSelect" required></select></div>
           <div class="col-md-3"><label class="form-label">Quantity</label><input type="number" class="form-control" name="qty" value="1" min="1" required></div>
           <div class="col-md-3"><label class="form-label">Unit Price (₱)</label><input type="number" class="form-control" name="price" value="0.00" step="0.01" required></div>
           <div class="col-md-4"><label class="form-label">Discount (%)</label><input type="number" class="form-control" name="discount" value="0" min="0" max="100"></div>

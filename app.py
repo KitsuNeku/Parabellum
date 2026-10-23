@@ -24,9 +24,11 @@ from flask import Flask, render_template, jsonify, request, session, redirect, u
 from datetime import datetime, timezone
 import os
 import psycopg2.errors
+from contextlib import contextmanager
+from psycopg2.extras import RealDictCursor
 
 from config import DB_CONFIG, SECRET_KEY, DEBUG, AUTO_RETRAIN_ENABLED, AUTO_RETRAIN_HOUR, AUTO_AGGREGATE_BEFORE_RETRAIN
-from mlr_model import aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history, generate_sql_backup, restore_sql_backup
+from mlr_model import connect_db, aggregate_monthly_demand, get_materials, run_forecast, execute_query, log_audit, get_forecast_history, generate_sql_backup, restore_sql_backup
 import weather_api
 import requests
 import scheduler as retrain_scheduler
@@ -789,6 +791,27 @@ def api_inventory_save():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
+@contextmanager
+def _stock_tx():
+    """
+    One database transaction for anything that changes materials.current_stock.
+    Callers first lock the material's row (SELECT ... FOR UPDATE), so two
+    people changing the same item at the same moment run one after the other
+    instead of both reading the same old balance and overwriting each other.
+    Commits on success, rolls everything back on any error.
+    """
+    conn = connect_db(DB_CONFIG)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            yield cur
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def _weather_for_today():
     """
     (avg temp C, rainfall mm, max wind km/h) for today's date in the database,
@@ -825,36 +848,38 @@ def _apply_movement(material_code, quantity, kind, remarks, project_id=None, rec
     show who did it - independent of `remarks`, which describes the
     movement itself (a delivery note, a project reference), not the person.
     """
-    rows = execute_query(DB_CONFIG,
-        "SELECT material_id, material_name, unit, current_stock FROM materials WHERE material_code=%s;",
-        (material_code,), fetch=True)
-    if not rows:
-        raise ValueError("That material was not found.")
-    m = rows[0]
-    balance = float(m["current_stock"])
     quantity = float(quantity)
-
     if quantity <= 0:
         raise ValueError("Quantity must be greater than zero.")
 
-    if kind == "ISSUANCE" and quantity > balance:
-        raise ValueError(
-            f"Cannot issue {quantity:g} {m['unit']} — only {balance:g} in stock.")
-
-    new_balance = balance - quantity if kind == "ISSUANCE" else balance + quantity
-
+    # Weather lookup is a network call: do it BEFORE locking the row.
     temp_c, rain_mm, wind_kmh = _weather_for_today()
-    execute_query(DB_CONFIG, """
-        INSERT INTO stock_movements
-            (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by,
-             weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
-        VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s);
-    """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by,
-          temp_c, rain_mm, wind_kmh))
 
-    execute_query(DB_CONFIG,
-        "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
-        (new_balance, m["material_id"]))
+    with _stock_tx() as cur:
+        # FOR UPDATE: anyone else changing this material waits here until we commit.
+        cur.execute(
+            "SELECT material_id, material_name, unit, current_stock FROM materials "
+            "WHERE material_code=%s FOR UPDATE;", (material_code,))
+        m = cur.fetchone()
+        if not m:
+            raise ValueError("That material was not found.")
+        balance = float(m["current_stock"])
+
+        if kind == "ISSUANCE" and quantity > balance:
+            raise ValueError(
+                f"Cannot issue {quantity:g} {m['unit']} \u2014 only {balance:g} in stock.")
+
+        new_balance = balance - quantity if kind == "ISSUANCE" else balance + quantity
+
+        cur.execute("""
+            INSERT INTO stock_movements
+                (material_id, movement_type, quantity, movement_date, project_id, remarks, recorded_by,
+                 weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
+            VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s);
+        """, (m["material_id"], kind, quantity, project_id, remarks, recorded_by,
+              temp_c, rain_mm, wind_kmh))
+        cur.execute("UPDATE materials SET current_stock=%s WHERE material_id=%s;",
+                    (new_balance, m["material_id"]))
 
     return m["material_name"], new_balance
 
@@ -921,56 +946,59 @@ def _set_back_order_disposition(back_order_id, disposition, replaced_qty=None,
     Returns (material_name, new_balance_or_None, stock_delta) for the
     audit log; stock_delta is 0 if nothing about current_stock changed.
     """
-    rows = execute_query(DB_CONFIG, """
-        SELECT bo.material_id, bo.quantity, bo.restocked_qty, bo.disposition, m.material_name, m.current_stock, m.unit
-          FROM back_orders bo JOIN materials m ON m.material_id = bo.material_id
-         WHERE bo.back_order_id = %s;
-    """, (back_order_id,), fetch=True)
-    if not rows:
-        raise ValueError("Back order record not found.")
-    row = rows[0]
-    # Final once set: a back order that is already Replaced or Reimbursed
-    # can't be switched or cleared (enforced here, not just in the UI, so a
-    # stale page or a direct request can't undo it and re-run the stock change).
-    if row["disposition"]:
-        raise ValueError(f"This back order is already marked {row['disposition']} and can't be changed.")
-    quantity = float(row["quantity"])
-    balance = float(row["current_stock"])
-    old_restocked_qty = float(row["restocked_qty"] or 0)
+    with _stock_tx() as cur:
+        # FOR UPDATE locks this back order AND its material until we commit, so
+        # a simultaneous Stock Out / Stock In / second click waits its turn.
+        cur.execute("""
+            SELECT bo.material_id, bo.quantity, bo.restocked_qty, bo.disposition, m.material_name, m.current_stock, m.unit
+              FROM back_orders bo JOIN materials m ON m.material_id = bo.material_id
+             WHERE bo.back_order_id = %s
+               FOR UPDATE OF bo, m;
+        """, (back_order_id,))
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("Back order record not found.")
+        # Final once set: a back order that is already Replaced or Reimbursed
+        # can't be switched or cleared (enforced here, not just in the UI, so a
+        # stale page or a direct request can't undo it and re-run the stock change).
+        if row["disposition"]:
+            raise ValueError(f"This back order is already marked {row['disposition']} and can't be changed.")
+        quantity = float(row["quantity"])
+        balance = float(row["current_stock"])
+        old_restocked_qty = float(row["restocked_qty"] or 0)
 
-    if disposition == "Replaced":
-        if replaced_qty is None or replaced_qty <= 0:
-            raise ValueError("Qty Replaced must be greater than zero.")
-        if replaced_qty > quantity:
-            raise ValueError(f"Qty Replaced can't exceed the {quantity:g} {row['unit']} returned.")
-        new_restocked_qty = replaced_qty
-    else:
-        new_restocked_qty = 0.0
-        replaced_qty = None   # never stored against a non-Replaced row
+        if disposition == "Replaced":
+            if replaced_qty is None or replaced_qty <= 0:
+                raise ValueError("Qty Replaced must be greater than zero.")
+            if replaced_qty > quantity:
+                raise ValueError(f"Qty Replaced can't exceed the {quantity:g} {row['unit']} returned.")
+            new_restocked_qty = replaced_qty
+        else:
+            new_restocked_qty = 0.0
+            replaced_qty = None   # never stored against a non-Replaced row
 
-    if disposition != "Reimbursed":
-        reimbursed_amount = None   # never stored against a non-Reimbursed row
-    elif reimbursed_amount is None or reimbursed_amount <= 0:
-        raise ValueError("Amount Reimbursed must be greater than zero.")
+        if disposition != "Reimbursed":
+            reimbursed_amount = None   # never stored against a non-Reimbursed row
+        elif reimbursed_amount is None or reimbursed_amount <= 0:
+            raise ValueError("Amount Reimbursed must be greater than zero.")
 
-    stock_delta = new_restocked_qty - old_restocked_qty
-    new_balance = balance + stock_delta
-    if new_balance < 0:
-        stock_delta = -balance
-        new_balance = 0.0
+        stock_delta = new_restocked_qty - old_restocked_qty
+        new_balance = balance + stock_delta
+        if new_balance < 0:
+            stock_delta = -balance
+            new_balance = 0.0
 
-    if stock_delta != 0.0:
-        execute_query(DB_CONFIG,
-            "UPDATE materials SET current_stock=%s WHERE material_id=%s;",
-            (new_balance, row["material_id"]))
+        if stock_delta != 0.0:
+            cur.execute("UPDATE materials SET current_stock=%s WHERE material_id=%s;",
+                        (new_balance, row["material_id"]))
 
-    execute_query(DB_CONFIG, """
-        UPDATE back_orders
-           SET disposition=%s, restocked=%s, restocked_qty=%s,
-               replaced_qty=%s, reimbursed_amount=%s, disposition_notes=%s
-         WHERE back_order_id=%s;
-    """, (disposition, new_restocked_qty > 0, new_restocked_qty,
-          replaced_qty, reimbursed_amount, notes, back_order_id))
+        cur.execute("""
+            UPDATE back_orders
+               SET disposition=%s, restocked=%s, restocked_qty=%s,
+                   replaced_qty=%s, reimbursed_amount=%s, disposition_notes=%s
+             WHERE back_order_id=%s;
+        """, (disposition, new_restocked_qty > 0, new_restocked_qty,
+              replaced_qty, reimbursed_amount, notes, back_order_id))
 
     return row["material_name"], new_balance, stock_delta
 
@@ -1815,25 +1843,26 @@ def api_transactions_save():
             proj_id = r[0]["project_id"] if r else None
 
         # If this material exists in the catalog, deduct it (Objective 1.3).
-        mat = execute_query(DB_CONFIG,
-            "SELECT material_id, current_stock, unit FROM materials WHERE material_name=%s;",
-            (material_name,), fetch=True)
-        if mat:
-            m = mat[0]
-            balance = float(m["current_stock"])
-            if qty > balance:
-                return jsonify({"ok": False,
-                    "error": f"Cannot sell {qty:g} {m['unit']} of {material_name} — only {balance:g} in stock."}), 400
-            temp_c, rain_mm, wind_kmh = _weather_for_today()
-            execute_query(DB_CONFIG, """
-                INSERT INTO stock_movements
-                    (material_id, movement_type, quantity, movement_date, project_id, remarks,
-                     weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
-                VALUES (%s, 'ISSUANCE', %s, CURRENT_DATE, %s, %s, %s, %s, %s);
-            """, (m["material_id"], qty, proj_id, "Sold via transaction", temp_c, rain_mm, wind_kmh))
-            execute_query(DB_CONFIG,
-                "UPDATE materials SET current_stock = current_stock - %s WHERE material_id=%s;",
-                (qty, m["material_id"]))
+        temp_c, rain_mm, wind_kmh = _weather_for_today()   # network call: before locking
+        with _stock_tx() as cur:
+            cur.execute(
+                "SELECT material_id, current_stock, unit FROM materials WHERE material_name=%s FOR UPDATE;",
+                (material_name,))
+            m = cur.fetchone()
+            mat = bool(m)
+            if m:
+                balance = float(m["current_stock"])
+                if qty > balance:
+                    return jsonify({"ok": False,
+                        "error": f"Cannot sell {qty:g} {m['unit']} of {material_name} \u2014 only {balance:g} in stock."}), 400
+                cur.execute("""
+                    INSERT INTO stock_movements
+                        (material_id, movement_type, quantity, movement_date, project_id, remarks,
+                         weather_temp_c, weather_rainfall_mm, weather_wind_kmh)
+                    VALUES (%s, 'ISSUANCE', %s, CURRENT_DATE, %s, %s, %s, %s, %s);
+                """, (m["material_id"], qty, proj_id, "Sold via transaction", temp_c, rain_mm, wind_kmh))
+                cur.execute("UPDATE materials SET current_stock = current_stock - %s WHERE material_id=%s;",
+                            (qty, m["material_id"]))
 
         # Record the transaction. amount = qty * price (kept for the dashboard/forecast).
         execute_query(DB_CONFIG, """

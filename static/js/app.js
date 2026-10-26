@@ -1213,6 +1213,46 @@ document.addEventListener('DOMContentLoaded', () => {
         window.updateHistoricalChart(RESULT.forecasts);   // all materials, not just the selected one
       if (typeof window.updateInventoryChart === 'function')
         window.updateInventoryChart(history);
+
+      // Also fill the all-materials forecast table.
+      if (typeof window.updateForecastTable === 'function')
+        window.updateForecastTable(RESULT);
+    };
+
+    window.updateForecastTable = (R) => {
+      const tbody = document.getElementById('forecastAllBody');
+      const monthBadge = document.getElementById('fcTableMonth');
+      if (!tbody) return;
+      const forecasts = (R && R.forecasts) || [];
+      if (monthBadge) monthBadge.textContent = R && R.forecast_month ? R.forecast_month : '—';
+      if (!forecasts.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted-2 py-4">No forecasts yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = forecasts.map(f => {
+        const trend = f.prev_demand
+          ? (((f.predicted_demand - f.prev_demand) / f.prev_demand) * 100)
+          : null;
+        const trendCell = trend === null
+          ? '<span class="text-muted-2">—</span>'
+          : (trend >= 0
+              ? `<span class="text-danger"><i class="bi bi-arrow-up"></i> ${trend.toFixed(1)}%</span>`
+              : `<span class="text-success"><i class="bi bi-arrow-down"></i> ${Math.abs(trend).toFixed(1)}%</span>`);
+        const restockCell = f.reorder_qty > 0
+          ? `<span class="fw-semibold" style="color:var(--primary)">${f.reorder_qty} ${escapeHTML(f.unit)}</span>`
+          : '<span class="text-success">Enough stock</span>';
+        const modelCell = f.model_type === 'pooled fallback'
+          ? '<span class="badge b-warning">Pooled fallback</span>'
+          : '<span class="badge b-success">Per-material</span>';
+        return `<tr>
+          <td><div class="fw-medium">${escapeHTML(f.material_name)}</div></td>
+          <td class="text-end">${f.current_stock} <span class="text-muted-2">${escapeHTML(f.unit)}</span></td>
+          <td class="text-end fw-semibold">${f.predicted_demand} <span class="text-muted-2">${escapeHTML(f.unit)}</span></td>
+          <td class="text-end">${trendCell}</td>
+          <td class="text-end">${restockCell}</td>
+          <td>${modelCell}</td>
+        </tr>`;
+      }).join('');
     };
 
     const runForecast = async () => {

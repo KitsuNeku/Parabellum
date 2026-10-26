@@ -158,6 +158,29 @@
         <div class="col-12 col-md-4"><div class="kpi"><div class="kpi-label">Recommended Restock</div><div class="kpi-value" id="kpiReorder">&mdash;</div><div class="kpi-sub">Suggested quantity to order</div></div></div>
       </div>
 
+      <!-- Forecast table: one row per material, columns for the forecast fields.
+       Fills when a forecast is run (window.updateForecastTable). -->
+      <div class="card mb-4"><div class="card-body">
+        <div class="card-title-row mb-2">
+          <h2 class="panel-title mb-0"><i class="bi bi-table me-2" style="color:var(--primary)"></i>Forecast - All Materials</h2>
+          <span class="badge b-neutral" id="fcTableMonth">—</span>
+        </div>
+        <p class="panel-sub mb-3">Every material's predicted demand for the forecast month, with the recommended restock.</p>
+        <div class="table-wrap"><table class="table" id="forecastAllTable">
+          <thead><tr>
+            <th>Material</th>
+            <th class="text-end">Current Stock</th>
+            <th class="text-end">Predicted Demand</th>
+            <th class="text-end">Trend vs. last month</th>
+            <th class="text-end">Recommended Restock</th>
+            <th>Model</th>
+          </tr></thead>
+          <tbody id="forecastAllBody">
+            <tr><td colspan="6" class="text-center text-muted-2 py-4">Run a forecast to fill this table.</td></tr>
+          </tbody>
+        </table></div>
+      </div></div>
+
       <!-- Read-only forecast viewer + explanation -->
       <div class="row g-3 mb-4">
         <div class="col-lg-7"><div class="card h-100"><div class="card-body">

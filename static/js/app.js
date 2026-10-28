@@ -169,11 +169,18 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
   let deliveryHTML = '';
   const dv = info.delivery;
   if (dv) {
-    deliveryHTML = dv.delivered
-      ? `<div class="small mt-2"><i class="bi bi-truck me-1 text-success"></i><span class="fw-medium text-success">Delivered</span>
+    if (dv.status === 'Delivered') {
+      deliveryHTML = `<div class="small mt-2"><i class="bi bi-truck me-1 text-success"></i><span class="fw-medium text-success">Delivered</span>
           ${dv.at ? `<span class="text-muted-2"> \u00b7 ${_rcEsc(dv.at)}</span>` : ''}</div>
-         ${wxLine(dv.weather, 'Weather in Lipa City on the delivery day', 'Delivery day')}`
-      : `<div class="small mt-2"><i class="bi bi-hourglass-split me-1 text-warning"></i><span class="fw-medium text-warning-emphasis">Delivery pending</span></div>`;
+         ${wxLine(dv.weather, 'Weather in Lipa City on the delivery day', 'Delivery day')}`;
+    } else if (dv.status === 'Failed') {
+      deliveryHTML = `<div class="small mt-2"><i class="bi bi-x-octagon-fill me-1 text-danger"></i><span class="fw-medium text-danger">Delivery failed</span>
+          ${dv.at ? `<span class="text-muted-2"> \u00b7 ${_rcEsc(dv.at)}</span>` : ''}</div>
+         ${dv.reason ? `<div class="small"><span class="text-muted-2">Reason: </span><span class="fw-medium">${_rcEsc(dv.reason)}</span></div>` : ''}
+         ${wxLine(dv.weather, 'Weather in Lipa City on the day the delivery failed', 'Delivery day')}`;
+    } else {
+      deliveryHTML = `<div class="small mt-2"><i class="bi bi-hourglass-split me-1 text-warning"></i><span class="fw-medium text-warning-emphasis">Delivery pending</span></div>`;
+    }
   }
 
   return `

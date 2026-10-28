@@ -1040,37 +1040,75 @@ def api_stock_out():
         return jsonify({"ok": False, "error": "A server error occurred. Please try again or contact your administrator."}), 500
 
 
+# Max length for the failure reason field - matches security.py's
+# general 500-char cap on JSON string fields.
+DELIVERY_REASON_MAX_LEN = 500
+
+
 @app.route("/api/inventory/stock-out/deliver", methods=["POST"])
 @permission_required("inventory")
 def api_stock_out_deliver():
     """
-    Mark one Stock Out as Delivered (TEMPORARY - delivery confirmation).
-    Stamps the time and the weather in Lipa City on the delivery day. Only
-    ISSUANCE rows; a row that is already Delivered is left as it is. Does
-    NOT touch stock levels or the forecast (every Stock Out still counts).
+    Mark one Stock Out as Delivered OR Failed (TEMPORARY - delivery
+    confirmation). Stamps the time and the weather in Lipa City on the day
+    it was recorded. Only ISSUANCE rows; a row that already has an outcome
+    is left as it is. Does NOT touch stock levels or the forecast (every
+    Stock Out still counts, whether it reached the client or not).
+
+    Body: {"movementId": int,
+           "status":     "Delivered" | "Failed",   # default "Delivered"
+           "reason":     str}                      # required when "Failed"
     """
     d = request.get_json(silent=True) or {}
     try:
         movement_id = int(d.get("movementId"))
     except (TypeError, ValueError):
         return jsonify({"ok": False, "error": "Invalid Stock Out record."}), 400
+    status = (d.get("status") or "Delivered").strip()
+    if status not in ("Delivered", "Failed"):
+        return jsonify({"ok": False, "error": "Status must be Delivered or Failed."}), 400
+    reason = (d.get("reason") or "").strip()
+    if status == "Failed":
+        if not reason:
+            return jsonify({"ok": False, "error": "Please give a reason the delivery did not push through."}), 400
+        if len(reason) > DELIVERY_REASON_MAX_LEN:
+            return jsonify({"ok": False, "error": f"Reason can be up to {DELIVERY_REASON_MAX_LEN} characters."}), 400
+    else:
+        reason = None   # Delivered never stores a reason
     try:
         rows = execute_query(DB_CONFIG, """
-            SELECT movement_type, delivered_at FROM stock_movements WHERE movement_id = %s;
+            SELECT movement_type, delivered_at, delivery_failed_at
+              FROM stock_movements WHERE movement_id = %s;
         """, (movement_id,), fetch=True)
         if not rows or rows[0]["movement_type"] != "ISSUANCE":
             return jsonify({"ok": False, "error": "Stock Out record not found."}), 404
         if rows[0]["delivered_at"] is not None:
             return jsonify({"ok": False, "error": "This Stock Out is already marked as Delivered."}), 400
+        if rows[0]["delivery_failed_at"] is not None:
+            return jsonify({"ok": False, "error": "This Stock Out is already marked as Failed."}), 400
         temp, rain, wind = _weather_for_today()
-        execute_query(DB_CONFIG, """
-            UPDATE stock_movements
-               SET delivered_at = CURRENT_TIMESTAMP,
-                   delivery_temp_c = %s, delivery_rainfall_mm = %s, delivery_wind_kmh = %s
-             WHERE movement_id = %s AND delivered_at IS NULL;
-        """, (temp, rain, wind, movement_id))
-        log_audit(DB_CONFIG, "STOCK_OUT_DELIVERED", f"Stock Out MOV-{movement_id:04d} marked as Delivered.",
-                  session["user"]["username"])
+        if status == "Delivered":
+            execute_query(DB_CONFIG, """
+                UPDATE stock_movements
+                   SET delivered_at = CURRENT_TIMESTAMP,
+                       delivery_temp_c = %s, delivery_rainfall_mm = %s, delivery_wind_kmh = %s
+                 WHERE movement_id = %s
+                   AND delivered_at IS NULL AND delivery_failed_at IS NULL;
+            """, (temp, rain, wind, movement_id))
+            log_audit(DB_CONFIG, "STOCK_OUT_DELIVERED", f"Stock Out MOV-{movement_id:04d} marked as Delivered.",
+                      session["user"]["username"])
+        else:
+            execute_query(DB_CONFIG, """
+                UPDATE stock_movements
+                   SET delivery_failed_at = CURRENT_TIMESTAMP,
+                       delivery_failure_reason = %s,
+                       delivery_temp_c = %s, delivery_rainfall_mm = %s, delivery_wind_kmh = %s
+                 WHERE movement_id = %s
+                   AND delivered_at IS NULL AND delivery_failed_at IS NULL;
+            """, (reason, temp, rain, wind, movement_id))
+            log_audit(DB_CONFIG, "STOCK_OUT_FAILED",
+                      f"Stock Out MOV-{movement_id:04d} marked as Failed: {reason}",
+                      session["user"]["username"])
         return jsonify({"ok": True})
     except Exception:
         app.logger.exception("Database error")
@@ -1287,7 +1325,7 @@ def api_inventory_movements():
                    sm.remarks, sm.recorded_by,
                    sm.weather_temp_c, sm.weather_rainfall_mm, sm.weather_wind_kmh,
                    sm.delivered_at, sm.delivery_temp_c, sm.delivery_rainfall_mm,
-                   sm.delivery_wind_kmh
+                   sm.delivery_wind_kmh, sm.delivery_failed_at, sm.delivery_failure_reason
               FROM stock_movements sm
               JOIN materials m ON m.material_id = sm.material_id
              ORDER BY sm.movement_date DESC, sm.movement_id DESC;
@@ -1308,11 +1346,13 @@ def api_inventory_movements():
             "weatherTemp": None if r.get("weather_temp_c") is None else float(r["weather_temp_c"]),
             "weatherRain": None if r.get("weather_rainfall_mm") is None else float(r["weather_rainfall_mm"]),
             "weatherWind": None if r.get("weather_wind_kmh") is None else float(r["weather_wind_kmh"]),
-            # Delivery confirmation (Stock Out only): NULL deliveredAt = Pending.
-            "deliveredAt":  r["delivered_at"].isoformat() if r.get("delivered_at") else None,
-            "deliveryTemp": _f(r.get("delivery_temp_c")),
-            "deliveryRain": _f(r.get("delivery_rainfall_mm")),
-            "deliveryWind": _f(r.get("delivery_wind_kmh")),
+            # Delivery confirmation (Stock Out only): both NULL = Pending.
+            "deliveredAt":    r["delivered_at"].isoformat() if r.get("delivered_at") else None,
+            "deliveryFailedAt": r["delivery_failed_at"].isoformat() if r.get("delivery_failed_at") else None,
+            "deliveryFailureReason": r.get("delivery_failure_reason") or None,
+            "deliveryTemp":   _f(r.get("delivery_temp_c")),
+            "deliveryRain":   _f(r.get("delivery_rainfall_mm")),
+            "deliveryWind":   _f(r.get("delivery_wind_kmh")),
         } for r in rows]
         return jsonify({"ok": True, "data": data})
     except Exception as e:

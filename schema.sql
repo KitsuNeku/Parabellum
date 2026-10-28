@@ -148,7 +148,11 @@ CREATE TABLE stock_movements (
     delivered_at           TIMESTAMPTZ,
     delivery_temp_c        NUMERIC(5,2),
     delivery_rainfall_mm   NUMERIC(8,2),
-    delivery_wind_kmh      NUMERIC(6,2)
+    delivery_wind_kmh      NUMERIC(6,2),
+    -- Failed delivery (TEMPORARY): if the delivery didn't push through, when
+    -- it was recorded as failed and why. Mutually exclusive with delivered_at.
+    delivery_failed_at       TIMESTAMPTZ,
+    delivery_failure_reason  TEXT
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);

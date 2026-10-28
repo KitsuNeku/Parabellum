@@ -107,7 +107,7 @@
         </div>
 
         <!-- Help -->
-        <button class="icon-btn" data-bs-toggle="tooltip" title="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
+        <button class="icon-btn" data-bs-toggle="tooltip" title="Need help? Contact the Administrator" aria-label="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
 
         <!-- Profile -->
         <div class="dropdown">
@@ -618,6 +618,29 @@
         </form>
       </div></div></div>
 
+      <!-- Mark Delivery Failed modal (TEMPORARY - delivery confirmation).
+           Asks for the reason this Stock Out did not push through. -->
+      <div class="modal fade" id="deliverFailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-x-octagon me-2 text-danger"></i>Mark Delivery as Failed</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form id="deliverFailForm" novalidate>
+        <div class="modal-body">
+          <p class="small text-muted-2 mb-2">Stock Out <span class="fw-medium" id="deliverFailMovNo">—</span></p>
+          <div class="mb-2">
+            <label class="form-label" for="deliverFailReason">Reason it did not push through</label>
+            <textarea class="form-control" id="deliverFailReason" rows="3" maxlength="500" required
+              placeholder="e.g. Heavy rain, truck broke down, client not available"></textarea>
+            <div class="form-text">Up to 500 characters. The weather of today is saved automatically.</div>
+          </div>
+          <div class="small text-muted-2"><i class="bi bi-info-circle me-1"></i>Stock levels and the forecast are not changed. Every Stock Out still counts.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger" id="deliverFailSubmit">Mark as Failed</button>
+        </div>
+        </form>
+      </div></div></div>
+
       <!-- Transaction receipt: pops up after Confirm (Stock In / Stock Out / Back
            Order) and when reprinting a row. Printing is optional - Close skips it.
            Content comes from showTransactionReceipt() in app.js. -->
@@ -776,6 +799,8 @@
       // and kept so onClear can rebuild the original option list.
       const stockInCatSel = document.querySelector('#stockInModal select[name="cat"]');
       const stockInCatOrigHTML = stockInCatSel ? stockInCatSel.innerHTML : '';
+      const stockInUnitSel = document.querySelector('#stockInModal select[name="unit"]');
+      const stockInUnitOrigHTML = stockInUnitSel ? stockInUnitSel.innerHTML : '';
       wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', {
         allowUnmatched: true,
         allowOthers: true,
@@ -800,6 +825,18 @@
             if (cat) stockInCatSel.value = cat;
             stockInCatSel.disabled = true;
           }
+          // Unit: same treatment as Category - lock to this item's own unit,
+          // adding it to the dropdown if it's not one of the standard options.
+          if (stockInUnitSel) {
+            const unit = material.unit || '';
+            if (unit && ![...stockInUnitSel.options].some(o => o.value === unit || o.textContent === unit)) {
+              const extra = document.createElement('option');
+              extra.textContent = unit;
+              stockInUnitSel.appendChild(extra);
+            }
+            if (unit) stockInUnitSel.value = unit;
+            stockInUnitSel.disabled = true;
+          }
         },
         onClear: () => {
           const sup = document.getElementById('stockInSupplier');
@@ -812,6 +849,11 @@
             stockInCatSel.disabled = false;
             stockInCatSel.innerHTML = stockInCatOrigHTML;
             stockInCatSel.selectedIndex = 0;
+          }
+          if (stockInUnitSel) {
+            stockInUnitSel.disabled = false;
+            stockInUnitSel.innerHTML = stockInUnitOrigHTML;
+            stockInUnitSel.selectedIndex = 0;
           }
         },
       });
@@ -1262,7 +1304,7 @@
         window.showTransactionReceipt('ISSUANCE', items, {
           when: info.when,
           weather: wmv ? { temp: wmv.weatherTemp, rain: wmv.weatherRain, wind: wmv.weatherWind } : null,
-          delivery: { delivered: false },   // a new Stock Out always starts Pending
+          delivery: { status: 'Pending' },   // a new Stock Out always starts Pending
           fields: [['Client / Customer', info.client], ['Project', info.project], ['Delivery Address', info.address],
                    ['Contact', info.contact], ['Purpose / Reference', info.projectId], ['Location', locs], ['Released by', info.user]],
           recordedBy: info.user, counterparty: '',
@@ -1723,34 +1765,79 @@
           + ' \u00b7 ' + d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
       }
       function deliveryInfo(m){
-        return { delivered: !!m.deliveredAt, at: m.deliveredAt ? fmtDeliveredAt(m.deliveredAt) : '',
-                 weather: { temp: m.deliveryTemp, rain: m.deliveryRain, wind: m.deliveryWind } };
+        const weather = { temp: m.deliveryTemp, rain: m.deliveryRain, wind: m.deliveryWind };
+        if (m.deliveredAt) return { status: 'Delivered', at: fmtDeliveredAt(m.deliveredAt), weather };
+        if (m.deliveryFailedAt) return { status: 'Failed', at: fmtDeliveredAt(m.deliveryFailedAt),
+                                         reason: m.deliveryFailureReason || '', weather };
+        return { status: 'Pending', at: '', weather };
       }
       function deliveryCell(m){
         if (m.deliveredAt) {
           return `<td><span class="badge b-success"><i class="bi bi-check-circle-fill me-1"></i>Delivered</span>
             <div class="small text-muted-2 mt-1">${escapeHTML(fmtDeliveredAt(m.deliveredAt))}</div></td>`;
         }
+        if (m.deliveryFailedAt) {
+          const r = m.deliveryFailureReason || '';
+          return `<td><span class="badge b-danger"><i class="bi bi-x-octagon-fill me-1"></i>Failed</span>
+            <div class="small text-muted-2 mt-1">${escapeHTML(fmtDeliveredAt(m.deliveryFailedAt))}</div>
+            ${r ? `<div class="small mt-1" title="${escapeHTML(r)}">${escapeHTML(r.length > 60 ? r.slice(0,60)+'\u2026' : r)}</div>` : ''}</td>`;
+        }
         return `<td><span class="badge b-warning me-1">Pending</span>
-          <button type="button" class="btn btn-sm btn-light-2 py-0 px-2" data-deliver data-movement-id="${m.movementId}">
-            <i class="bi bi-truck me-1"></i>Mark as Delivered</button></td>`;
+          <div class="d-inline-flex gap-1 mt-1">
+            <button type="button" class="btn btn-sm btn-light-2 py-0 px-2" data-deliver data-movement-id="${m.movementId}">
+              <i class="bi bi-truck me-1"></i>Mark as Delivered</button>
+            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" data-deliver-fail data-movement-id="${m.movementId}">
+              <i class="bi bi-x-octagon me-1"></i>Failed</button>
+          </div></td>`;
       }
-      async function markDelivered(movementId, btn){
+      async function postDeliveryOutcome(movementId, status, reason, btn){
         if (btn) btn.disabled = true;
         try {
           const res = await fetch('/api/inventory/stock-out/deliver', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ movementId }),
+            body: JSON.stringify({ movementId, status, reason }),
           });
           const json = await res.json();
           if (!json.ok) throw new Error(json.error);
           if (typeof window.refreshInventory === 'function') await window.refreshInventory();
-          showToast('Stock Out marked as Delivered', 'success', 'bi-truck');
+          showToast(status === 'Delivered' ? 'Stock Out marked as Delivered' : 'Stock Out marked as Failed',
+                    status === 'Delivered' ? 'success' : 'warning',
+                    status === 'Delivered' ? 'bi-truck' : 'bi-x-octagon');
+          return true;
         } catch (err) {
           if (btn) btn.disabled = false;
           showToast(err.message, 'error', 'bi-exclamation-triangle');
+          return false;
         }
       }
+      async function markDelivered(movementId, btn){ return postDeliveryOutcome(movementId, 'Delivered', '', btn); }
+
+      // Delivery-failed modal: capture the reason first, then post.
+      (function wireDeliverFailModal(){
+        const modal = document.getElementById('deliverFailModal');
+        if (!modal) return;
+        const form = document.getElementById('deliverFailForm');
+        const reason = document.getElementById('deliverFailReason');
+        const movNo = document.getElementById('deliverFailMovNo');
+        const submit = document.getElementById('deliverFailSubmit');
+        let pending = null;   // the movement id waiting on this reason
+        window.openDeliverFailModal = (movementId) => {
+          pending = movementId;
+          reason.value = '';
+          submit.disabled = false;
+          movNo.textContent = 'MOV-' + String(movementId).padStart(4, '0');
+          bootstrap.Modal.getOrCreateInstance(modal).show();
+          setTimeout(() => reason.focus(), 200);
+        };
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const txt = reason.value.trim();
+          if (!txt) { reason.focus(); return; }
+          submit.disabled = true;
+          const ok = await postDeliveryOutcome(pending, 'Failed', txt, submit);
+          if (ok) bootstrap.Modal.getInstance(modal).hide();
+        });
+      })();
 
       /* Movement rows get their own action buttons - View / Edit / Print /
        Delete - kept separate from the shared actionBtns() helper (used on
@@ -2101,6 +2188,9 @@
       function handleRowAction(e){
         const delBtn = e.target.closest('[data-deliver]');
         if (delBtn) { markDelivered(parseInt(delBtn.dataset.movementId, 10), delBtn); return; }
+
+        const failBtn = e.target.closest('[data-deliver-fail]');
+        if (failBtn) { window.openDeliverFailModal(parseInt(failBtn.dataset.movementId, 10)); return; }
 
         const printBtn = e.target.closest('.print-move');
         if (printBtn) { showMoveSlip(parseInt(printBtn.dataset.movementId, 10)); return; }

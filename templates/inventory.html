@@ -237,6 +237,7 @@
               <th class="text-end">Total Out</th>
               <th class="text-end">Back Orders</th>
               <th class="text-end">Net Stock</th>
+              <th class="text-center">Actions</th>
             </tr></thead>
             <tbody id="stockSummaryBody"></tbody>
           </table></div>
@@ -564,6 +565,59 @@
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button></div>
       </div></div></div>
+
+      <!-- Item Edit Sidebar (slide-in from the right). One per item: click
+           the pencil on any row in Stock Movement Summary to open it. Does
+           NOT edit current stock on hand - that stays controlled by Stock
+           In / Stock Out so the movement history matches. -->
+      <div class="offcanvas offcanvas-end" tabindex="-1" id="editItemSidebar" aria-labelledby="editItemSidebarLabel" style="width:420px;max-width:100vw">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title" id="editItemSidebarLabel"><i class="bi bi-pencil-square me-2" style="color:var(--primary)"></i>Edit Item</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <form id="editItemForm" novalidate class="offcanvas-body d-flex flex-column">
+          <input type="hidden" name="edit_id" id="editItemEditId">
+          <div class="mb-3 small text-muted-2">
+            Item Code: <span class="fw-medium text-dark" id="editItemCode">—</span>
+          </div>
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">Item Name</label>
+              <input class="form-control" name="name" id="editItemName" required>
+              <div class="invalid-feedback">Item name is required.</div></div>
+            <div class="col-md-6"><label class="form-label">Category</label>
+              <select class="form-select" name="cat" id="editItemCat">
+                <option value="" disabled hidden>Select…</option>
+                <option>Bars</option><option>Plates</option><option>Sheets</option>
+                <option>Tubes &amp; Pipes</option><option>Beams</option>
+                <option>Fasteners</option><option>Consumables</option>
+              </select></div>
+            <div class="col-md-6"><label class="form-label">Supplier</label>
+              <select class="form-select" name="sup" id="editItemSupplier" required></select>
+              <div class="invalid-feedback">Choose the supplier for this item.</div></div>
+            <div class="col-md-6"><label class="form-label">Unit</label>
+              <select class="form-select" name="unit" id="editItemUnit">
+                <option>pcs</option><option>kg</option><option>sheets</option>
+                <option>length</option><option>roll</option><option>box</option>
+              </select></div>
+            <div class="col-md-6"><label class="form-label">Unit Price (₱)</label>
+              <input type="number" class="form-control" name="price" id="editItemPrice" value="0.00" step="0.01" min="0"></div>
+            <div class="col-md-6"><label class="form-label">Reorder Level</label>
+              <input type="number" class="form-control" name="reorder" id="editItemReorder" value="0" min="0"></div>
+            <div class="col-md-6"><label class="form-label">Location</label>
+              <select class="form-select" name="loc" id="editItemLoc">
+                <option>Warehouse A</option><option>Warehouse B</option>
+                <option>Yard 1</option><option>Yard 2</option>
+              </select></div>
+          </div>
+          <div class="small text-muted-2 mt-3">
+            <i class="bi bi-info-circle me-1"></i>Stock on hand (<span id="editItemOnHand">—</span>) is changed through Stock In and Stock Out, not here.
+          </div>
+          <div class="mt-auto d-flex justify-content-end gap-2 pt-3">
+            <button type="button" class="btn btn-light-2" data-bs-dismiss="offcanvas">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="editItemSaveBtn"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
+          </div>
+        </form>
+      </div>
 
       <!-- Back Order Disposition Modal - opened from the Back Orders table's
            Reimbursed/Replaced buttons when newly marking one (clicking an
@@ -1167,9 +1221,28 @@
         so.avail.textContent = (outOfStock ? `Out of stock \u2014 0 ${i.unit} available` : `Available: ${NUM(i.qty)} ${i.unit}`)
           + (inCart ? ` \u00b7 ${NUM(inCart.requestedQty)} already in this request` : '');
       }
-      so.results?.addEventListener('mousedown', () => { showCartAvail(); setCartError(''); });
-      so.search?.addEventListener('input', () => { showCartAvail(); setCartError(''); });
-      so.qty?.addEventListener('input', () => setCartError(''));
+      // Keep the Qty input's max attribute in sync with the picked item's
+      // available stock, so the browser clamps typing/arrows to it.
+      function syncQtyMax(){
+        const i = so.itemId.value ? inventoryStore.find(so.itemId.value) : null;
+        if (!i) { so.qty.removeAttribute('max'); return; }
+        const row = stockOutCart.find(r => r.itemId === i.id);
+        const remaining = Math.max(0, (Number(i.qty) || 0) - (row ? row.requestedQty : 0));
+        so.qty.max = String(remaining);
+      }
+      // Clamp a number input to its max/min as the user types.
+      function clampQtyInput(inp){
+        if (inp.value === '') return;
+        let v = Number(inp.value);
+        const max = inp.max === '' ? Infinity : Number(inp.max);
+        const min = inp.min === '' ? -Infinity : Number(inp.min);
+        if (Number.isFinite(max) && v > max) v = max;
+        if (Number.isFinite(min) && v < min) v = min;
+        if (String(v) !== inp.value) inp.value = String(v);
+      }
+      so.results?.addEventListener('mousedown', () => { showCartAvail(); syncQtyMax(); setCartError(''); });
+      so.search?.addEventListener('input', () => { showCartAvail(); syncQtyMax(); setCartError(''); });
+      so.qty?.addEventListener('input', () => { clampQtyInput(so.qty); setCartError(''); });
 
       function setCartError(msg){
         so.error.textContent = msg;
@@ -1196,7 +1269,7 @@
         }
         // Clear the mini-form for the next item.
         so.search.value = ''; so.itemId.value = ''; so.qty.value = '';
-        setCartError(''); showCartAvail(); hideStockOutResult();
+        setCartError(''); showCartAvail(); syncQtyMax(); hideStockOutResult();
         renderStockOutCart();
       }
       so.addBtn?.addEventListener('click', addToStockOutCart);
@@ -1254,6 +1327,7 @@
       so.body?.addEventListener('input', (e) => {
         const inp = e.target.closest('[data-cart-idx]'); if (!inp) return;
         const r = stockOutCart[+inp.dataset.cartIdx]; if (!r) return;
+        clampQtyInput(inp);
         r.requestedQty = inp.value === '' ? NaN : Number(inp.value);
         const err = rowQtyError(r);
         inp.classList.toggle('is-invalid', !!err);
@@ -1467,6 +1541,17 @@
             <td class="text-end">${NUM(r.stockedOut)} ${escapeHTML(r.unit)}</td>
             <td><input type="number" class="form-control form-control-sm text-end return-qty-input" min="0" max="${r.stockedOut}" step="any" value="0"></td>
           </tr>`).join('');
+        // Clamp any Qty-to-Return input to the stocked-out amount as the user types.
+        ret.body.querySelectorAll('.return-qty-input').forEach(inp => {
+          inp.addEventListener('input', () => {
+            if (inp.value === '') return;
+            let v = Number(inp.value);
+            const max = Number(inp.max);
+            if (Number.isFinite(max) && v > max) v = max;
+            if (v < 0) v = 0;
+            if (String(v) !== inp.value) inp.value = String(v);
+          });
+        });
       }
 
       function resetReturnPicker(){
@@ -2032,7 +2117,7 @@
         tbody.innerHTML = '';
         if (pageItems.length === 0) {
           const reason = (moveSearchQuery || moveCategoryFilter) ? 'match your search or filter' : 'yet';
-          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" class="text-center text-muted-2 py-4">
+          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="8" class="text-center text-muted-2 py-4">
             No items ${reason}.</td></tr>`);
         }
         pageItems.forEach(r => {
@@ -2044,8 +2129,13 @@
             <td class="text-end text-danger">${NUM(r.totalOut)} <span class="text-muted-2">${r.unit}</span></td>
             <td class="text-end" style="color:var(--primary)">${NUM(r.backOrder)} <span class="text-muted-2">${r.unit}</span></td>
             <td class="text-end fw-medium">${NUM(r.netStock)} <span class="text-muted-2">${r.unit}</span></td>
+            <td class="text-center">
+              <button type="button" class="act-btn" data-bs-toggle="tooltip" title="Edit this item"
+                      data-edit-item="${escapeHTML(r.id)}"><i class="bi bi-pencil"></i></button>
+            </td>
           </tr>`);
         });
+        initTooltips(tbody);
         set('stockSummaryCount', pageItems.length === rows.length
           ? `Showing ${rows.length} item${rows.length===1?'':'s'}`
           : `Showing ${start+1}–${start+pageItems.length} of ${rows.length} items`);
@@ -2224,6 +2314,104 @@
       document.getElementById('stockInBody').addEventListener('click', handleRowAction);
       document.getElementById('stockOutBody').addEventListener('click', handleRowAction);
       document.getElementById('returnsBody')?.addEventListener('click', handleRowAction);
+
+      /* ---------- Item Edit Sidebar wiring ---------- */
+      (function wireEditItemSidebar(){
+        const sidebarEl = document.getElementById('editItemSidebar');
+        if (!sidebarEl) return;
+        const sidebar = bootstrap.Offcanvas.getOrCreateInstance(sidebarEl);
+        const form = document.getElementById('editItemForm');
+        const saveBtn = document.getElementById('editItemSaveBtn');
+        let currentItem = null;
+        let currentOnHand = 0;
+
+        function populateSuppliers(selected){
+          const sel = document.getElementById('editItemSupplier');
+          sel.innerHTML = (window.SUPPLIERS_CACHE_FOR_EDIT || SUPPLIERS_CACHE)
+            .map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
+          if (selected && !sel.querySelector(`option[value="${CSS.escape(selected)}"]`)) {
+            // The item's current supplier isn't in the active-supplier list
+            // (inactive, deleted, or a free-typed value) - keep it as a one-off
+            // option so saving doesn't silently drop it.
+            const o = document.createElement('option');
+            o.value = o.textContent = selected;
+            sel.insertBefore(o, sel.firstChild);
+          }
+          if (selected) sel.value = selected;
+        }
+        function openForItem(i){
+          currentItem = i;
+          currentOnHand = Number(i.qty) || 0;
+          document.getElementById('editItemEditId').value = i.id;
+          document.getElementById('editItemCode').textContent = i.id;
+          document.getElementById('editItemName').value = i.name || '';
+          document.getElementById('editItemPrice').value = Number(i.price || 0).toFixed(2);
+          document.getElementById('editItemReorder').value = i.reorder || 0;
+          document.getElementById('editItemOnHand').textContent = `${NUM(currentOnHand)} ${i.unit || ''}`;
+          const cat = document.getElementById('editItemCat');
+          if (i.cat && ![...cat.options].some(o => o.value === i.cat || o.textContent === i.cat)) {
+            const extra = document.createElement('option');
+            extra.textContent = i.cat; cat.appendChild(extra);
+          }
+          cat.value = i.cat || '';
+          const unit = document.getElementById('editItemUnit');
+          if (i.unit && ![...unit.options].some(o => o.value === i.unit || o.textContent === i.unit)) {
+            const extra = document.createElement('option');
+            extra.textContent = i.unit; unit.appendChild(extra);
+          }
+          unit.value = i.unit || 'pcs';
+          const loc = document.getElementById('editItemLoc');
+          if (i.loc && ![...loc.options].some(o => o.value === i.loc || o.textContent === i.loc)) {
+            const extra = document.createElement('option');
+            extra.textContent = i.loc; loc.appendChild(extra);
+          }
+          loc.value = i.loc || 'Warehouse A';
+          populateSuppliers(i.sup || '');
+          form.classList.remove('was-validated');
+          sidebar.show();
+        }
+        // Delegate the pencil click on any Stock Movement Summary row.
+        document.getElementById('stockSummaryBody')?.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-edit-item]'); if (!btn) return;
+          const i = inventoryStore.find(btn.dataset.editItem); if (!i) return;
+          openForItem(i);
+        });
+
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
+          saveBtn.disabled = true;
+          try {
+            const payload = {
+              edit_id: currentItem.id,
+              name:    document.getElementById('editItemName').value.trim(),
+              cat:     document.getElementById('editItemCat').value,
+              sup:     document.getElementById('editItemSupplier').value,
+              unit:    document.getElementById('editItemUnit').value,
+              price:   document.getElementById('editItemPrice').value,
+              reorder: document.getElementById('editItemReorder').value,
+              loc:     document.getElementById('editItemLoc').value,
+              // Preserve the on-hand stock - the backend requires qty and
+              // uses it to overwrite current_stock; passing the current
+              // value keeps the stock untouched.
+              qty:     currentOnHand,
+            };
+            const res = await fetch('/api/inventory/save', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const json = await res.json();
+            if (!json.ok) throw new Error(json.error || 'Save failed.');
+            if (typeof window.refreshInventory === 'function') await window.refreshInventory();
+            showToast(`${payload.name} updated`, 'success', 'bi-check-circle');
+            sidebar.hide();
+          } catch (err) {
+            showToast(err.message, 'error', 'bi-exclamation-triangle');
+          } finally {
+            saveBtn.disabled = false;
+          }
+        });
+      })();
 
       /* ---------- attention lists + sidebar badge + item dropdowns
        (unchanged - still computed from the MATERIALS list, not movement

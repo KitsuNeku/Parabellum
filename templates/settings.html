@@ -411,6 +411,22 @@
           f.name.value = u.name; f.email.value = u.email; f.role.value = u.role;
           f.username.value = u.username; f.dept.value = u.dept; f.status.value = u.status;
           f.password.value = '';
+          // Admin account's role cannot be changed - lock the select and
+          // show a short note. Server also refuses role changes for admin
+          // in case this is bypassed.
+          const isAdmin = (u.username === 'admin');
+          f.role.disabled = isAdmin;
+          const roleCell = f.role.closest('.col-md-6');
+          let note = roleCell.querySelector('[data-admin-role-note]');
+          if (isAdmin && !note) {
+            note = document.createElement('div');
+            note.setAttribute('data-admin-role-note', '');
+            note.className = 'small text-muted-2 mt-1';
+            note.innerHTML = '<i class="bi bi-shield-lock me-1"></i>The admin account always stays System Administrator.';
+            roleCell.appendChild(note);
+          } else if (!isAdmin && note) {
+            note.remove();
+          }
           userModal.show();
           return;
         }
@@ -589,12 +605,17 @@
         document.getElementById('userModalSubmit').textContent = 'Save User';
         pwLabel.textContent = 'Password';
         pwInput.required = false;
+        userForm.elements.role.disabled = false;
+        userForm.querySelector('[data-admin-role-note]')?.remove();
       });
 
       userForm.addEventListener('submit', async (e) => {
         if (!userForm.checkValidity()) return;
         e.preventDefault();
         e.stopImmediatePropagation();
+        // Re-enable the role select so FormData picks it up; server
+        // still refuses role changes for admin.
+        if (userForm.elements.role.disabled) userForm.elements.role.disabled = false;
         const data = Object.fromEntries(new FormData(userForm));
         data.edit_id = userForm.getAttribute('data-edit-id') || null;
         if (!data.edit_id && !data.password) {

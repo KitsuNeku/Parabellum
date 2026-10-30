@@ -2147,6 +2147,15 @@ def api_users_save():
     try:
         if edit_id:
             user_id = int(edit_id.split("-")[1])
+            # Admin account's role is permanent and cannot be changed from
+            # here. Name, email, department, status and password are still
+            # editable.
+            current = execute_query(DB_CONFIG,
+                "SELECT username, role FROM users WHERE user_id = %s;",
+                (user_id,), fetch=True)
+            if current and current[0]["username"] == "admin" and role != current[0]["role"]:
+                return jsonify({"ok": False,
+                    "error": "The admin account's role cannot be changed."}), 400
             if password:
                 execute_query(DB_CONFIG, """
                     UPDATE users SET full_name=%s, username=%s, role=%s, email=%s,

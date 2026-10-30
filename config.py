@@ -33,7 +33,7 @@ DB_CONFIG = {
     # YOU MUST CHANGE THIS - nobody but you has your database password.
     # It's the one you set when creating the Supabase project (not your
     # Supabase login password). Reset it from the Connect panel if lost.
-    "password": os.getenv("DB_PASSWORD", "dimayuganeo13"),
+    "password": os.getenv("DB_PASSWORD", "maindb26PB!main"),
     "sslmode":  os.getenv("DB_SSLMODE", "prefer"),
 }
 

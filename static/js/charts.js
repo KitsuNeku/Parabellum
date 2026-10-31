@@ -92,84 +92,68 @@ document.addEventListener('DOMContentLoaded', () => {
   let forecastChart;
   if (el('chartMonthlyForecast')) {
     forecastChart = new Chart(el('chartMonthlyForecast'), {
-      type:'line',
+      type:'bar',
       data:{ labels:[],
         datasets:[
           { label:'Historical demand', data:[],
-            borderColor:C.primary, backgroundColor:C.primary, tension:.35, borderWidth:2.5, pointRadius:3 },
+            backgroundColor:C.primary, borderRadius:4, maxBarThickness:46 },
           { label:'Forecast', data:[],
-            borderColor:C.gold, backgroundColor:C.goldSoft, borderDash:[6,5], tension:.35, borderWidth:2.5, pointRadius:4, fill:true }
+            backgroundColor:C.gold, borderRadius:4, maxBarThickness:46 },
         ]},
-      // indexAxis:'y' swaps the axes: the months run down the LEFT side
-      // (oldest at the top, forecast month at the bottom) and the units sit
-      // along the BOTTOM.
-      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      // Months run along the BOTTOM, units up the LEFT. History bars are
+      // primary-coloured; the forecast month's bar is gold.
+      options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ position:'top', align:'end' } },
-        scales:{ x:axis({ beginAtZero:true }),
-                 y:{ grid:{ display:false }, ticks:{ color:C.grayText } } } }
+        scales:{ x:Object.assign({ stacked:true }, noGridX),
+                 y:axis({ beginAtZero:true, stacked:true }) } }
     });
     window.updateForecastChart = (historyPoints, forecastLabel, predicted) => {
       const labels = historyPoints.map(p => p.month).concat([forecastLabel]);
+      // Two datasets, one coloured per bar - a given month's value sits in
+      // only one of them (the other has null), so each month shows a single
+      // bar in the right colour.
       const histSeries = historyPoints.map(p => p.demand).concat([null]);
-      const fcSeries   = historyPoints.map(_ => null);
-      if (histSeries.length >= 2) fcSeries[fcSeries.length - 1] = histSeries[histSeries.length - 2];
-      fcSeries.push(predicted);
+      const fcSeries   = historyPoints.map(_ => null).concat([predicted]);
       forecastChart.data.labels = labels;
       forecastChart.data.datasets[0].data = histSeries;
       forecastChart.data.datasets[1].data = fcSeries;
       forecastChart.update();
-      firstOnTop(forecastChart);          // oldest month at the top, forecast month at the bottom
     };
   }
 
-  /* ---------- Forecasting page: Historical Demand (month picker) ----------
-   Pick a month (#histMonthSelect, newest by default); the bars show how many
-   units of each MATERIAL were consumed that month, most consumed at the top.
-   Source: the per-material `history` the forecast returns (its last months).
-   Materials are counted in their own units (pcs, sheets, kg ...), so the
-   ranking compares raw numbers across different units - the tooltip shows
-   each bar's unit. Materials with no consumption that month are left out. */
+  /* ---------- Forecasting page: Historical Demand (stacked bars) ----------
+   One bar per MONTH (oldest to newest along the bottom), stacked by material.
+   Each coloured segment inside a bar is one material; the tooltip shows the
+   material name, how many units, and the unit. Materials have different
+   units (pcs, sheets, kg ...), so a bar's total height mixes units - read
+   the segments, not the total height. */
   let historicalChart;
   if (el('chartHistoricalDemand')) {
-    let histForecasts = [];
+    const matPalette = [C.primary, C.gold, C.info, C.success, '#7c3aed', '#d97b34', '#0f766e', '#9aa1ad', '#c94a3f', '#0f172a'];
     historicalChart = new Chart(el('chartHistoricalDemand'), {
       type:'bar',
-      data:{ labels:[], datasets:[{ label:'Units consumed', data:[], units:[],
-        backgroundColor:C.primary, borderRadius:4, maxBarThickness:26 }] },
-      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:false },
-          tooltip:{ callbacks:{ label:(c)=> ' ' + Number(c.raw).toLocaleString('en-PH') + ' ' + ((c.dataset.units || [])[c.dataIndex] || '') } } },
-        scales:{ x:axis({ beginAtZero:true }), y:{ grid:{ display:false } } } }
+      data:{ labels:[], datasets:[] },
+      options:{ responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'nearest', intersect:true },
+        plugins:{
+          legend:{ position:'bottom', labels:{ boxWidth:8, padding:10, font:{ size:11 } } },
+          tooltip:{ callbacks:{ label:(c)=> ' ' + c.dataset.label + ': ' + Number(c.raw).toLocaleString('en-PH') + ' ' + (c.dataset.unit || '') } } },
+        scales:{ x:Object.assign({ stacked:true }, noGridX),
+                 y:axis({ beginAtZero:true, stacked:true }) } }
     });
-    const draw = () => {
-      const sel = el('histMonthSelect');
-      const month = sel ? sel.value : '';
-      const rows = [];
-      histForecasts.forEach(f => {
-        const p = (f.history || []).find(h => h.month === month);
-        const v = p ? Number(p.demand) || 0 : 0;
-        if (v > 0) rows.push({ name: f.material_name, unit: f.unit, v });
-      });
-      rows.sort((a, b) => b.v - a.v);                      // most consumed first (top)
-      const ds = historicalChart.data.datasets[0];
-      historicalChart.data.labels = rows.map(r => r.name);
-      ds.data = rows.map(r => r.v);
-      ds.units = rows.map(r => r.unit);
-      historicalChart.update();
-    };
-    el('histMonthSelect')?.addEventListener('change', draw);
     window.updateHistoricalChart = (forecasts) => {
-      histForecasts = forecasts || [];
-      const months = [];                                   // month labels, oldest first
-      histForecasts.forEach(f => (f.history || []).forEach(p => { if (!months.includes(p.month)) months.push(p.month); }));
-      const sel = el('histMonthSelect');
-      if (sel) {
-        const keep = sel.value;
-        sel.innerHTML = months.slice().reverse().map(m => `<option value="${m}">${m}</option>`).join('');
-        sel.value = months.includes(keep) ? keep : (months[months.length - 1] || '');
-        sel.disabled = !months.length;
-      }
-      draw();
+      const fcs = forecasts || [];
+      const months = [];                                   // oldest first
+      fcs.forEach(f => (f.history || []).forEach(p => { if (!months.includes(p.month)) months.push(p.month); }));
+      historicalChart.data.labels = months;
+      historicalChart.data.datasets = fcs.map((f, i) => {
+        const byMonth = {};
+        (f.history || []).forEach(p => { byMonth[p.month] = Number(p.demand) || 0; });
+        return { label: f.material_name, unit: f.unit,
+                 data: months.map(m => byMonth[m] || 0),
+                 backgroundColor: matPalette[i % matPalette.length], borderWidth:0, maxBarThickness:46 };
+      });
+      historicalChart.update();
     };
   }
 

@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/support.css') }}" rel="stylesheet">
   <style>
     :root{
       --primary:#b11217; --primary-rgb:177,18,23; --primary-dark:#8a1214; --primary-soft:#fff2ea;
@@ -111,7 +112,10 @@
 
           <p class="service-line">While many steel and iron works still rely on manual tracking and guesswork, Parabellum plans ahead — so projects stay on schedule and materials are always available.</p>
 
-          <a href="/login" class="btn btn-gold"><i class="bi bi-box-arrow-in-right me-2"></i>Login to System</a>
+          <div class="d-flex flex-wrap gap-2">
+            <a href="/login" class="btn btn-gold"><i class="bi bi-box-arrow-in-right me-2"></i>Login to System</a>
+            <button type="button" class="btn btn-outline-light sp-open-btn" data-support-open><i class="bi bi-headset me-2"></i>Need Support?</button>
+          </div>
         </div>
 
         <div class="col-lg-6">
@@ -149,5 +153,67 @@
     </div>
   </div>
 </div>
+
+<!-- Support modal -->
+<div class="modal fade sp-modal" id="supportModal" tabindex="-1" aria-labelledby="supportModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">
+    <div class="modal-header">
+      <div>
+        <h5 class="modal-title" id="supportModalTitle"><i class="bi bi-headset me-2"></i>Customer Support</h5>
+        <div class="sp-modal-sub" id="supportModalSub">Tell us about your concern and our team will reply in the chat.</div>
+      </div>
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    </div>
+    <form id="supportForm" novalidate>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label" for="spCompany">Company <span class="sp-opt">(optional)</span></label>
+            <input type="text" class="form-control" id="spCompany" name="company" maxlength="150" autocomplete="organization" placeholder="e.g. ABC Construction"></div>
+          <div class="col-md-6"><label class="form-label" for="spName">Full Name <span class="sp-req">*</span></label>
+            <input type="text" class="form-control" id="spName" name="name" maxlength="120" autocomplete="name" required>
+            <div class="invalid-feedback"></div></div>
+          <div class="col-md-6"><label class="form-label" for="spEmail">Email <span class="sp-req">*</span></label>
+            <input type="email" class="form-control" id="spEmail" name="email" maxlength="150" autocomplete="email" required placeholder="you@example.com">
+            <div class="invalid-feedback"></div></div>
+          <div class="col-md-6"><label class="form-label" for="spPhone">Phone Number <span class="sp-req">*</span></label>
+            <input type="tel" class="form-control" id="spPhone" name="phone" maxlength="20" autocomplete="tel" required placeholder="09XX XXX XXXX">
+            <div class="invalid-feedback"></div></div>
+          <div class="col-12"><label class="form-label" for="spOrder">Order / Transaction No. <span class="sp-opt">(optional)</span></label>
+            <input type="text" class="form-control" id="spOrder" name="orderRef" maxlength="60" placeholder="e.g. TXN-0012"></div>
+          <div class="col-12"><label class="form-label" for="spConcern">Your Concern <span class="sp-req">*</span></label>
+            <textarea class="form-control" id="spConcern" name="concern" rows="5" maxlength="2000" required placeholder="Describe your inquiry, order follow-up, or issue&hellip;"></textarea>
+            <div class="d-flex justify-content-between"><div class="invalid-feedback d-block" id="spConcernErr"></div><small class="sp-count" id="spConcernCount">0 / 2000</small></div></div>
+          <input type="text" name="website" id="spWebsite" class="sp-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+        </div>
+        <div class="sp-form-err" id="supportFormErr"></div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <button type="button" class="btn btn-link sp-link" data-support-view="find">Already have a ticket?</button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn sp-btn-primary" id="supportSubmit"><i class="bi bi-send me-2"></i>Submit</button>
+        </div>
+      </div>
+    </form>
+    <form id="supportFindForm" novalidate hidden>
+      <div class="modal-body">
+        <p class="sp-modal-sub mb-3">Enter your ticket number and the email you used to open the conversation.</p>
+        <div class="row g-3">
+          <div class="col-md-5"><label class="form-label" for="spFindTicket">Ticket No.</label>
+            <input type="text" class="form-control" id="spFindTicket" maxlength="20" required placeholder="TKT-0001"></div>
+          <div class="col-md-7"><label class="form-label" for="spFindEmail">Email</label>
+            <input type="email" class="form-control" id="spFindEmail" maxlength="150" required placeholder="you@example.com"></div>
+        </div>
+        <div class="sp-form-err" id="supportFindErr"></div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <button type="button" class="btn btn-link sp-link" data-support-view="new">Start a new ticket</button>
+        <button type="submit" class="btn sp-btn-primary" id="supportFindSubmit"><i class="bi bi-chat-dots me-2"></i>Open Chat</button>
+      </div>
+    </form>
+  </div></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/support.js') }}"></script>
 </body>
 </html>

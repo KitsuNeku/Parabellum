@@ -1,16 +1,3 @@
-/* =====================================================================
- PARABELLUM ISOS - Chat between accounts
- A floating button (bottom-right) on every signed-in page. It opens a small
- panel: a list of the other accounts, then a one-to-one conversation.
- Loaded by app.js once the session is confirmed (see "Session" block there).
-
- Updates by polling (no extra server needed, works on any host):
-   unread badge   every 15 s while the panel is closed
-   contact list   every  8 s while it is open
-   conversation   every  4 s while it is open
- Polling pauses while the browser tab is in the background.
- Message text is only ever inserted with textContent (never as HTML).
- ===================================================================== */
 (function () {
   if (window.__parabellumChat) return;
   window.__parabellumChat = true;
@@ -20,7 +7,7 @@
 
   const state = { open: false, view: 'list', peer: null, seen: new Set(), lastId: 0, timer: null, sending: false };
 
-  /* ---------- tiny helpers ---------- */
+  /* tiny helpers */
   const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
   async function api(path, opts) {
@@ -46,7 +33,7 @@
   }
   const initial = (name) => (String(name || '?').trim()[0] || '?').toUpperCase();
 
-  /* ---------- DOM ---------- */
+  /* Dom */
   const fab = h('button', 'chat-fab no-print');
   fab.type = 'button'; fab.setAttribute('aria-label', 'Open chat'); fab.title = 'Chat';
   fab.innerHTML = '<i class="bi bi-chat-dots-fill"></i>';
@@ -72,7 +59,7 @@
   panel.append(head, body, errLine, compose);
   document.body.append(fab, panel);
 
-  /* ---------- badge ---------- */
+  /* badge */
   function setBadge(n) {
     n = Number(n) || 0;
     badge.textContent = n > 99 ? '99+' : String(n);
@@ -80,10 +67,10 @@
     fab.setAttribute('aria-label', n > 0 ? `Open chat (${n} unread)` : 'Open chat');
   }
   async function refreshUnread() {
-    try { setBadge((await api('/api/chat/unread')).unread); } catch (_) { /* badge just stays as is */ }
+    try { setBadge((await api('/api/chat/unread')).unread); } catch (_) { }
   }
 
-  /* ---------- contact list ---------- */
+  /* contact list */
   async function showList() {
     state.view = 'list'; state.peer = null;
     backBtn.style.display = 'none'; compose.style.display = 'none'; errLine.style.display = 'none';
@@ -115,7 +102,7 @@
     body.replaceChildren(frag);
   }
 
-  /* ---------- conversation ---------- */
+  /* conversation */
   function bubble(m) {
     const d = h('div', 'chat-msg' + (m.mine ? ' mine' : ''));
     d.append(document.createTextNode(m.body), h('span', 'chat-ts', stampMsg(m.sentAt)));
@@ -149,7 +136,7 @@
     const peer = state.peer; if (!peer || state.view !== 'thread') return;
     try {
       const msgs = await api(`/api/chat/messages?with=${encodeURIComponent(peer.id)}&after=${state.lastId}`);
-      if (state.peer !== peer || state.view !== 'thread') return;      // user switched away meanwhile
+      if (state.peer !== peer || state.view !== 'thread') return;
       errLine.style.display = 'none';
       if (first && !msgs.length) body.querySelector('.chat-thread').appendChild(h('div', 'chat-empty', 'No messages yet. Say hello!'));
       if (msgs.length) { const e = body.querySelector('.chat-thread .chat-empty'); if (e) e.remove(); append(msgs, first); refreshUnread(); }
@@ -179,14 +166,14 @@
       append([m], true);
       ta.value = ''; autosize();
     } catch (err) {
-      errLine.textContent = err.message; errLine.style.display = '';   // the typed text stays so nothing is lost
+      errLine.textContent = err.message; errLine.style.display = '';
     } finally {
       state.sending = false; sendBtn.disabled = !ta.value.trim();
       ta.focus();
     }
   });
 
-  /* ---------- open / close / polling ---------- */
+  /* open / close / polling */
   function schedule() {
     clearTimeout(state.timer);
     const every = !state.open ? POLL_UNREAD : (state.view === 'thread' ? POLL_THREAD : POLL_LIST);

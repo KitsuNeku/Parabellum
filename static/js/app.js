@@ -1,17 +1,4 @@
-/* =====================================================================
- PARABELLUM ISOS - App Interactivity (vanilla JS)
- ===================================================================== */
 
-/* ------ Security helpers ---------------------------------------------
- esc(s)         - HTML-escape user-controlled strings before dropping
-                  them into innerHTML / insertAdjacentHTML. Prevents
-                  stored XSS via names / notes an admin could set.
- window.fetch   - Overridden below so every state-changing (POST / PUT /
-                  PATCH / DELETE) call to /api/* automatically carries
-                  the X-CSRF-Token header from the csrf_token cookie.
-                  Existing call sites don't have to change; the wrapper
-                  is transparent for GET requests and non-/api/ calls.
- -------------------------------------------------------------------- */
 function esc(s) {
   if (s === null || s === undefined) return "";
   return String(s)
@@ -52,13 +39,6 @@ function esc(s) {
   };
 })();
 
-/* Shared by every page with a paginated table (inventory, transactions,
- etc.) - a proper "windowed" page list instead of
- rendering a button for every single page. With hundreds of records
- (e.g. 1121 transactions = 141 pages), rendering all of them in one
- unwrapped row overflows and overlaps on any screen, worst of all on
- mobile. Always shows page 1, the last page, and a small window around
- whichever page is currently active, collapsing the rest into "...". */
 function buildPageWindow(current, total, maxNeighbors = 1) {
   if (total <= 1) return [1];
   const pages = new Set([1, total, current]);
@@ -75,21 +55,6 @@ function buildPageWindow(current, total, maxNeighbors = 1) {
   return out;
 }
 
-/* ---------------- Transaction receipts (Stock In / Stock Out / Back Order) ----------------
- ONE receipt renderer for every entry point, so a receipt looks the same
- whether it pops up right after Confirm, is reprinted from a table row, or is
- opened from the Reports page:
-   buildReceiptHTML(kind, items, info)      -> the receipt's HTML
-   showTransactionReceipt(kind, items, info) -> shows it in #moveSlipModal
- kind:  'RECEIPT' (Stock In) | 'ISSUANCE' (Stock Out) | 'RETURN' (Back Order)
- items: one row per material in the transaction:
-        [{ movementId, id, name, cat, qty, unit, price }]
-        (several items = one receipt with several rows, never one receipt each)
- info:  { when, fields: [[label, value], ...], recordedBy, counterparty, note,
-          weather: { temp, rain, wind } (optional - Stock Out receipts),
-          delivery: { delivered, at, weather: {temp, rain, wind} } (optional - Stock Out receipts) }
- The modal footer has Close + Print (the app's existing [data-print] button),
- so printing is always optional. */
 const RECEIPT_KINDS = {
   RECEIPT:  { title: 'STOCK IN RECEIPT',   label: 'Stock In',   badge: 'b-success', qty: 'Qty Received',
               sigLeft: 'Received / Recorded by', sigRight: 'Delivered by (Supplier)' },
@@ -103,13 +68,9 @@ window.RECEIPT_KINDS = RECEIPT_KINDS;
 const _rcEsc  = (s) => (typeof escapeHTML === 'function' ? escapeHTML(s) : esc(s));
 const _rcNum  = (n) => (typeof NUM === 'function' ? NUM(n) : String(n));
 const _rcPeso = (n) => (typeof PESO === 'function' ? PESO(n) : String(n));
-// Back orders live in their own table/id-space now (back_order_id), so
-// they're numbered "BKO-####" rather than "MOV-####" - the two are never
-// confused even though both ride in the same `movementId` JS field.
 const movNo   = (id, kind) => (id || id === 0) && String(id) !== ''
   ? `${kind === 'RETURN' ? 'BKO' : 'MOV'}-${String(id).padStart(4, '0')}` : '';
 
-/* Date + time the receipt was produced, e.g. "October 2, 2026 · 2:45 PM". */
 window.receiptNow = () => {
   const d = new Date();
   return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -149,7 +110,6 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
   const sig = (label, name) => `<div class="col-6"><div style="border-bottom:1px solid #999;height:34px" class="d-flex align-items-end justify-content-center pb-1 fw-medium">${_rcEsc(name || '')}</div>
       <div class="small text-muted-2 text-center mt-1">${_rcEsc(label)}</div></div>`;
 
-  // Weather line (Stock Out receipts), top right under the date.
   const wxLine = (wx, title, label) => {
     if (!wx || (wx.temp == null && wx.rain == null)) return '';
     const rainy = wx.rain != null && Number(wx.rain) >= 1;
@@ -161,11 +121,8 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
     return `<div class="small mt-1" title="${_rcEsc(title)}">
       <i class="bi ${icon} me-1" style="color:${rainy ? '#2b6cb0' : '#e6a817'}"></i>${label ? `<span class="text-muted-2">${_rcEsc(label)}: </span>` : ''}<span class="fw-medium">${_rcEsc(parts.join(' \u00b7 '))}</span></div>`;
   };
-  // Weather on the day of the movement.
   let weatherHTML = wxLine(info.weather, 'Weather in Lipa City on the day of this Stock Out', info.delivery ? 'Order day' : '');
 
-  // Delivery confirmation (Stock Out receipts only; TEMPORARY): Pending, or
-  // Delivered + when + the weather on the delivery day.
   let deliveryHTML = '';
   const dv = info.delivery;
   if (dv) {
@@ -173,8 +130,12 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
       deliveryHTML = `<div class="small mt-2"><i class="bi bi-truck me-1 text-success"></i><span class="fw-medium text-success">Delivered</span>
           ${dv.at ? `<span class="text-muted-2"> \u00b7 ${_rcEsc(dv.at)}</span>` : ''}</div>
          ${wxLine(dv.weather, 'Weather in Lipa City on the delivery day', 'Delivery day')}`;
+    } else if (dv.status === 'Returned') {
+      deliveryHTML = `<div class="small mt-2"><i class="bi bi-arrow-counterclockwise me-1"></i><span class="fw-medium">Returned to inventory</span>
+          ${dv.at ? `<span class="text-muted-2"> \u00b7 ${_rcEsc(dv.at)}</span>` : ''}</div>
+         ${dv.reason ? `<div class="small"><span class="text-muted-2">Delivery failed: </span><span class="fw-medium">${_rcEsc(dv.reason)}</span></div>` : ''}`;
     } else if (dv.status === 'Failed') {
-      deliveryHTML = `<div class="small mt-2"><i class="bi bi-x-octagon-fill me-1 text-danger"></i><span class="fw-medium text-danger">Delivery failed</span>
+      deliveryHTML = `<div class="small mt-2"><i class="bi bi-x-octagon-fill me-1 text-danger"></i><span class="fw-medium text-danger">Delivery failed \u00b7 on standby</span>
           ${dv.at ? `<span class="text-muted-2"> \u00b7 ${_rcEsc(dv.at)}</span>` : ''}</div>
          ${dv.reason ? `<div class="small"><span class="text-muted-2">Reason: </span><span class="fw-medium">${_rcEsc(dv.reason)}</span></div>` : ''}
          ${wxLine(dv.weather, 'Weather in Lipa City on the day the delivery failed', 'Delivery day')}`;
@@ -205,9 +166,6 @@ window.buildReceiptHTML = function (kind, items, info = {}) {
     </div>`;
 };
 
-/* Shows a receipt in #moveSlipModal (created here if the page doesn't have
- one, e.g. Reports). If another modal is still closing (the Stock In / Stock
- Out / Back Order form), waits for it so the two don't overlap. */
 window.showTransactionReceipt = function (kind, items, info = {}) {
   let el = document.getElementById('moveSlipModal');
   if (!el) {
@@ -230,10 +188,6 @@ window.showTransactionReceipt = function (kind, items, info = {}) {
   else open();
 };
 
-/* The movement a save just created. Uses the id the server returned when it
- sends one (json.movementId); otherwise the newest movement of that type for
- that material that wasn't in the list before the save - read from the
- freshly re-fetched ALL_MOVEMENTS, never from unsaved form/cart state. */
 window.findNewMovement = function (type, code, beforeIds, preferId) {
   const all = window.ALL_MOVEMENTS || [];
   if (preferId) { const hit = all.find(m => String(m.movementId) === String(preferId)); if (hit) return hit; }
@@ -243,13 +197,6 @@ window.findNewMovement = function (type, code, beforeIds, preferId) {
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  /* ---------------- Dashboard: fill KPIs, alert and usage chart from the DB ----------
- Nothing on the dashboard is pre-filled with sample figures any more: the KPI
- cards start as "-" and this fills them from /api/dashboard. The Forecast
- Alert banner stays hidden unless a real forecast produced an alert, and the
- usage chart starts empty and is filled for all three ranges. If the fetch
- fails, the page shows dashes / an empty chart and a toast - never made-up
- numbers. */
   if (document.getElementById('dashKpiProjects')) {
     (async () => {
       try {
@@ -282,26 +229,23 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Forecast alert banner: shown ONLY when a real forecast produced one.
         const banner = document.getElementById('fcAlertBanner');
         if (banner) {
           if (d.alert) {
-            const mat = document.getElementById('fcAlertMaterial');
-            const pct = document.getElementById('fcAlertPct');
-            const qty = document.getElementById('fcAlertQty');
-            if (mat) mat.textContent = d.alert.material;
-            if (pct) pct.textContent = Math.abs(d.alert.pct) + '%';
-            if (qty) qty.textContent = d.alert.reorder + ' ' + d.alert.unit;
-            // Flip "increase"/"decrease" to match the real direction.
-            const verb = document.getElementById('fcAlertVerb');
-            if (verb) verb.textContent = d.alert.pct < 0 ? 'decrease' : 'increase';
+            const a = d.alert;
+            const setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            setT('fcAlertMaterial', a.material);
+            setT('fcAlertMonth', a.month || 'next month');
+            setT('fcAlertPredicted', `${NUM(a.predicted)} ${a.unit}`);
+            setT('fcAlertTrend', a.pct === 0 ? 'no change' : `${a.pct > 0 ? '\u25b2' : '\u25bc'} ${Math.abs(a.pct)}%`);
+            setT('fcAlertStock', `${NUM(a.stock)} ${a.unit}`);
+            setT('fcAlertQty', `${NUM(a.reorder)} ${a.unit}`);
             banner.style.display = '';
           } else {
             banner.style.display = 'none';
           }
         }
 
-        // Material usage chart: real totals for each of the three ranges.
         if (typeof window.setUsageData === 'function') {
           const split = (rows) => [(rows || []).map(u => u.label), (rows || []).map(u => u.qty)];
           window.setUsageData('monthly', ...split(d.usage));
@@ -310,7 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } catch (err) {
         console.error('Dashboard load failed:', err);
-        // Don't leave "Loading..." on screen forever when the request fails.
         const tbFail = document.getElementById('dashTxnBody');
         if (tbFail) tbFail.innerHTML = '<tr><td colspan="5" class="text-center text-muted-2 py-3">Could not load recent transactions.</td></tr>';
         showToast('Could not load dashboard figures from the database', 'error', 'bi-exclamation-triangle');
@@ -318,20 +261,12 @@ document.addEventListener('DOMContentLoaded', () => {
     })();
   }
 
-  /* ---------------- Session: keep CURRENT_USER populated ----------------
- Identity and role-filtered nav are now rendered server-side (Jinja,
- from the session) on first paint - no flash of the wrong account
- switching between logins. This fetch just keeps the CURRENT_USER JS
- variable populated for pages that still reference it in script (e.g.
- reports.html's "Generated by ..." line), and bounces to /login if a
- cached page is somehow viewed without a live session. */
   (async () => {
     try {
       const res = await fetch('/api/me');
       const json = await res.json();
       if (!json.ok) throw new Error('not signed in');
       CURRENT_USER = json.data;
-      // Floating chat button + panel on every signed-in page (not on the login page).
       if (!location.pathname.startsWith('/login') && !document.getElementById('chatScript')) {
         const cs = document.createElement('script');
         cs.id = 'chatScript'; cs.src = '/static/js/chat.js';
@@ -344,17 +279,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })();
 
-  /* ---------------- Sign out (every "Sign Out" control, any page) ----------------
- Clears the server-side session first, THEN navigates to /login.
- Just linking to /login (the old behavior) left the session live. */
   document.querySelectorAll('a[href="/login"]').forEach(a => {
     if (!/sign out/i.test(a.textContent)) return;
     a.addEventListener('click', (e) => {
       e.preventDefault();
-      // Also clear the "already shown this session" flag for the dashboard's
-      // auto-popping Stock Alerts modal, so it pops again right after
-      // the next login instead of staying silently dismissed for whoever
-      // logs in next on this browser tab (see dashboard.html).
       try { sessionStorage.removeItem('parabellum.stockAlertsShown'); sessionStorage.removeItem('parabellum.lowStockModalShown'); sessionStorage.removeItem('parabellum.outStockModalShown'); } catch (_) {}
       fetch('/api/logout', { method: 'POST' }).finally(() => {
         window.location.href = '/login';
@@ -362,12 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* Sidebar inventory badge = live out-of-stock count. The server renders the
- first value from the database (see _user_context in app.py), so every page
- starts correct. Pages that load the full inventory list (Inventory,
- Dashboard) call this again after each refresh so it follows stock changes
- without a reload. It only recounts once inventory has really loaded - an
- empty array means "not loaded yet", not "zero out of stock". */
   window.updateInventoryBadge = () => {
     if (typeof INVENTORY === 'undefined' || INVENTORY.length === 0) return;
     const oos = INVENTORY.filter(i => i.status === 'Out of Stock').length;
@@ -377,10 +299,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  /* ---------------- Notifications bell: live feed from /api/notifications ----------------
- Replaces the five identical hardcoded alerts every page used to carry. The
- red dot only shows when there is something to report. */
-  (async () => {
+  /* Notifications bell */
+  window.refreshNotifications = async () => {
     const list = document.querySelector('[data-notif-list]');
     if (!list) return;
     const dot   = document.querySelector('[data-notif-dot]');
@@ -403,21 +323,30 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Notifications load failed:', err);
       list.innerHTML = '<div class="text-center text-danger small py-3">Could not load notifications.</div>';
     }
-  })();
+  };
+  window.refreshNotifications();
 
-  /* ---------------- Sidebar toggle (mobile) ---------------- */
+  /* Sidebar toggle */
   const sidebar   = document.querySelector('.sidebar');
   const hamburger = document.querySelector('.hamburger');
   const backdrop  = document.querySelector('.backdrop');
   const openNav  = () => { sidebar?.classList.add('open');  backdrop?.classList.add('show'); };
   const closeNav = () => { sidebar?.classList.remove('open'); backdrop?.classList.remove('show'); };
-  hamburger?.addEventListener('click', () => sidebar?.classList.contains('open') ? closeNav() : openNav());
+  hamburger?.addEventListener('click', () => {
+    const root = document.documentElement;
+    if (window.innerWidth >= 992 && root.classList.contains('sb-collapsible')) {
+      const mini = root.classList.toggle('sb-mini');
+      try { localStorage.setItem('sbMini', mini ? '1' : '0'); } catch (_) {}
+      return;
+    }
+    sidebar?.classList.contains('open') ? closeNav() : openNav();
+  });
   backdrop?.addEventListener('click', closeNav);
   document.querySelectorAll('.sidebar__nav .nav-link').forEach(a => {
     a.addEventListener('click', () => { if (window.innerWidth < 992) closeNav(); });
   });
 
-  /* ---------------- Live clock ---------------- */
+  /* Live clock */
   const clockEl = document.getElementById('liveClock');
   const dateEl  = document.getElementById('liveDate');
   function tick() {
@@ -427,16 +356,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (clockEl || dateEl) { tick(); setInterval(tick, 1000); }
 
-  /* ---------------- Tooltips ---------------- */
+  /* Tooltips */
   document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
 
-  /* ---------------- Toast helper ----------------
-   action (optional): { label, onClick } — renders a small button in the
-   toast, bottom-right of the screen (the toast host is already
-   position-fixed bottom-0 end-0), e.g. "View Back Order" after recording
-   a return, which scrolls the page down to that record. Clicking it also
-   dismisses the toast. A toast with an action stays up a little longer
-   so there's time to click it. */
   window.showToast = function (msg, tone = 'primary', icon = 'bi-check-circle-fill', action = null) {
     let host = document.getElementById('toastHost');
     if (!host) {
@@ -470,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('hidden.bs.toast', () => el.remove());
   };
 
-  /* ---------------- Generic table search ---------------- */
+  /* Generic table search */
   document.querySelectorAll('[data-table-search]').forEach(input => {
     const target = document.querySelector(input.getAttribute('data-table-search'));
     input.addEventListener('input', () => {
@@ -481,7 +403,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ---------------- Generic column filter (data-filter on selects) ---------------- */
   document.querySelectorAll('[data-filter-target]').forEach(sel => {
     const target = document.querySelector(sel.getAttribute('data-filter-target'));
     const col = parseInt(sel.getAttribute('data-filter-col'), 10);
@@ -495,21 +416,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ---------------- Backend-only operations (server-side by nature; wired once backend exists) ---------------- */
-  document.querySelectorAll('[data-backend-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const action = btn.getAttribute('data-backend-action');
-      showToast(`${action} — this operation runs on the server and will be available once the backend is connected.`, 'info', 'bi-info-circle-fill');
-    });
-  });
+  /* Shared delete-confirmation dialog */
+  window.confirmAction = function (title, message, label, onConfirm) {
+    let m = document.getElementById('sharedActionModal');
+    if (!m) {
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="sharedActionModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title" id="sharedActionTitle"></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body"><p class="mb-0" id="sharedActionMsg"></p></div>
+          <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="sharedActionBtn"></button></div>
+        </div></div></div>`);
+      m = document.getElementById('sharedActionModal');
+    }
+    document.getElementById('sharedActionTitle').textContent = title;
+    document.getElementById('sharedActionMsg').textContent = message;
+    const btn = document.getElementById('sharedActionBtn');
+    const clone = btn.cloneNode(true);
+    clone.textContent = label;
+    btn.replaceWith(clone);
+    const modal = bootstrap.Modal.getOrCreateInstance(m);
+    clone.addEventListener('click', () => { modal.hide(); onConfirm(); });
+    modal.show();
+  };
 
-  /* ---------------- Shared delete-confirmation dialog ---------------- */
-  window.confirmDelete = function (message, onConfirm) {
+  window.confirmDelete = function (message, onConfirm, opts = {}) {
     let m = document.getElementById('sharedConfirmModal');
     if (!m) {
       document.body.insertAdjacentHTML('beforeend', `
         <div class="modal fade" id="sharedConfirmModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content">
-          <div class="modal-header"><h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2" style="color:var(--primary)"></i>Confirm Delete</h5>
+          <div class="modal-header"><h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2" style="color:var(--primary)"></i><span id="sharedConfirmTitle">Confirm Delete</span></h5>
             <button class="btn-close" data-bs-dismiss="modal"></button></div>
           <div class="modal-body"><p class="mb-0" id="sharedConfirmMsg">Delete this record? This cannot be undone.</p></div>
           <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button>
@@ -518,18 +454,16 @@ document.addEventListener('DOMContentLoaded', () => {
       m = document.getElementById('sharedConfirmModal');
     }
     document.getElementById('sharedConfirmMsg').textContent = message;
+    document.getElementById('sharedConfirmTitle').textContent = opts.title || 'Confirm Delete';
     const btn = document.getElementById('sharedConfirmBtn');
-    const clone = btn.cloneNode(true);          // drop any previous listener
+    const clone = btn.cloneNode(true);
+    clone.textContent = opts.button || 'Delete';
     btn.replaceWith(clone);
     const modal = bootstrap.Modal.getOrCreateInstance(m);
     clone.addEventListener('click', () => { modal.hide(); onConfirm(); });
     modal.show();
   };
 
-  /* ---------------- Forms: Bootstrap validation + entity-aware submit ----------------
- Forms tagged data-entity="inventory|customers|projects|users|stock-in|stock-out"
- dispatch an "entity:submit" event that the page's script handles (store mutation +
- re-render). Forms without data-entity keep the simple save-toast behavior. */
   document.querySelectorAll('.needs-validation').forEach(form => {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -555,17 +489,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ---------------- Inventory: back the page onto the database --------------
- The inventory page reads everything through inventoryStore / INVENTORY and
- re-renders with window.renderInventory(). We (1) load real rows from the DB
- on page load, and (2) intercept the Add/Stock-In/Stock-Out forms and the
- delete action so they persist. The server owns the negative-stock rule -
- a stock-out that exceeds the balance is rejected, not silently clamped. */
   if (document.getElementById('stockInBody') && typeof INVENTORY !== 'undefined') {
 
-    // Clear demo rows NOW, before the page's own inline script (runs
-    // right after this) paints them as if real. See the matching
-    // comment in wireEntityPage for why this ordering matters.
     INVENTORY.length = 0;
 
     const refreshInventory = async () => {
@@ -586,12 +511,12 @@ document.addEventListener('DOMContentLoaded', () => {
           showToast('Could not load inventory from the database — showing may be outdated', 'error', 'bi-exclamation-triangle');
           return;
         }
-        INVENTORY.length = 0;               // clear sample rows, keep the array reference
+        INVENTORY.length = 0;
         invJson.data.forEach(r => INVENTORY.push(r));
         if (typeof window.updateInventoryBadge === 'function') window.updateInventoryBadge();
-        window.ALL_MOVEMENTS = moveJson.data;    // Stock In / Stock Out tables read this
-        window.ALL_BACKORDERS = boJson.data;     // Back Orders table reads this (its own table now)
-        window.STOCK_SUMMARY = sumJson.data;     // per-item In/Out/Back Order aggregate table
+        window.ALL_MOVEMENTS = moveJson.data;
+        window.ALL_BACKORDERS = boJson.data;
+        window.STOCK_SUMMARY = sumJson.data;
         if (typeof window.renderInventory === 'function') window.renderInventory();
       } catch (err) {
         console.error('refreshInventory failed:', err);
@@ -599,24 +524,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    // Intercept the three inventory forms in the CAPTURE phase, so this runs
-    // before the generic form handler and we can stop its optimistic "success".
     const wire = (selector, url, buildBody, opts = {}) => {
       const form = document.querySelector(selector);
       if (!form) return;
       form.addEventListener('submit', async (e) => {
-        if (!form.checkValidity()) return;  // let the generic validation show
+        if (!form.checkValidity()) return;
         e.preventDefault();
-        e.stopImmediatePropagation();       // block the generic (fake-success) handler
+        e.stopImmediatePropagation();
 
         const data = Object.fromEntries(new FormData(form));
         const body = buildBody(data, form);
-        // `url` can be a fixed string, or a function(data, form) => string for
-        // a form that posts to different endpoints depending on its own state
-        // (e.g. the Stock In modal's "Existing Item" vs "New Item" toggle).
         const targetUrl = typeof url === 'function' ? url(data, form) : url;
-        // Snapshot BEFORE saving: which movements already existed (so the new
-        // one can be told apart after the re-fetch) and the item's details.
         const beforeIds  = new Set((window.ALL_MOVEMENTS || []).map(m => m.movementId));
         const itemBefore = data.itemId && typeof inventoryStore !== 'undefined' ? { ...(inventoryStore.find(data.itemId) || {}) } : null;
         try {
@@ -633,46 +551,24 @@ document.addEventListener('DOMContentLoaded', () => {
           form.reset(); form.classList.remove('was-validated');
           form.removeAttribute('data-edit-id');
           const msg = typeof opts.successMsg === 'function' ? opts.successMsg(data, form) : (opts.successMsg || 'Saved');
-          // opts.successAction: optional (data, form) => { label, onClick } for
-          // a button on the success toast (e.g. "View Back Order").
           const action = typeof opts.successAction === 'function' ? opts.successAction(data, form) : null;
           showToast(msg, 'success', undefined, action);
-          // e.g. pop up the transaction receipt (only reached after the server saved it)
           if (typeof opts.onSuccess === 'function') {
             try { opts.onSuccess(data, form, { json, beforeIds, itemBefore }); }
             catch (hookErr) { console.error('Receipt could not be shown:', hookErr); }
           }
         } catch (err) {
-          // e.g. "Cannot issue 500 pcs - only 120 in stock." Keep the modal open.
           showToast(err.message, 'error', 'bi-exclamation-triangle');
         }
-      }, true);  // <-- capture phase
+      }, true);
     };
 
-    /* Stock In doubles as "register a brand-new item + its first delivery"
-     (the old, separate Add Item module's job, folded directly into this
-     one form - no mode toggle to click first). inventory.html's item-name
-     box clears #stockInItemId the moment the typed text no longer matches
-     a selected item (see wireItemSearch), so itemId being empty at submit
-     time IS the signal that this is a new item, not an existing one:
-       itemId set   -> existing item -> /api/inventory/stock-in
-       itemId empty -> new item      -> /api/inventory/save, which creates
-                                         the material AND - since this is
-                                         its first stock - logs that
-                                         quantity as a RECEIPT so it shows
-                                         up in the Stock In table/report
-                                         like any other delivery. */
     wire('#stockInModal form',
       (d) => d.itemId ? '/api/inventory/stock-in' : '/api/inventory/save',
       (d) => (d.itemId
         ? { itemId: d.itemId, qty: d.qty, remarks: d.remarks }
-        // Stock In's "new item" path no longer asks for Reorder Level (it's
-        // still set explicitly via Add Item, or editable afterward from the
-        // item's own Edit form) - 0 is the same default Add Item's own
-        // Reorder Level field starts at.
         : { name: d.name, cat: d.cat, sup: d.sup, unit: d.unit, qty: d.qty, price: d.price, reorder: 0, loc: d.loc }),
       { successMsg: (d) => d.itemId ? 'Stock added to inventory' : 'New item added to inventory and stocked',
-        // Stock In receipt: exactly the item + quantity just received.
         onSuccess: (d, form, { json, beforeIds, itemBefore }) => {
           const code = d.itemId || json.code || json.id || '';
           const mv   = window.findNewMovement('RECEIPT', code, beforeIds, json.movementId);
@@ -690,20 +586,9 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         } });
 
-    /* Stock Out is now a multi-item request (cart-style). inventory.html
-     builds the cart and calls this on "Confirm Stock Out". The server
-     endpoint is unchanged (one item per POST, negative-stock guard on the
-     server), so rows are sent one at a time, in order. If a row fails, we
-     STOP there: rows already issued stay issued (reported back, never
-     resent) and the failed row + everything after it come back as
-     `remaining`. Inventory is re-fetched once at the end if anything was
-     issued so the on-hand numbers stay honest.
-       rows: [{ itemId, requestedQty, ... }], ref: project id (e.g. "PRJ-301")
-       returns { issued: [...], failed: { row, error } | null, remaining: [...] } */
     window.submitStockOutRequest = async (rows, ref, onProgress) => {
       const issued = [];
       const beforeIds = new Set((window.ALL_MOVEMENTS || []).map(m => m.movementId));
-      // After the re-fetch, tag each issued row with the movement it created.
       const tagIssued = () => issued.forEach(r => {
         const mv = window.findNewMovement('ISSUANCE', r.itemId, beforeIds, r.movementId);
         if (mv) { r.movementId = mv.movementId; beforeIds.add(mv.movementId); }
@@ -720,7 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
           try { json = await res.json(); }
           catch (_) { throw new Error(`The server returned an unexpected response (HTTP ${res.status}).`); }
           if (!json.ok) throw new Error(json.error || `Request failed (HTTP ${res.status}).`);
-          issued.push({ ...row, movementId: json.movementId });   // only rows the server actually deducted
+          issued.push({ ...row, movementId: json.movementId });
         } catch (err) {
           const error = err instanceof TypeError ? 'Could not connect to the server.' : err.message;
           if (issued.length) { await refreshInventory(); tagIssued(); }
@@ -733,18 +618,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     window.refreshInventory = refreshInventory;
 
-    // Record Return (Back Order) is no longer a single-item wire() form -
-    // it's a reference-code-driven, multi-item submit (pick a Stock Out
-    // reference, edit a Qty to Return per item it covers) handled entirely
-    // in inventory.html's own script, the same way Stock Out's cart is.
-    // See the "Record Return (Back Order)" block there.
-
-    // The Stock Out Request modal's Project dropdown needs CUSTOMERS +
-    // PROJECTS loaded on the Inventory page (they're not otherwise loaded
-    // here). We use a scoped endpoint (/api/inventory/projects-for-stockout)
-    // that returns only the fields the modal needs and is gated to
-    // "inventory" - so Inventory Personnel, who don't have "customers" or
-    // "projects" permission, can still pick a project when issuing stock.
     (async () => {
       try {
         const res  = await fetch('/api/inventory/projects-for-stockout');
@@ -761,43 +634,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof window.renderStockOutProjects === 'function') {
           window.renderStockOutProjects();
         }
-      } catch (_) { /* connection issues already surfaced by refreshInventory() */ }
+      } catch (_) { }
     })();
 
-    // Persist deletes: the page calls inventoryStore.remove(id) then re-renders.
-    // Wrap remove() so it also tells the server.
     if (typeof inventoryStore !== 'undefined') {
       const originalRemove = inventoryStore.remove;
       inventoryStore.remove = (id) => {
-        originalRemove(id);                 // optimistic local removal
+        originalRemove(id);
         fetch('/api/inventory/delete', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id }),
-        }).catch(() => {});
+        }).then(r => r.json()).then(j => {
+          if (!j.ok) showToast(j.error || 'Could not delete this item', 'error', 'bi-exclamation-triangle');
+        }).catch(() => showToast('Could not reach the server', 'error', 'bi-exclamation-triangle'))
+          .finally(() => refreshInventory());
       };
     }
 
-    refreshInventory();  // load real data on page open
+    refreshInventory();
   }
 
-  /* ---------------- Customers & Projects: back onto the database ------------
- Same pattern as inventory: load real rows on open, intercept the entity
- forms to persist via the API, and wrap store.remove() to persist deletes. */
   const wireEntityPage = (cfg) => {
     if (!document.getElementById(cfg.anchorId)) return;
     if (typeof window[cfg.arrayName] === 'undefined') return;
     const arr = window[cfg.arrayName];
     const store = window[cfg.storeName];
 
-    // Clear the demo/sample rows RIGHT NOW, synchronously - before the
-    // page's own inline script (which runs after this, since app.js
-    // loads first) gets a chance to paint them as if they were real.
-    // Without this, the page briefly shows plausible-looking but WRONG
-    // numbers (baked-in sample data) until the async fetch below
-    // resolves and replaces them - a confusing "flash of wrong data"
-    // that looks exactly like a real bug even though nothing is
-    // actually broken. Clearing first means the initial paint honestly
-    // shows an empty/loading state instead.
     arr.length = 0;
 
     const refresh = async () => {
@@ -811,10 +673,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (_) {}
     };
 
-    // Optional: expose a direct save-one-record function (not tied to the
-    // Add/Edit form) for pages that need to persist a change made outside
-    // that form - e.g. Suppliers' Deactivate/Reactivate button, which only
-    // flips `status` and shouldn't have to fake a form submit to do it.
     if (cfg.saveFnName) {
       window[cfg.saveFnName] = async (rec) => {
         const res = await fetch(cfg.saveUrl, {
@@ -862,7 +720,10 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch(cfg.deleteUrl, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id }),
-        }).catch(() => {});
+        }).then(r => r.json()).then(j => {
+          if (!j.ok) showToast(j.error || 'Could not delete this record', 'error', 'bi-exclamation-triangle');
+        }).catch(() => showToast('Could not reach the server', 'error', 'bi-exclamation-triangle'))
+          .finally(() => refresh());
       };
     }
 
@@ -881,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderName: 'renderSuppliers', formSelector: '[data-entity="suppliers"]',
     listUrl: '/api/suppliers', saveUrl: '/api/suppliers/save',
     deleteUrl: '/api/suppliers/delete', successMsg: 'Supplier saved',
-    saveFnName: 'saveSupplierRecord',   // used by the Deactivate/Reactivate button
+    saveFnName: 'saveSupplierRecord',
   });
 
   wireEntityPage({
@@ -889,26 +750,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderName: 'renderProjects', formSelector: '[data-entity="projects"]',
     listUrl: '/api/projects', saveUrl: '/api/projects/save',
     deleteUrl: '/api/projects/delete', successMsg: 'Project saved',
-    // /api/projects already returns the resolved display names (cust, staff),
-    // looked up by the database from the real customers/employees tables, so
-    // rows are used as-is. (This used to resolve names from hardcoded sample
-    // arrays, which showed the wrong name whenever a real code matched one.)
     mapRow: (r) => r,
   });
 
-  // --------------------------------------------------------------
-  // Dashboard page: pulls from PROJECTS, TRANSACTIONS, and INVENTORY
-  // all at once for its KPI cards + recent-transactions table. None of
-  // the wiring above engages here (it's all gated behind projBody/
-  // txnBody/stockInBody, which don't exist on this page), so without this
-  // block the dashboard would show data.js's sample numbers forever -
-  // not just a brief flash like the dedicated list pages, since nothing
-  // would ever fetch real data for it at all.
-  // --------------------------------------------------------------
   if (document.getElementById('dashKpiProjects')) {
-    // Clear sample rows immediately, before this page's own inline
-    // script paints them - see the matching comment on wireEntityPage
-    // for why this ordering matters (avoids a flash of demo numbers).
     if (typeof PROJECTS !== 'undefined') PROJECTS.length = 0;
     if (typeof TRANSACTIONS !== 'undefined') TRANSACTIONS.length = 0;
     if (typeof INVENTORY !== 'undefined') INVENTORY.length = 0;
@@ -924,7 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         arr.length = 0;
         json.data.forEach(r => arr.push(r));
-        (window.DASH_LOADED = window.DASH_LOADED || {})[label] = true;   // renderDashboard() waits on this
+        (window.DASH_LOADED = window.DASH_LOADED || {})[label] = true;
         if (typeof window.updateInventoryBadge === 'function') window.updateInventoryBadge();
         if (typeof window.renderDashboard === 'function') window.renderDashboard();
       } catch (err) {
@@ -933,34 +778,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 
-    // The KPI cards and the Recent Client Transactions table are filled
-    // from /api/dashboard above (aggregates + 5 latest rows), so the
-    // projects / transactions lists are NOT fetched here any more. They
-    // used to be, which (a) overwrote the monthly-transactions KPI with the
-    // all-time count and (b) threw "Could not load ... from the database"
-    // toasts for accounts without Projects / Transactions access (e.g.
-    // Inventory Personnel). The full inventory list is only needed for the
-    // Low Stock pop-up, so it is fetched only for accounts that may open
-    // the Inventory page.
     const _allowed = window.ALLOWED_PAGES || [];
     if (_allowed.includes('inventory')) loadDashboardData('/api/inventory', INVENTORY, 'inventory');
   }
 
-  // On the projects page, fill the "Assigned Personnel" dropdown from the
-  // employees table (it used to come from a hardcoded 5-person array).
   const projStaffSelect = document.getElementById('projStaffSelect');
   if (projStaffSelect) {
     fetch('/api/employees').then(r => r.json()).then(json => {
       if (!json.ok) return;
       EMPLOYEES.length = 0;
       json.data.forEach(e => EMPLOYEES.push(e));
-      projStaffSelect.innerHTML = json.data.map(e =>
+      projStaffSelect.innerHTML = '<option value="">Unassigned</option>' + json.data.map(e =>
         `<option value="${esc(e.id)}">${esc(e.name)}${e.status && e.status !== 'Active' ? ' (inactive)' : ''}</option>`).join('');
     }).catch(() => {});
   }
 
-  // On the projects page, fill the Customer dropdown from the REAL customer
-  // list so a saved project links to an actual customer record (not a sample).
   const projCustSelect = document.getElementById('projCustSelect');
   if (projCustSelect) {
     fetch('/api/customers').then(r => r.json()).then(json => {
@@ -970,20 +802,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(() => {});
   }
 
-  /* ---------------- Transactions: back onto the database -------------------
- The page renders through TRANSACTIONS + window.renderTransactions(). We
- load real rows, fill the Customer/Project/Material dropdowns from the DB,
- and intercept the create form. Saving a transaction also deducts the sold
- material from inventory server-side (Objective 1.3), with the same
- negative-stock guard as Stock Out. */
   if (document.getElementById('txnBody') && typeof TRANSACTIONS !== 'undefined') {
 
-    // Clear demo rows NOW, before the page's own inline script (runs
-    // right after this) paints them as if real. This is the fix for
-    // "the page briefly shows old numbers then switches to real ones" -
-    // that was always a harmless loading flash, never lost/wrong data,
-    // but it looked exactly like a bug. See the matching comment in
-    // wireEntityPage for the full explanation.
     TRANSACTIONS.length = 0;
 
     const refreshTxns = async () => {
@@ -999,18 +819,11 @@ document.addEventListener('DOMContentLoaded', () => {
         json.data.forEach(t => TRANSACTIONS.push(t));
         if (typeof window.renderTransactions === 'function') window.renderTransactions();
       } catch (err) {
-        // A network error, a non-JSON response (e.g. an HTML error page),
-        // or anything else unexpected lands here. This used to fail
-        // completely silently, leaving the page stuck showing whatever
-        // demo/sample rows were on screen before this call ran, with no
-        // indication anything was wrong - that's the exact bug behind
-        // "the page shows old data instead of the database."
         console.error('refreshTxns failed:', err);
         showToast('Could not connect to the server to load transactions', 'error', 'bi-exclamation-triangle');
       }
     };
 
-    // Populate the three dropdowns from real data.
     const fillSelect = (id, url, mapper, placeholder) => {
       const sel = document.getElementById(id);
       if (!sel) return;
@@ -1027,7 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fillSelect('txnMatSelect', '/api/inventory',
       m => `<option value="${m.name}" data-price="${m.price}">${m.name}</option>`, 'Select…');
 
-    // Auto-fill unit price when a material is chosen (nice touch, uses catalog price).
     document.getElementById('txnMatSelect')?.addEventListener('change', (e) => {
       const opt = e.target.selectedOptions[0];
       const priceInput = document.querySelector('#txnForm [name="price"]');
@@ -1073,21 +885,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ---------------- Login submit → real server-side check ---------------- */
   const loginForm = document.getElementById('loginForm');
   if (loginForm) {
+    const tfForm = document.getElementById('twoFactorForm');
+    const goNext = (json) => {
+      try { sessionStorage.removeItem('parabellum.stockAlertsShown'); } catch (_) {}
+      window.location.href = (json.mustChangePassword || json.setup2fa) ? '/profile' : '/dashboard';
+    };
+    const showErr = (box, msg) => { if (box) { box.textContent = msg; box.classList.remove('d-none'); } };
+
+    document.getElementById('forgotLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('forgotNote')?.classList.toggle('d-none');
+    });
+
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!loginForm.checkValidity()) { loginForm.classList.add('was-validated'); return; }
-
       const btn = document.getElementById('loginBtn');
       const errorBox = document.getElementById('loginError');
       errorBox?.classList.add('d-none');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Signing in…';
-      }
-
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Signing in\u2026';
       try {
         const res = await fetch('/api/login', {
           method: 'POST',
@@ -1095,216 +914,64 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({
             username: document.getElementById('username').value.trim(),
             password: document.getElementById('password').value,
+            remember: document.getElementById('remember')?.checked !== false,
           }),
         });
         const json = await res.json();
         if (!json.ok) throw new Error(json.error || 'Invalid username or password.');
-        // A fresh login: let the dashboard show its Stock Alerts pop-up once.
-        try { sessionStorage.removeItem('parabellum.stockAlertsShown'); } catch (_) {}
-        window.location.href = '/dashboard';
+        if (json.twoFactor) {
+          loginForm.classList.add('d-none');
+          tfForm.classList.remove('d-none');
+          document.getElementById('twoFactorCode').focus();
+          return;
+        }
+        goNext(json);
       } catch (err) {
-        if (errorBox) {
-          errorBox.textContent = err.message;
-          errorBox.classList.remove('d-none');
-        }
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i> Sign In';
-        }
+        showErr(errorBox, err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-box-arrow-in-right me-1"></i> Sign In';
       }
+    });
+
+    tfForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const codeEl = document.getElementById('twoFactorCode');
+      const box = document.getElementById('twoFactorError');
+      const btn = document.getElementById('twoFactorBtn');
+      box.classList.add('d-none');
+      if (!/^\d{6}$/.test(codeEl.value.trim())) { showErr(box, 'Enter the 6-digit code.'); return; }
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/login/2fa', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: codeEl.value.trim() }),
+        });
+        const json = await res.json();
+        if (json.ok) { goNext(json); return; }
+        if (json.restart) {
+          tfForm.classList.add('d-none'); loginForm.classList.remove('d-none');
+          document.getElementById('password').value = '';
+          showErr(document.getElementById('loginError'), json.error);
+          return;
+        }
+        showErr(box, json.error || 'That code is not correct.');
+        codeEl.select();
+      } catch (_) {
+        showErr(box, 'Could not reach the server.');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    document.getElementById('twoFactorCode')?.addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+      if (e.target.value.length === 6) tfForm.requestSubmit();
+    });
+    document.getElementById('twoFactorBack')?.addEventListener('click', () => {
+      fetch('/api/logout', { method: 'POST' }).finally(() => window.location.reload());
     });
   }
 
-  /* ---------------- Forecasting: LIVE Multiple Linear Regression --------------
- Calls POST /api/forecast. Flask trains the model on monthly_demand,
- evaluates it on months it never saw, forecasts NEXT MONTH for every
- material, and returns real MAE / RMSE / MAPE / R2.
- --------------------------------------------------------------------------- */
-  const fcSelect = document.getElementById('fcMaterialSelect');
-  if (fcSelect) {
-    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
-    let RESULT = null;   // the last full forecast run
-
-    const showError = (msg) => {
-      ['kpiMaterial','kpiPredicted','kpiReorder','fcResMaterial',
-       'fcResPredicted','fcResMonth','fcResStock','fcResTrend','fcResConf',
-       'fcMAE','fcRMSE','fcMAPE','fcR2',
-       'fcWxTemp','fcWxRain','fcWxDays','fcWxIndex','fcWxSource'].forEach(id => set(id, '—'));
-      setHTML('fcResReorder', `<span class="text-danger fw-semibold">${msg}</span>`);
-      setHTML('fcWxInsight', '—');
-      if (!fcSelect.value) fcSelect.innerHTML = '<option value="">Unavailable</option>';
-      const bar = document.getElementById('fcWxBar');
-      if (bar) bar.style.width = '0%';
-      const badge = document.getElementById('fcWxBadge');
-      if (badge) { badge.textContent = '—'; badge.className = 'badge'; }
-    };
-
-    const render = (name) => {
-      if (!RESULT) return;
-      const f = RESULT.forecasts.find(x => x.material_name === name) || RESULT.forecasts[0];
-      if (!f) return;
-      const m = RESULT.metrics;
-
-      set('fcResMaterial',  f.material_name);
-      set('fcResMonth',     RESULT.forecast_month);
-      set('fcResPredicted', f.predicted_demand + ' ' + f.unit);
-      set('fcResStock',     f.current_stock + ' ' + f.unit);
-      set('fcResTrend',     f.prev_demand
-                              ? (((f.predicted_demand - f.prev_demand) / f.prev_demand * 100)
-                                  .toFixed(1) + '%')
-                              : '—');
-      set('fcResConf',      'R² ' + m.r2);
-
-      set('fcMAE',  m.mae);
-      set('fcRMSE', m.rmse);
-      set('fcMAPE', m.mape === null ? 'n/a' : m.mape + '%');
-      set('fcR2',   m.r2);
-
-      set('kpiMaterial',  f.material_name.replace(/\s*\(.*\)/, ''));
-      set('kpiPredicted', f.predicted_demand);
-      set('kpiReorder',   f.reorder_qty);
-      set('fcUpdated',    new Date().toLocaleString());
-
-      setHTML('fcResReorder', f.reorder_qty > 0
-        ? `Restock about <strong>${f.reorder_qty} ${f.unit}</strong> before ${RESULT.forecast_month} to meet the predicted demand.`
-        : `Current stock is sufficient for the predicted demand in ${RESULT.forecast_month}. No restock needed yet.`);
-
-      // Weather Outlook panel -- forecast-month conditions plus THIS material's
-      // own weather->demand relationship (from its per-material MLR fit).
-      const wx = RESULT.weather;
-      if (wx) {
-        set('fcWxTemp',   wx.avg_temp_c + '°C');
-        set('fcWxRain',   wx.total_rainfall_mm + ' mm');
-        set('fcWxDays',   wx.rainy_days + ' days');
-        set('fcWxIndex',  wx.favorability_index + ' / 100 — ' + wx.favorability_label);
-        set('fcWxSource', wx.source);
-
-        let insightHTML = f.weather_insight || '—';
-        if (f.sample_size_warning) {
-          insightHTML += ` <span class="text-warning-emphasis">` +
-                         `(Based on only ${f.training_rows} months of history — ` +
-                         `treat this coefficient as tentative until more data accumulates.)</span>`;
-        }
-        if (f.model_type === 'pooled fallback') {
-          insightHTML = `<div class="mb-1"><span class="badge b-warning">Pooled fallback</span> ` +
-                        `Not enough history for a material-specific model yet.</div>` + insightHTML;
-        }
-        setHTML('fcWxInsight', insightHTML);
-
-        const bar = document.getElementById('fcWxBar');
-        if (bar) {
-          bar.style.width = wx.favorability_index + '%';
-          bar.className = 'progress-bar ' + (
-            wx.favorability_label === 'Favorable'   ? 'bg-success' :
-            wx.favorability_label === 'Moderate'    ? 'bg-warning' : 'bg-danger'
-          );
-        }
-        const badge = document.getElementById('fcWxBadge');
-        if (badge) {
-          badge.textContent = wx.favorability_label;
-          badge.className = 'badge ' + (
-            wx.favorability_label === 'Favorable'   ? 'b-success' :
-            wx.favorability_label === 'Moderate'    ? 'b-warning' : 'b-danger'
-          );
-        }
-      }
-
-      // Repaint the three forecasting charts with the selected material's real
-      // history from the DB (last 6 months), plus the MLR-predicted dot.
-      const history = f.history || [];
-      const fcLabel = f.forecast_label || RESULT.forecast_month;
-      if (typeof window.updateForecastChart === 'function')
-        window.updateForecastChart(history, fcLabel, f.predicted_demand);
-      if (typeof window.updateHistoricalChart === 'function')
-        window.updateHistoricalChart(RESULT.forecasts);   // all materials, not just the selected one
-      if (typeof window.updateInventoryChart === 'function')
-        window.updateInventoryChart(history);
-
-      // Also fill the all-materials forecast table.
-      if (typeof window.updateForecastTable === 'function')
-        window.updateForecastTable(RESULT);
-    };
-
-    window.updateForecastTable = (R) => {
-      const tbody = document.getElementById('forecastAllBody');
-      const monthBadge = document.getElementById('fcTableMonth');
-      if (!tbody) return;
-      const forecasts = (R && R.forecasts) || [];
-      if (monthBadge) monthBadge.textContent = R && R.forecast_month ? R.forecast_month : '—';
-      if (!forecasts.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted-2 py-4">No forecasts yet.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = forecasts.map(f => {
-        const trend = f.prev_demand
-          ? (((f.predicted_demand - f.prev_demand) / f.prev_demand) * 100)
-          : null;
-        const trendCell = trend === null
-          ? '<span class="text-muted-2">—</span>'
-          : (trend >= 0
-              ? `<span class="text-danger"><i class="bi bi-arrow-up"></i> ${trend.toFixed(1)}%</span>`
-              : `<span class="text-success"><i class="bi bi-arrow-down"></i> ${Math.abs(trend).toFixed(1)}%</span>`);
-        const restockCell = f.reorder_qty > 0
-          ? `<span class="fw-semibold" style="color:var(--primary)">${f.reorder_qty} ${escapeHTML(f.unit)}</span>`
-          : '<span class="text-success">Enough stock</span>';
-        const modelCell = f.model_type === 'pooled fallback'
-          ? '<span class="badge b-warning">Pooled fallback</span>'
-          : '<span class="badge b-success">Per-material</span>';
-        return `<tr>
-          <td><div class="fw-medium">${escapeHTML(f.material_name)}</div></td>
-          <td class="text-end">${f.current_stock} <span class="text-muted-2">${escapeHTML(f.unit)}</span></td>
-          <td class="text-end fw-semibold">${f.predicted_demand} <span class="text-muted-2">${escapeHTML(f.unit)}</span></td>
-          <td class="text-end">${trendCell}</td>
-          <td class="text-end">${restockCell}</td>
-          <td>${modelCell}</td>
-        </tr>`;
-      }).join('');
-    };
-
-    const runForecast = async () => {
-      fcSelect.disabled = true;
-      set('fcResPredicted', 'Running model…');
-      try {
-        const res  = await fetch('/api/forecast', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
-        });
-        const json = await res.json();
-        if (!json.ok) throw new Error(json.error);
-
-        RESULT = json.data;
-
-        const chosen = fcSelect.value;
-        fcSelect.innerHTML = '';
-        RESULT.forecasts.forEach(f => {
-          const o = document.createElement('option');
-          o.value = o.textContent = f.material_name;
-          fcSelect.appendChild(o);
-        });
-        if (RESULT.forecasts.some(f => f.material_name === chosen)) fcSelect.value = chosen;
-
-        render(fcSelect.value);
-
-        // Newly saved forecast rows should show up immediately in the
-        // Prediction History table below.
-        if (typeof window.reloadForecastHistory === 'function')
-          window.reloadForecastHistory();
-      } catch (err) {
-        showError(err.message);
-      } finally {
-        fcSelect.disabled = false;
-      }
-    };
-
-    fcSelect.addEventListener('change', () => render(fcSelect.value));
-    const runBtn = document.getElementById('fcRunBtn');
-    if (runBtn) runBtn.addEventListener('click', runForecast);
-    runForecast();
-  }
-
-  /* ---------------- Dashboard: inventory-usage timeframe toggle (Daily / Weekly / Monthly) ---------------- */
   const usageToggle = document.getElementById('usageToggle');
   if (usageToggle && typeof window.updateUsageChart === 'function') {
     const rangeLabel = document.getElementById('usageRangeLabel');
@@ -1318,7 +985,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* ---------------- Projects: Table / Gallery view toggle ---------------- */
   const projViewToggle = document.getElementById('projViewToggle');
   if (projViewToggle) {
     const tableView   = document.getElementById('projTableView');
@@ -1334,17 +1000,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* ---------------- Print (invoice / report) ---------------- */
   document.querySelectorAll('[data-print]').forEach(btn => {
     btn.addEventListener('click', () => window.print());
   });
 
-  /* ---------------- Export buttons: REAL PDF / Excel downloads ----------------
- Buttons with data-report + data-format hit the real export endpoint,
- which generates the file server-side from the live database and the
- browser downloads it directly. Buttons without those attributes (the
- bulk "Recent Reports" header buttons) keep the old placeholder toast -
- there isn't a single report type for them to export yet. */
   document.querySelectorAll('[data-export]').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.report;
@@ -1358,13 +1017,52 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ---------------- Settings theme toggle (demo) ---------------- */
-  document.querySelectorAll('[data-theme-swatch]').forEach(sw => {
-    sw.addEventListener('click', () => {
-      document.querySelectorAll('[data-theme-swatch]').forEach(s => s.classList.remove('active'));
-      sw.classList.add('active');
-      showToast('Theme preference saved', 'success');
-    });
+});
+
+/* KPI tiles */
+document.addEventListener('DOMContentLoaded', () => {
+  const allowed = window.ALLOWED_PAGES || [];
+  const tiles = [...document.querySelectorAll('.stat-card[data-kpi]')];
+  tiles.forEach(t => {
+    const href = t.dataset.kpiHref;
+    if (href) {
+      const page = href.replace(/^\//, '').split(/[?#]/)[0];
+      if (page && !allowed.includes(page)) { t.removeAttribute('data-kpi'); return; }
+    }
+    t.setAttribute('role', 'button');
+    t.setAttribute('tabindex', '0');
   });
 
+  const select = (tile) => {
+    const on = tile && !tile.classList.contains('is-selected');
+    tiles.forEach(x => x.classList.remove('is-selected'));
+    if (on) tile.classList.add('is-selected');
+    return on;
+  };
+
+  const activate = (tile) => {
+    if (!tile.hasAttribute('data-kpi')) return;
+    if (tile.dataset.kpiHref) { window.location.href = tile.dataset.kpiHref; return; }
+    if (tile.dataset.kpiScroll) {
+      document.querySelector(tile.dataset.kpiScroll)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const on = tile.dataset.kpi === 'all' ? (select(null), false) : select(tile);
+    if (typeof window.onKpiFilter === 'function') window.onKpiFilter(on ? tile.dataset.kpi : null);
+    const list = document.querySelector('.table-wrap');
+    if (on && list) list.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  tiles.forEach(t => {
+    t.addEventListener('click', () => activate(t));
+    t.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(t); } });
+  });
+
+  window.clearKpiSelection = () => tiles.forEach(x => x.classList.remove('is-selected'));
+
+  const fromUrl = new URLSearchParams(window.location.search).get('kpi');
+  if (fromUrl) {
+    const t = tiles.find(x => x.dataset.kpi === fromUrl && !x.dataset.kpiHref && !x.dataset.kpiScroll);
+    if (t) setTimeout(() => activate(t), 0);
+  }
 });

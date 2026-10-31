@@ -1,134 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inventory · Parabellum ISOS</title>
-  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
-  <!-- Google Font: Poppins -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Bootstrap 5 + Icons (CDN) -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <!-- Custom design system -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-</head>
-<body>
-<div class="backdrop"></div>
-<div class="app">
-  <!-- ============ SIDEBAR ============ -->
-  <aside class="sidebar">
-    <div class="sidebar__brand d-flex align-items-center gap-2">
-      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
-      <div>
-        <div class="brand-name">PARABELLUM</div>
-        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
-      </div>
-    </div>
-
-    <div class="sidebar__user">
-      <div class="avatar-gold">{{ current_user_initials }}</div>
-      <div>
-        <div class="u-name">{{ current_user.name }}</div>
-        <div class="u-role">{{ current_user.role }}</div>
-      </div>
-    </div>
-
-    <nav class="sidebar__nav">
-      <div class="nav-section">MAIN</div>
-      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
-      <div class="nav-section">INVENTORY &amp; SALES</div>
-      {% if 'inventory' in allowed_pages %}<a class="nav-link active" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger{% if not inventory_oos_count %} d-none{% endif %}">{{ inventory_oos_count }}</span></a>{% endif %}
-      {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
-      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
-      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
-      {% if 'transactions' in allowed_pages %}<a class="nav-link" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
-      <div class="nav-section">INTELLIGENCE</div>
-      {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
-      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
-      <div class="nav-section">SYSTEM</div>
-      {% if 'settings' in allowed_pages %}<a class="nav-link" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
-      {% if 'profile' in allowed_pages %}<a class="nav-link" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
-    </nav>
-
-    <div class="sidebar__footer">
-      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
-        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
-      </a>
-    </div>
-  </aside>
-  <!-- ============ MAIN ============ -->
-  <div class="main">
-    <!-- ============ TOPBAR ============ -->
-    <header class="topbar">
-      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
-
-      <div class="topbar__search dropdown">
-        <i class="bi bi-search"></i>
-        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
-               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
-        <ul class="dropdown-menu dropdown-panel mt-2">
-          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
-          <a href="/inventory" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
-            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
-          </a>
-          <a href="/suppliers" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-truck"></i></div>
-            <div><div class="dp-title text-dark">Search Suppliers</div><div class="dp-time">Open suppliers module</div></div>
-          </a>
-          <a href="/customers" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
-            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
-          </a>
-          <a href="/projects" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
-            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
-          </a>
-          <a href="/transactions" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
-            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
-          </a>
-        </ul>
-      </div>
-
-      <div class="topbar__actions">
-        <!-- Notifications -->
-        <div class="dropdown">
-          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
-            <i class="bi bi-bell"></i><span class="dot d-none" data-notif-dot></span>
-          </button>
-          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
-            <div class="dp-head"><h6>Notifications</h6><span class="badge b-neutral" data-notif-count>0</span></div>
-            <div data-notif-list><div class="text-center text-muted-2 small py-3">Loading…</div></div>
-          </div>
-        </div>
-
-        <!-- Help -->
-        <button class="icon-btn" data-bs-toggle="tooltip" title="Need help? Contact the Administrator" aria-label="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
-
-        <!-- Profile -->
-        <div class="dropdown">
-          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
-            <div class="avatar-sm">{{ current_user_initials }}</div>
-            <div class="p-meta">
-              <div class="p-name">{{ current_user.name }}</div>
-              <div class="p-role">{{ current_user.role }}</div>
-            </div>
-            <i class="bi bi-chevron-down small text-muted-2"></i>
-          </div>
-          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
-            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
-            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
-          </ul>
-        </div>
-      </div>
-    </header>
-    <main class="page">
+{% extends "layout.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
       <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Inventory</li></ol></nav>
       <div class="page-head">
         <div>
@@ -136,12 +8,6 @@
           <p class="page-subtitle">Track stock levels, suppliers, and material movement.</p>
         </div>
       </div>
-      <!-- Attention lists: Low Stock / Out of Stock / New Stock Materials
-           (data-driven from INVENTORY and ALL_MOVEMENTS). The old KPI stat
-           cards (Total Items / In Stock / Low Stock / Out of Stock) and the
-           Stock Summary panel that used to sit here were removed per client
-           request - Stock Summary now lives on the Reports page as its own
-           card instead (see reports.html). -->
       <div class="row g-3 mb-4">
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
@@ -159,13 +25,6 @@
           <p class="panel-sub mb-2">Items that need immediate reordering.</p>
           <div class="stock-list" id="outStockList"></div>
         </div></div></div>
-        <!-- New Stock Materials: today's Stock In (RECEIPT) movements only,
-             most-recent-first. ALL_MOVEMENTS already comes back from the
-             server sorted by movement_date DESC, movement_id DESC, and
-             movement_id increases with insertion order, so filtering to
-             today's date and keeping that order is also sorted by time -
-             there's no separate time-of-day column to sort by (movement_date
-             is a DATE, not a timestamp). -->
         <div class="col-md-6 col-xl-4"><div class="card h-100"><div class="card-body">
           <div class="card-title-row">
             <h2 class="panel-title"><i class="bi bi-clock-history me-2" style="color:var(--primary)"></i>New Stock Materials</h2>
@@ -178,9 +37,6 @@
 
       <div class="card mb-4">
         <div class="card-body">
-          <!-- Toolbar (classmate's layout: filters on top row, action buttons
-               on a separate row underneath so nothing gets squeezed on the
-               right side and everything stays reachable at narrower widths) -->
           <div class="toolbar">
             <div class="search-box"><i class="bi bi-search"></i>
               <input type="text" class="form-control" id="moveSearchInput" placeholder="Search item name or ID…">
@@ -197,18 +53,8 @@
               <input type="date" class="form-control form-control-sm" style="max-width:160px" id="moveDateTo">
               <button type="button" class="btn btn-light-2 btn-sm" id="moveDateClearBtn" title="Clear search and date filter"><i class="bi bi-x-lg"></i></button>
             </div>
-            <!-- "Search" button - applies whatever's already typed/picked in
-                 #moveSearchInput (item name/ID) and the From/To date range
-                 above to the Stock In / Stock Out / Back Orders tables below.
-                 Those controls already filter live as you type/pick them;
-                 this button is an explicit, discoverable way to trigger the
-                 same search rather than a separate filter field of its own
-                 (the inline "Filter movement records…" bar this used to
-                 reveal has been removed). -->
             <button type="button" class="btn btn-primary btn-sm" id="stockTableSearchBtn"><i class="bi bi-search me-1"></i>Search</button>
           </div>
-          <!-- Row 2: stock movement actions, left-aligned under the filter row.
-               The .toolbar's own bottom margin provides the spacing between rows. -->
           <div class="d-flex flex-wrap align-items-center gap-2">
             <button class="btn btn-light-2 btn-sm" data-bs-toggle="modal" data-bs-target="#stockInModal"><i class="bi bi-box-arrow-in-down me-1"></i>Stock In</button>
             <button class="btn btn-light-2 btn-sm" data-bs-toggle="modal" data-bs-target="#stockOutModal"><i class="bi bi-box-arrow-up me-1"></i>Stock Out</button>
@@ -218,12 +64,6 @@
       </div>
 
       <!-- Stock Movement Summary table -->
-      <!-- Per-item aggregate: Total In (RECEIPT), Total Out (ISSUANCE),
-           and Back Orders (material that came back from a customer,
-           from its own back_orders table). Net Stock = In - Out + any
-           Back Orders marked "Replaced" (the only disposition that
-           adds back into current_stock - see _set_back_order_disposition
-           in app.py and /api/inventory/summary's query). -->
       <div class="card mb-4">
         <div class="card-body">
           <div class="card-title-row mb-2">
@@ -237,6 +77,7 @@
               <th class="text-end">Total Out</th>
               <th class="text-end">Back Orders</th>
               <th class="text-end">Net Stock</th>
+              <th class="text-center">Actions</th>
             </tr></thead>
             <tbody id="stockSummaryBody"></tbody>
           </table></div>
@@ -289,7 +130,6 @@
         </div>
       </div>
 
-      <!-- Back Orders (Returns from Customers) table -->
       <div class="card">
         <div class="card-body">
           <div class="card-title-row mb-2">
@@ -311,13 +151,6 @@
       </div>
 
       <!-- Stock In Modal -->
-      <!-- Also doubles as "Add Item": the old, separate Add Item module's
-           job (register a brand-new material) is folded directly into this
-           one form - no mode switch to click first. Search for an existing
-           item, or just type a name that isn't in the list yet and fill in
-           its details below; which happens is decided automatically at
-           submit time by whether an existing item was actually selected
-           (see wire('#stockInModal form', …) in app.js), not by a toggle. -->
       <div class="modal fade" id="stockInModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-arrow-in-down me-2 text-success"></i>Stock In</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate data-reset data-entity="stock-in" data-success-msg="Stock added to inventory">
@@ -338,14 +171,6 @@
             <div class="form-text">Pick a match from the list to stock an existing item, leave it unmatched and fill in the details below to add it as a new item, or use <strong>Add Item</strong> above to register one with a supplier picked from the list.</div>
           </div>
 
-          <!-- Only used when the name above doesn't match an existing item
-               (itemId stays empty) - same fields the old, separate Add Item
-               module used. Always visible in the same place; nothing to
-               click to reveal them. When an EXISTING item is picked instead,
-               Supplier and Unit Price switch to read-only and auto-fill from
-               that item's own record (see wireItemSearch's onSelect/onClear
-               below) - purely informational, since stocking an existing item
-               never touches those fields on the server either way. -->
           <div class="col-md-6"><label class="form-label">Category <span class="text-muted-2 fw-normal">(new item only)</span></label><select class="form-select" name="cat"><option value="" selected disabled hidden>Select&hellip;</option><option>Bars</option><option>Plates</option><option>Sheets</option><option>Tubes &amp; Pipes</option><option>Beams</option><option>Fasteners</option><option>Consumables</option></select></div>
           <div class="col-md-6 position-relative">
             <div class="d-flex justify-content-between align-items-end">
@@ -367,14 +192,6 @@
         </form>
       </div></div></div>
 
-      <!-- Add Item Modal - registers a brand-new material against an existing
-           supplier, with no stock movement implied (Initial Stock defaults to
-           0). This is a standalone counterpart to Stock In's own "type a new
-           item name" path - that one still works and is for "I'm receiving a
-           delivery of something not yet in the catalog", this one is for
-           "just register the item". Both end up at the same /api/inventory/save
-           endpoint, the only difference is this form's Supplier is a required
-           picker from the real Suppliers list, not a free-text/typed field. -->
       <div class="modal fade" id="addItemModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-plus-lg me-2" style="color:var(--primary)"></i>Add Item</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate id="addItemForm">
@@ -400,10 +217,6 @@
         </form>
       </div></div></div>
 
-      <!-- Add Supplier Modal - same fields/endpoint as the Suppliers page's
-           own Add Supplier form (/api/suppliers/save), offered here too so a
-           supplier can be registered without leaving Inventory mid-task
-           (e.g. right before using it in Add Item or Stock In above). -->
       <div class="modal fade" id="addSupplierModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-truck me-2" style="color:var(--primary)"></i>Add Supplier</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form class="needs-validation" novalidate id="addSupplierForm">
@@ -423,11 +236,6 @@
         </form>
       </div></div></div>
 
-      <!-- Stock Out Modal - "Stock Out Request" (cart-style) flow:
-           1) pick the Project (its client, address and contact fill in),
-           2) add items to the request table - nothing in inventory changes yet,
-           3) Confirm Stock Out issues each row through /api/inventory/stock-out.
-           The cart lives only in memory (stockOutCart in the script below). -->
       <div class="modal fade" id="stockOutModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-arrow-up me-2 text-danger"></i>Stock Out Request</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form id="stockOutForm" novalidate>
@@ -437,7 +245,6 @@
             <div class="small text-muted-2">Date: <span class="fw-medium" id="stockOutDate">—</span></div>
           </div>
 
-          <!-- a) Client / Project - picked first -->
           <div class="col-12"><div class="section-label text-muted-2 small fw-semibold">1 · Client / Project</div></div>
           <div class="col-md-6">
             <label class="form-label" for="stockOutProject">Project</label>
@@ -449,7 +256,6 @@
           <div class="col-md-6"><label class="form-label">Address</label><div class="form-control-plaintext fw-medium" id="stockOutAddress">—</div></div>
           <div class="col-md-6"><label class="form-label">Contact</label><div class="form-control-plaintext fw-medium" id="stockOutContact">—</div></div>
 
-          <!-- b) Add item to request - only fills the table below, never touches inventory -->
           <div class="col-12"><div class="section-label text-muted-2 small fw-semibold mt-1">2 · Add materials to the request</div></div>
           <div class="col-md-6 position-relative">
             <label class="form-label" for="stockOutCartItemSearch">Item</label>
@@ -488,22 +294,12 @@
             <div class="small text-muted-2 mt-2"><i class="bi bi-info-circle me-1"></i>Items in this list are only reserved for the request. Inventory is reduced when you confirm.</div>
           </div>
 
-          <!-- Result of a partly-failed confirm (hidden otherwise) -->
           <div class="col-12"><div class="alert alert-warning small mb-0 d-none" id="stockOutResult" role="alert"></div></div>
         </div></div>
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="stockOutConfirmBtn" disabled>Confirm Stock Out</button></div>
         </form>
       </div></div></div>
 
-      <!-- Return (Back Order) Modal - built around the Stock Out Reference
-           Code rather than a bare item picker: pick the reference used when
-           the materials were stocked out (the same "Purpose / Reference"
-           shown on the Stock Out receipt), and every item issued under it
-           appears in an editable table below - set a Qty to Return on
-           whichever rows are actually coming back. Confirm posts one
-           /api/inventory/return call per row with a quantity, the same
-           one-row-at-a-time pattern Stock Out's own cart uses (see
-           window.submitStockOutRequest in app.js). -->
       <div class="modal fade" id="returnModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2" style="color:var(--primary)"></i>Record Return (Back Order)</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <form id="returnForm" novalidate>
@@ -527,11 +323,6 @@
             </table></div>
             <div class="small text-muted-2 mt-1">Leave an item's Qty to Return at 0 to leave it out of this return.</div>
           </div>
-          <!-- Who processed/received this return, not who sent it back - the
-               project above already identifies the client/project side, so
-               this is simply the logged-in account handling it, same as
-               "Recorded by" at the top of this form. Read-only for that
-               reason (it's not information to type in). -->
           <div class="col-md-6"><label class="form-label">Received By</label><input class="form-control bg-light" name="customer" value="{{ current_user.name }}" readonly></div>
           <div class="col-md-6"><label class="form-label">Reason for Return</label><input class="form-control" name="remarks" placeholder="e.g. Wrong size delivered, item unused"></div>
         </div></div>
@@ -543,7 +334,6 @@
         </form>
       </div></div></div>
 
-      <!-- Item Detail Modal (Supplier & Location live here) -->
       <div class="modal fade" id="invDetailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-box-seam me-2" style="color:var(--primary)"></i>Item Details</h5>
           <button class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -565,20 +355,55 @@
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Close</button></div>
       </div></div></div>
 
-      <!-- Back Order Disposition Modal - opened from the Back Orders table's
-           Reimbursed/Replaced buttons when newly marking one (clicking an
-           ALREADY-marked button still clears it instantly, no popup needed
-           to undo - see handleRowAction). The item, supplier and receiver
-           are read-only here (same field style as the Item Detail modal
-           above) since they're just confirming an existing record, not
-           editing it; the one number that actually varies per case - how
-           many units were really replaced, or how much was paid back -
-           stays editable, alongside a remarks field for the disposition
-           itself (condition on return, how the refund was given, etc.),
-           kept separate from the return's original reason. Modeled on
-           Record Return's own "confirm the specifics, then post" shape,
-           just for the Replaced/Reimbursed side of a back order instead of
-           the return itself. -->
+      <div class="offcanvas offcanvas-end" tabindex="-1" id="editItemSidebar" aria-labelledby="editItemSidebarLabel" style="width:420px;max-width:100vw">
+        <div class="offcanvas-header">
+          <h5 class="offcanvas-title" id="editItemSidebarLabel"><i class="bi bi-pencil-square me-2" style="color:var(--primary)"></i>Edit Item</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <form id="editItemForm" novalidate class="offcanvas-body d-flex flex-column">
+          <input type="hidden" name="edit_id" id="editItemEditId">
+          <div class="mb-3 small text-muted-2">
+            Item Code: <span class="fw-medium text-dark" id="editItemCode">—</span>
+          </div>
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">Item Name</label>
+              <input class="form-control" name="name" id="editItemName" required>
+              <div class="invalid-feedback">Item name is required.</div></div>
+            <div class="col-md-6"><label class="form-label">Category</label>
+              <select class="form-select" name="cat" id="editItemCat">
+                <option value="" disabled hidden>Select…</option>
+                <option>Bars</option><option>Plates</option><option>Sheets</option>
+                <option>Tubes &amp; Pipes</option><option>Beams</option>
+                <option>Fasteners</option><option>Consumables</option>
+              </select></div>
+            <div class="col-md-6"><label class="form-label">Supplier</label>
+              <select class="form-select" name="sup" id="editItemSupplier" required></select>
+              <div class="invalid-feedback">Choose the supplier for this item.</div></div>
+            <div class="col-md-6"><label class="form-label">Unit</label>
+              <select class="form-select" name="unit" id="editItemUnit">
+                <option>pcs</option><option>kg</option><option>sheets</option>
+                <option>length</option><option>roll</option><option>box</option>
+              </select></div>
+            <div class="col-md-6"><label class="form-label">Unit Price (₱)</label>
+              <input type="number" class="form-control" name="price" id="editItemPrice" value="0.00" step="0.01" min="0"></div>
+            <div class="col-md-6"><label class="form-label">Reorder Level</label>
+              <input type="number" class="form-control" name="reorder" id="editItemReorder" value="0" min="0"></div>
+            <div class="col-md-6"><label class="form-label">Location</label>
+              <select class="form-select" name="loc" id="editItemLoc">
+                <option>Warehouse A</option><option>Warehouse B</option>
+                <option>Yard 1</option><option>Yard 2</option>
+              </select></div>
+          </div>
+          <div class="small text-muted-2 mt-3">
+            <i class="bi bi-info-circle me-1"></i>Stock on hand (<span id="editItemOnHand">—</span>) is changed through Stock In and Stock Out, not here.
+          </div>
+          <div class="mt-auto d-flex justify-content-end gap-2 pt-3">
+            <button type="button" class="btn btn-light-2" data-bs-dismiss="offcanvas">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="editItemSaveBtn"><i class="bi bi-check-lg me-1"></i>Save Changes</button>
+          </div>
+        </form>
+      </div>
+
       <div class="modal fade" id="dispositionModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title" id="dispoTitle"><i class="bi bi-check2-circle me-2" style="color:var(--primary)"></i>Mark as Replaced</h5>
           <button class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -618,8 +443,6 @@
         </form>
       </div></div></div>
 
-      <!-- Mark Delivery Failed modal (TEMPORARY - delivery confirmation).
-           Asks for the reason this Stock Out did not push through. -->
       <div class="modal fade" id="deliverFailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-x-octagon me-2 text-danger"></i>Mark Delivery as Failed</h5>
           <button class="btn-close" data-bs-dismiss="modal"></button></div>
@@ -641,1675 +464,14 @@
         </form>
       </div></div></div>
 
-      <!-- Transaction receipt: pops up after Confirm (Stock In / Stock Out / Back
-           Order) and when reprinting a row. Printing is optional - Close skips it.
-           Content comes from showTransactionReceipt() in app.js. -->
       <div class="modal fade" id="moveSlipModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
         <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt me-2" style="color:var(--primary)"></i>Receipt</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body" id="moveSlipBody"></div>
         <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" data-print><i class="bi bi-printer me-1"></i>Print Receipt</button></div>
       </div></div></div>
-
-    </main>
-      <footer class="app-footer">
-        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
-        <div class="d-flex gap-3">
-          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
-          <span class="text-muted-2">v1.0.0</span>
-        </div>
-      </footer>
-  </div>
-</div>
-  <!-- Scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}
+{% block scripts %}
   <script src="{{ url_for('static', filename='js/data.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const set = (id,val)=>{ const el=document.getElementById(id); if(el) el.textContent=val; };
-      let currentDetailId = null;
-
-      // Shared by every .item-search-results dropdown below (item pickers,
-      // supplier pickers, the Back Order reference picker). The dropdown is
-      // position:absolute, so a long result list doesn't add any scrollable
-      // height to the modal itself - if it runs past the bottom of the
-      // screen there is nothing to scroll to reveal the rest of it. Clamping
-      // its max-height to whatever room is actually left below the input
-      // (floor 100px, same 220px ceiling as the CSS default) means the
-      // dropdown always fits on screen and scrolls internally instead -
-      // it already has overflow-y:auto for that.
-      function fitSearchResults(input, results){
-        const rect = input.getBoundingClientRect();
-        const spaceBelow = window.innerHeight - rect.bottom - 16;
-        results.style.maxHeight = Math.max(100, Math.min(220, spaceBelow)) + 'px';
-      }
-
-      /* ---------- Searchable item picker (Stock In / Stock Out modals) ----------
-       Replaces the old plain "Choose item…" dropdown with a text search box
-       that filters the live materials list as you type. Selecting a result
-       fills a hidden input with the material's real id/code, which is what
-       actually gets submitted - the visible box just shows the chosen name. */
-      function wireItemSearch(searchId, hiddenId, resultsId, opts = {}){
-        const searchInput = document.getElementById(searchId);
-        const hiddenInput = document.getElementById(hiddenId);
-        const results = document.getElementById(resultsId);
-        if (!searchInput || !hiddenInput || !results) return;
-        // Stock In also accepts a name that matches nothing (that's a new
-        // item, not an error), so it skips the "must pick from the list"
-        // validation message the other two item pickers still enforce.
-        const allowUnmatched = !!opts.allowUnmatched;
-        const unmatchedMsg = allowUnmatched ? '' : 'Search and select an item from the list.';
-
-        // Stock Out only: there's nothing to issue from an out-of-stock item
-        // (addToStockOutCart already refuses it), so flag it red in the
-        // dropdown itself rather than letting someone pick it and only then
-        // find out. Stock In / Return don't set this - 0 on hand is a normal,
-        // pickable state there (that's the whole point of Stock In).
-        const flagOutOfStock = !!opts.flagOutOfStock;
-
-        // Stock In only: an explicit "Others" row at the bottom of the
-        // dropdown, so adding a material that isn't in the list yet is a
-        // deliberate pick rather than something the user has to discover on
-        // their own by typing past the list. Picking it clears any selected
-        // item and leaves the field free to type a brand-new name into
-        // (Stock In already treats an unmatched name as a new item at
-        // submit time - see allowUnmatched above).
-        const allowOthers = !!opts.allowOthers;
-        const othersRow = `<div class="isr-item isr-item--other" data-other="1">
-            <div class="fw-medium"><i class="bi bi-plus-lg me-1"></i>Others</div>
-            <div class="small text-muted-2">Not in the list - add it as a new item</div>
-          </div>`;
-
-        function renderResults(query){
-          const items = inventoryStore.all();
-          const q = query.trim().toLowerCase();
-          const matches = q
-            ? items.filter(i => i.name.toLowerCase().includes(q) || i.id.toLowerCase().includes(q)).slice(0, 8)
-            : items.slice(0, 8);
-          results.innerHTML = (matches.length
-            ? matches.map(i => {
-                const outOfStock = flagOutOfStock && Number(i.qty) <= 0;
-                return `<div class="isr-item${outOfStock ? ' isr-item--out' : ''}" data-id="${i.id}">
-                <div class="fw-medium">${escapeHTML(i.name)}</div>
-                <div class="small ${outOfStock ? '' : 'text-muted-2'}">${i.id} \u2022 ${outOfStock ? 'Out of stock' : `${NUM(i.qty)} ${i.unit} on hand`}</div>
-              </div>`;
-              }).join('')
-            : `<div class="isr-empty">No matching items.</div>`) + (allowOthers ? othersRow : '');
-          results.classList.add('show');
-          fitSearchResults(searchInput, results);
-        }
-
-        searchInput.addEventListener('focus', () => renderResults(searchInput.value));
-        searchInput.addEventListener('input', () => {
-          // Typing invalidates whatever was previously selected - force a
-          // fresh pick from the list rather than submitting a stale id
-          // that no longer matches the displayed text.
-          const wasSelected = !!hiddenInput.value;
-          hiddenInput.value = '';
-          searchInput.setCustomValidity(unmatchedMsg);
-          renderResults(searchInput.value);
-          // Only fire onClear when actually LEAVING a selected item (not on
-          // every keystroke while already typing a new item's name) - see
-          // Stock In's onSelect/onClear below, which auto-fill/lock Supplier
-          // and Unit Price from the picked item's own record.
-          if (wasSelected && typeof opts.onClear === 'function') opts.onClear();
-        });
-        results.addEventListener('mousedown', (e) => {
-          // mousedown (not click) fires before the input's blur, so the
-          // selection registers before the dropdown gets hidden.
-          const item = e.target.closest('.isr-item'); if (!item) return;
-          if (item.dataset.other) {
-            const wasSelected = !!hiddenInput.value;
-            hiddenInput.value = '';
-            searchInput.value = '';
-            searchInput.setCustomValidity(unmatchedMsg);
-            results.classList.remove('show');
-            if (wasSelected && typeof opts.onClear === 'function') opts.onClear();
-            setTimeout(() => searchInput.focus(), 0);
-            return;
-          }
-          const material = inventoryStore.find(item.dataset.id); if (!material) return;
-          hiddenInput.value = material.id;
-          searchInput.value = material.name;
-          searchInput.setCustomValidity('');
-          results.classList.remove('show');
-          if (typeof opts.onSelect === 'function') opts.onSelect(material);
-        });
-        searchInput.addEventListener('blur', () => {
-          setTimeout(() => results.classList.remove('show'), 150);
-        });
-
-        // Reset to a clean, unselected state whenever the modal opens.
-        searchInput.closest('.modal')?.addEventListener('show.bs.modal', () => {
-          searchInput.value = '';
-          hiddenInput.value = '';
-          searchInput.setCustomValidity(unmatchedMsg);
-          results.classList.remove('show');
-          if (typeof opts.onClear === 'function') opts.onClear();
-        });
-      }
-      // Stock In: existing item picked -> Supplier and Unit Price are no
-      // longer meaningful to type (they're ignored by /api/inventory/stock-in
-      // anyway, see app.py), so auto-fill them from the item's own record
-      // and lock them read-only - that way they always show the real
-      // supplier/price instead of sitting blank or stale. Typing a
-      // different, unmatched name (back to "new item" mode) clears and
-      // unlocks them again.
-      // Category drop-down inside the Stock In form. Looked up by name once
-      // and kept so onClear can rebuild the original option list.
-      const stockInCatSel = document.querySelector('#stockInModal select[name="cat"]');
-      const stockInCatOrigHTML = stockInCatSel ? stockInCatSel.innerHTML : '';
-      const stockInUnitSel = document.querySelector('#stockInModal select[name="unit"]');
-      const stockInUnitOrigHTML = stockInUnitSel ? stockInUnitSel.innerHTML : '';
-      wireItemSearch('stockInItemSearch', 'stockInItemId', 'stockInItemResults', {
-        allowUnmatched: true,
-        allowOthers: true,
-        onSelect: (material) => {
-          const sup = document.getElementById('stockInSupplier');
-          const price = document.getElementById('stockInPrice');
-          const hint = document.getElementById('stockInSupplierHint');
-          if (sup)   { sup.value = material.sup || ''; sup.readOnly = true; }
-          if (price) { price.value = material.price != null ? Number(material.price).toFixed(2) : '0.00'; price.readOnly = true; }
-          if (hint)  hint.textContent = 'Filled in automatically from this item’s record.';
-          // Category: lock to this item's own category. If the item's
-          // category isn't one of the standard options (e.g. a legacy
-          // "Uncategorized"), add it so the field still shows the real
-          // value instead of silently falling back to the first option.
-          if (stockInCatSel) {
-            const cat = material.cat || '';
-            if (cat && ![...stockInCatSel.options].some(o => o.value === cat || o.textContent === cat)) {
-              const extra = document.createElement('option');
-              extra.textContent = cat;
-              stockInCatSel.appendChild(extra);
-            }
-            if (cat) stockInCatSel.value = cat;
-            stockInCatSel.disabled = true;
-          }
-          // Unit: same treatment as Category - lock to this item's own unit,
-          // adding it to the dropdown if it's not one of the standard options.
-          if (stockInUnitSel) {
-            const unit = material.unit || '';
-            if (unit && ![...stockInUnitSel.options].some(o => o.value === unit || o.textContent === unit)) {
-              const extra = document.createElement('option');
-              extra.textContent = unit;
-              stockInUnitSel.appendChild(extra);
-            }
-            if (unit) stockInUnitSel.value = unit;
-            stockInUnitSel.disabled = true;
-          }
-        },
-        onClear: () => {
-          const sup = document.getElementById('stockInSupplier');
-          const price = document.getElementById('stockInPrice');
-          const hint = document.getElementById('stockInSupplierHint');
-          if (sup)   { sup.readOnly = false; sup.value = ''; }
-          if (price) { price.readOnly = false; price.value = '0.00'; }
-          if (hint)  hint.textContent = 'New item only - search an existing supplier, type a new one, or use Add Supplier above to fill out its full details.';
-          if (stockInCatSel) {
-            stockInCatSel.disabled = false;
-            stockInCatSel.innerHTML = stockInCatOrigHTML;
-            stockInCatSel.selectedIndex = 0;
-          }
-          if (stockInUnitSel) {
-            stockInUnitSel.disabled = false;
-            stockInUnitSel.innerHTML = stockInUnitOrigHTML;
-            stockInUnitSel.selectedIndex = 0;
-          }
-        },
-      });
-      wireItemSearch('stockOutCartItemSearch', 'stockOutCartItemId', 'stockOutCartItemResults', { flagOutOfStock: true });
-
-      /* ---------- Suppliers list: shared by Stock In's supplier search, the
-       Add Item modal's supplier picker, and refreshed after Add Supplier
-       saves a new one. Fetched once up front; if it fails (no permission,
-       offline, etc.) Stock In's field still works fine as a plain typed
-       field, just with an empty dropdown, and Add Item's picker is left
-       with nothing to pick until the next successful load. ---------- */
-      let SUPPLIERS_CACHE = [];
-      function loadSuppliers(){
-        return fetch('/api/suppliers').then(r => r.ok ? r.json() : null).then(json => {
-          if (json && json.ok) SUPPLIERS_CACHE = json.data.filter(s => s.status === 'Active');
-          renderAddItemSupplierOptions();
-          return SUPPLIERS_CACHE;
-        }).catch(() => SUPPLIERS_CACHE);
-      }
-      function renderAddItemSupplierOptions(){
-        const sel = document.getElementById('addItemSupplier');
-        const hint = document.getElementById('addItemNoSuppliersHint');
-        if (!sel) return;
-        const current = sel.value;
-        sel.innerHTML = SUPPLIERS_CACHE.map(s => `<option value="${escapeHTML(s.name)}">${escapeHTML(s.name)}</option>`).join('');
-        if (current && SUPPLIERS_CACHE.some(s => s.name === current)) sel.value = current;
-        if (hint) hint.style.display = SUPPLIERS_CACHE.length ? 'none' : '';
-      }
-      loadSuppliers();
-
-      /* ---------- Stock In: Supplier search, same UX as Item Name above ----------
-       Same dropdown-while-typing pattern as wireItemSearch, but there's no
-       "pick from the list" requirement - typing a name that matches nothing
-       is a new supplier, not an error, exactly like a new item's name.
-       Disabled while an existing item is selected (see onSelect/onClear
-       above) since the field itself is read-only then. */
-      (function () {
-        const searchInput = document.getElementById('stockInSupplier');
-        const results = document.getElementById('stockInSupplierResults');
-        if (!searchInput || !results) return;
-
-        function renderResults(query){
-          const q = query.trim().toLowerCase();
-          const matches = q
-            ? SUPPLIERS_CACHE.filter(s => s.name.toLowerCase().includes(q)).slice(0, 8)
-            : SUPPLIERS_CACHE.slice(0, 8);
-          results.innerHTML = matches.length
-            ? matches.map(s => `<div class="isr-item" data-name="${escapeHTML(s.name)}">
-                <div class="fw-medium">${escapeHTML(s.name)}</div>
-                <div class="small text-muted-2">${escapeHTML(s.category || 'Supplier')}</div>
-              </div>`).join('')
-            : `<div class="isr-empty">No matching suppliers${q ? ' - "' + escapeHTML(query.trim()) + '" will be used as typed' : ''}.</div>`;
-          results.classList.add('show');
-          fitSearchResults(searchInput, results);
-        }
-
-        searchInput.addEventListener('focus', () => { if (!searchInput.readOnly) renderResults(searchInput.value); });
-        searchInput.addEventListener('input', () => renderResults(searchInput.value));
-        results.addEventListener('mousedown', (e) => {
-          const item = e.target.closest('.isr-item'); if (!item) return;
-          searchInput.value = item.dataset.name;
-          results.classList.remove('show');
-        });
-        searchInput.addEventListener('blur', () => {
-          setTimeout(() => results.classList.remove('show'), 150);
-        });
-        searchInput.closest('.modal')?.addEventListener('show.bs.modal', () => {
-          results.classList.remove('show');
-        });
-      })();
-
-      /* ---------- Add Item modal: register a new material against an
-       existing supplier, no stock movement unless Initial Stock > 0.
-       Reuses /api/inventory/save (the same endpoint Stock In's own "type a
-       new item" path uses) - the only real difference is Supplier here is
-       a required picker instead of a free-text/typed field. ---------- */
-      (function () {
-        const form = document.getElementById('addItemForm');
-        if (!form) return;
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          if (!form.checkValidity()) { e.stopPropagation(); form.classList.add('was-validated'); return; }
-          const d = Object.fromEntries(new FormData(form));
-          try {
-            const res = await fetch('/api/inventory/save', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: d.name, cat: d.cat, sup: d.sup, unit: d.unit,
-                                      price: d.price, reorder: d.reorder, loc: d.loc, qty: d.qty }),
-            });
-            const json = await res.json();
-            if (!json.ok) throw new Error(json.error);
-            await refreshInventory();
-            bootstrap.Modal.getInstance(form.closest('.modal'))?.hide();
-            form.reset(); form.classList.remove('was-validated');
-            showToast('Item added to inventory', 'success');
-          } catch (err) {
-            showToast(err.message, 'error', 'bi-exclamation-triangle');
-          }
-        });
-        form.closest('.modal')?.addEventListener('show.bs.modal', () => {
-          form.reset(); form.classList.remove('was-validated');
-        });
-      })();
-
-      /* ---------- Add Supplier modal: same endpoint as the Suppliers
-       page's own Add Supplier form (/api/suppliers/save). On success,
-       reloads SUPPLIERS_CACHE so the new supplier immediately shows up in
-       Stock In's supplier search and Add Item's supplier picker. ---------- */
-      (function () {
-        const form = document.getElementById('addSupplierForm');
-        if (!form) return;
-        const catSel = document.getElementById('addSupplierCategory');
-        const termsSel = document.getElementById('addSupplierTerms');
-        if (catSel) catSel.innerHTML = SUPPLIER_CATEGORIES.map(c => `<option>${escapeHTML(c)}</option>`).join('');
-        if (termsSel) termsSel.innerHTML =
-          SUPPLIER_TERMS.map(t => `<option ${t === 'Net 30' ? 'selected' : ''}>${escapeHTML(t)}</option>`).join('');
-
-        const saveBtn = document.getElementById('addSupplierSaveBtn');
-        // Guards against a double-click (or any other way of firing two
-        // overlapping submits) sending two /api/suppliers/save requests at
-        // once - without this, both can read the same "next supplier code"
-        // before either has inserted, and the second one fails with a
-        // duplicate-key error (see the server-side retry on that endpoint
-        // for the other half of this fix).
-        function setAddSupplierBusy(busy){
-          form.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
-          if (saveBtn) {
-            saveBtn.disabled = busy;
-            saveBtn.innerHTML = busy
-              ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Saving…`
-              : 'Save Supplier';
-          }
-        }
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          if (!form.checkValidity()) { e.stopPropagation(); form.classList.add('was-validated'); return; }
-          if (saveBtn?.disabled) return;
-          const d = Object.fromEntries(new FormData(form));
-          setAddSupplierBusy(true);
-          try {
-            const res = await fetch('/api/suppliers/save', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: d.name, contact: d.contact, phone: d.phone, email: d.email,
-                                      addr: d.addr, category: d.category, terms: d.terms, remarks: d.remarks,
-                                      status: 'Active' }),
-            });
-            const json = await res.json();
-            if (!json.ok) throw new Error(json.error);
-            await loadSuppliers();
-            bootstrap.Modal.getInstance(form.closest('.modal'))?.hide();
-            form.reset(); form.classList.remove('was-validated');
-            showToast('Supplier saved', 'success');
-          } catch (err) {
-            showToast(err.message, 'error', 'bi-exclamation-triangle');
-          } finally {
-            setAddSupplierBusy(false);
-          }
-        });
-        form.closest('.modal')?.addEventListener('show.bs.modal', () => {
-          form.reset(); form.classList.remove('was-validated');
-          setAddSupplierBusy(false);
-        });
-      })();
-
-      // Add Item and Add Supplier are reached from inside Stock In (or Add
-      // Supplier from inside Add Item). Moving between them used to
-      // overlap: the button hid the current window and opened the next one
-      // at the same moment, and the "bring Stock In back" handler below then
-      // re-opened Stock In ON TOP of Add Supplier, so nothing could be typed.
-      // Now it's one step at a time: the current window closes fully, THEN the
-      // next opens, and each remembers the window to go back to when it closes
-      // (Add Supplier opened from Add Item returns to Add Item, so the new
-      // supplier can be picked right away; otherwise back to Stock In).
-      const modalReturnTo = {};
-      let modalNavigating = false;
-      document.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-modal-nav]');
-        if (!btn) return;
-        e.preventDefault();
-        const from = btn.closest('.modal');
-        const toId = btn.dataset.modalNav;
-        if (!from || modalNavigating) return;
-        modalNavigating = true;
-        modalReturnTo[toId] = from.id;
-        from.addEventListener('hidden.bs.modal', () => {
-          modalNavigating = false;
-          bootstrap.Modal.getOrCreateInstance('#' + toId).show();
-        }, { once: true });
-        bootstrap.Modal.getInstance(from)?.hide();
-      });
-      ['addItemModal', 'addSupplierModal'].forEach(id => {
-        document.getElementById(id)?.addEventListener('hidden.bs.modal', () => {
-          if (modalNavigating) return;                       // moving on to another window, not closing
-          const back = modalReturnTo[id] || 'stockInModal';
-          delete modalReturnTo[id];
-          bootstrap.Modal.getOrCreateInstance('#' + back).show();
-        });
-      });
-
-      /* ---------- Stock In: existing vs. new item, decided automatically ----------
-       There's no mode switch to click - the "new item only" fields just sit
-       in the form at all times. wireItemSearch('stockInItemSearch', …) above
-       already clears #stockInItemId whenever the typed text changes, so at
-       submit time the hidden itemId tells wire('#stockInModal form', …) in
-       app.js which case this is: set → stock an existing item; empty → the
-       typed name plus whatever's in the fields below register a new one. */
-
-      /* ---------- Live date display (Stock In / Stock Out / Return modals) ----------
-       The server always stamps the movement with its own real current date
-       regardless of what's shown here (see _apply_movement in app.py) - so
-       this is a static, non-editable display rather than an editable field
-       that would misleadingly suggest the date can be backdated or changed.
-       Date only (no time-of-day) - a movement is dated, not timestamped,
-       throughout the app (Stock In / Stock Out / Back Order tables and
-       reports all show a plain date), so showing a running clock here was
-       inconsistent with that and with what's actually recorded. */
-      function tickMoveDates(){
-        const text = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-        const a = document.getElementById('stockInDate');  if (a) a.textContent = text;
-        const b = document.getElementById('stockOutDate'); if (b) b.textContent = text;
-        const c = document.getElementById('returnDate');   if (c) c.textContent = text;
-      }
-      tickMoveDates();
-      // Just a midnight-rollover safeguard now that this shows a date, not a
-      // clock - a date doesn't need per-second updates.
-      setInterval(tickMoveDates, 60000);
-
-      /* ---------- Stock Out Request (cart-style) ----------
-       stockOutCart is an in-memory "reserved" list only. Adding, editing or
-       removing rows NEVER touches inventoryStore / INVENTORY and never calls
-       the API - inventory changes only when Confirm Stock Out succeeds, via
-       window.submitStockOutRequest() in app.js (one /api/inventory/stock-out
-       call per row, in order). Reset whenever the modal opens or is closed
-       without confirming. */
-      let stockOutCart = [];      // [{ itemId, name, code, unit, available, requestedQty }]
-      // Rows the SERVER confirmed as issued in this request (never just-reserved
-      // cart rows), plus the client/project details captured at confirm time.
-      let stockOutIssued = [];
-      let stockOutReceiptInfo = null;
-      let stockOutBusy = false;   // true while Confirm is issuing rows
-      const so = {
-        modal:   document.getElementById('stockOutModal'),
-        form:    document.getElementById('stockOutForm'),
-        project: document.getElementById('stockOutProject'),
-        client:  document.getElementById('stockOutClient'),
-        address: document.getElementById('stockOutAddress'),
-        contact: document.getElementById('stockOutContact'),
-        search:  document.getElementById('stockOutCartItemSearch'),
-        itemId:  document.getElementById('stockOutCartItemId'),
-        results: document.getElementById('stockOutCartItemResults'),
-        avail:   document.getElementById('stockOutCartAvail'),
-        qty:     document.getElementById('stockOutCartQty'),
-        addBtn:  document.getElementById('stockOutCartAddBtn'),
-        error:   document.getElementById('stockOutCartError'),
-        body:    document.getElementById('stockOutCartBody'),
-        wrap:    document.getElementById('stockOutCartWrap'),
-        empty:   document.getElementById('stockOutCartEmpty'),
-        count:   document.getElementById('stockOutCartCount'),
-        result:  document.getElementById('stockOutResult'),
-        confirm: document.getElementById('stockOutConfirmBtn'),
-      };
-      const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
-      // a) Project dropdown - label "Project \u2014 Client", value = project id.
-      //    Exposed so app.js can re-run it after loading the real project list.
-      //    Completed projects are left out entirely - once a project is done
-      //    there's nothing further to issue materials against, so only
-      //    projects still underway (In Progress / On Hold / etc.) show up
-      //    here at all, not just grouped separately.
-      function renderStockOutProjects(){
-        if (!so.project || typeof PROJECTS === 'undefined') return;
-        const keep = so.project.value;
-        const opt = p => `<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)} \u2014 ${escapeHTML(custName(p.custId))}${p.status && p.status !== 'In Progress' ? ` (${escapeHTML(p.status)})` : ''}</option>`;
-        const eligible = PROJECTS.filter(p => p.status !== 'Completed');
-        const active = eligible.filter(p => p.status === 'In Progress');
-        const other  = eligible.filter(p => p.status !== 'In Progress');
-        so.project.innerHTML = (active.length ? `<optgroup label="Active projects">${active.map(opt).join('')}</optgroup>` : '')
-          + (other.length  ? `<optgroup label="Other projects">${other.map(opt).join('')}</optgroup>` : '');
-        so.project.value = eligible.some(p => p.id === keep) ? keep : '';
-        onStockOutProjectChange();
-      }
-      window.renderStockOutProjects = renderStockOutProjects;
-
-      function onStockOutProjectChange(){
-        const p = (typeof PROJECTS !== 'undefined') ? PROJECTS.find(x => x.id === so.project.value) : null;
-        const c = (p && typeof CUSTOMERS !== 'undefined') ? CUSTOMERS.find(x => x.id === p.custId) : null;
-        so.client.textContent  = p ? (typeof custName === 'function' ? custName(p.custId) : (c?.name || '\u2014')) : '\u2014';
-        so.address.textContent = c?.addr || '\u2014';
-        so.contact.textContent = c ? ([c.contact, c.phone].filter(Boolean).join(' \u00b7 ') || '\u2014') : '\u2014';
-        if (p) so.project.classList.remove('is-invalid');
-        const locked = !p || stockOutBusy;
-        so.search.disabled = locked; so.qty.disabled = locked; so.addBtn.disabled = locked;
-        if (!p) { so.avail.textContent = 'Choose a project first.'; }
-        else if (!so.itemId.value) { so.avail.textContent = 'Pick an item to see its available stock.'; }
-        updateStockOutConfirm();
-      }
-      so.project?.addEventListener('change', onStockOutProjectChange);
-
-      // b) Mini add-form. Shows the picked item's available stock as a hint.
-      function showCartAvail(){
-        const i = so.itemId.value ? inventoryStore.find(so.itemId.value) : null;
-        if (!i) {
-          so.avail.classList.remove('text-danger', 'fw-medium');
-          so.avail.textContent = so.project.value ? 'Pick an item to see its available stock.' : 'Choose a project first.';
-          return;
-        }
-        const inCart = stockOutCart.find(r => r.itemId === i.id);
-        const outOfStock = Number(i.qty) <= 0;
-        so.avail.classList.toggle('text-danger', outOfStock);
-        so.avail.classList.toggle('fw-medium', outOfStock);
-        so.avail.textContent = (outOfStock ? `Out of stock \u2014 0 ${i.unit} available` : `Available: ${NUM(i.qty)} ${i.unit}`)
-          + (inCart ? ` \u00b7 ${NUM(inCart.requestedQty)} already in this request` : '');
-      }
-      so.results?.addEventListener('mousedown', () => { showCartAvail(); setCartError(''); });
-      so.search?.addEventListener('input', () => { showCartAvail(); setCartError(''); });
-      so.qty?.addEventListener('input', () => setCartError(''));
-
-      function setCartError(msg){
-        so.error.textContent = msg;
-        so.qty.classList.toggle('is-invalid', !!msg && !!so.itemId.value);
-        so.search.classList.toggle('is-invalid', !!msg && !so.itemId.value);
-      }
-
-      function addToStockOutCart(){
-        const i = so.itemId.value ? inventoryStore.find(so.itemId.value) : null;
-        if (!i) return setCartError('Search for an item and pick it from the list.');
-        const qty = Number(so.qty.value);
-        if (!Number.isInteger(qty) || qty < 1) return setCartError('Enter a requested quantity of at least 1.');
-        const available = Number(i.qty) || 0;
-        if (available <= 0) return setCartError(`${i.name} is out of stock.`);
-        const row = stockOutCart.find(r => r.itemId === i.id);
-        if (row) {
-          // Same item again: merge into its existing row (Shopee-cart style).
-          const merged = row.requestedQty + qty;
-          if (merged > available) return setCartError(`Only ${NUM(available)} ${i.unit} available \u2014 ${NUM(row.requestedQty)} already in this request.`);
-          row.requestedQty = merged;
-        } else {
-          if (qty > available) return setCartError(`Only ${NUM(available)} ${i.unit} available.`);
-          stockOutCart.push({ itemId: i.id, name: i.name, code: i.id, unit: i.unit, available, requestedQty: qty });
-        }
-        // Clear the mini-form for the next item.
-        so.search.value = ''; so.itemId.value = ''; so.qty.value = '';
-        setCartError(''); showCartAvail(); hideStockOutResult();
-        renderStockOutCart();
-      }
-      so.addBtn?.addEventListener('click', addToStockOutCart);
-
-      // c) Request table - always re-rendered from stockOutCart.
-      const rowQtyError = (r) => (!Number.isInteger(r.requestedQty) || r.requestedQty < 1)
-        ? 'At least 1.'
-        : (r.requestedQty > r.available ? `Max ${NUM(r.available)}.` : '');
-      function renderStockOutCart(){
-        let cartTotal = 0;
-        so.body.innerHTML = stockOutCart.map((r, idx) => {
-          const err = rowQtyError(r);
-          // Unit price comes from the item's own record (not stored on the
-          // cart row itself) so it always reflects the current price, same
-          // as Stock In's auto-fill. Purely informational here - the server
-          // doesn't take a price on stock-out either way.
-          const unitPrice = Number(inventoryStore.find(r.itemId)?.price) || 0;
-          const qtyForTotal = Number.isFinite(r.requestedQty) ? r.requestedQty : 0;
-          const lineTotal = unitPrice * qtyForTotal;
-          cartTotal += lineTotal;
-          return `<tr>
-            <td class="fw-medium">${escapeHTML(r.name)}</td>
-            <td class="text-muted-2">${escapeHTML(r.code)}</td>
-            <td class="text-end">${NUM(r.available)}</td>
-            <td>
-              <input type="number" class="form-control form-control-sm ${err ? 'is-invalid' : ''}" min="1" max="${r.available}" step="1"
-                     value="${Number.isFinite(r.requestedQty) ? r.requestedQty : ''}" data-cart-idx="${idx}" aria-label="Requested quantity for ${escapeHTML(r.name)}" ${stockOutBusy ? 'disabled' : ''}>
-              <div class="invalid-feedback">${err}</div>
-            </td>
-            <td class="text-muted-2">${escapeHTML(r.unit)}</td>
-            <td class="text-end text-muted-2">${PESO(unitPrice)}</td>
-            <td class="text-end fw-medium">${PESO(lineTotal)}</td>
-            <td class="text-center"><button type="button" class="act-btn danger" data-cart-remove="${idx}" title="Remove from request" aria-label="Remove ${escapeHTML(r.name)} from request" ${stockOutBusy ? 'disabled' : ''}><i class="bi bi-trash"></i></button></td>
-          </tr>`;
-        }).join('');
-        const n = stockOutCart.length;
-        so.wrap.classList.toggle('d-none', n === 0);
-        so.empty.classList.toggle('d-none', n > 0);
-        so.count.textContent = plural(n, 'item');
-        const totalWrap = document.getElementById('stockOutCartTotalWrap');
-        const totalEl = document.getElementById('stockOutCartTotal');
-        if (totalWrap) totalWrap.classList.toggle('d-none', n === 0);
-        if (totalEl) totalEl.textContent = PESO(cartTotal);
-        // Once an item's been added, the project is locked - switching it
-        // part-way through would leave the cart's "available stock" figures
-        // (and the project-scoped Back Order lookup, which groups by
-        // project) pointing at the wrong project. Remove every row to
-        // unlock it again.
-        if (so.project) so.project.disabled = stockOutBusy || n > 0;
-        document.getElementById('stockOutProjectLockHint')?.classList.toggle('d-none', n === 0);
-        updateStockOutConfirm();
-      }
-      // Editing a requested qty: update state as you type (so Confirm reacts),
-      // re-render on change/blur. Out-of-range values block Confirm.
-      so.body?.addEventListener('input', (e) => {
-        const inp = e.target.closest('[data-cart-idx]'); if (!inp) return;
-        const r = stockOutCart[+inp.dataset.cartIdx]; if (!r) return;
-        r.requestedQty = inp.value === '' ? NaN : Number(inp.value);
-        const err = rowQtyError(r);
-        inp.classList.toggle('is-invalid', !!err);
-        inp.nextElementSibling.textContent = err;
-        updateStockOutConfirm();
-      });
-      so.body?.addEventListener('change', (e) => { if (e.target.closest('[data-cart-idx]')) renderStockOutCart(); });
-      // Remove: drops the row from THIS request only - inventory is untouched.
-      so.body?.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-cart-remove]'); if (!btn) return;
-        stockOutCart.splice(+btn.dataset.cartRemove, 1);
-        renderStockOutCart(); showCartAvail();
-      });
-
-      // d) Confirm is enabled only with a project, >=1 row, and every row valid.
-      function updateStockOutConfirm(){
-        so.confirm.disabled = stockOutBusy || !so.project.value || stockOutCart.length === 0
-          || stockOutCart.some(r => rowQtyError(r));
-      }
-
-      function hideStockOutResult(){ so.result.classList.add('d-none'); so.result.innerHTML = ''; }
-      function showStockOutResult(html){ so.result.innerHTML = html; so.result.classList.remove('d-none'); }
-
-      function resetStockOut(){
-        stockOutCart = [];
-        stockOutIssued = []; stockOutReceiptInfo = null;
-        so.project.value = ''; so.project.classList.remove('is-invalid');
-        so.search.value = ''; so.itemId.value = ''; so.qty.value = '';
-        setCartError(''); hideStockOutResult();
-        renderStockOutProjects();   // also runs onStockOutProjectChange()
-        renderStockOutCart();
-      }
-      so.modal?.addEventListener('show.bs.modal', resetStockOut);
-      // When the request window closes, show ONE receipt for every item actually
-      // issued in it (full success, or partly issued and then closed).
-      function showStockOutReceipt(){
-        if (!stockOutIssued.length || !stockOutReceiptInfo) return;
-        const info = stockOutReceiptInfo;
-        const items = stockOutIssued.map(r => {
-          const i = inventoryStore.find(r.itemId) || {};
-          return { movementId: r.movementId, id: r.itemId, name: r.name || i.name, cat: i.cat,
-                   qty: r.requestedQty, unit: r.unit || i.unit, price: Number(i.price) || 0 };
-        });
-        const locs = [...new Set(stockOutIssued.map(r => (inventoryStore.find(r.itemId) || {}).loc).filter(Boolean))].join(', ');
-        // Weather of the day, from the movements just saved (server stamps it).
-        const wmv = stockOutIssued.map(r => (window.ALL_MOVEMENTS || []).find(m => String(m.movementId) === String(r.movementId)))
-                                  .find(m => m && (m.weatherTemp != null || m.weatherRain != null));
-        window.showTransactionReceipt('ISSUANCE', items, {
-          when: info.when,
-          weather: wmv ? { temp: wmv.weatherTemp, rain: wmv.weatherRain, wind: wmv.weatherWind } : null,
-          delivery: { status: 'Pending' },   // a new Stock Out always starts Pending
-          fields: [['Client / Customer', info.client], ['Project', info.project], ['Delivery Address', info.address],
-                   ['Contact', info.contact], ['Purpose / Reference', info.projectId], ['Location', locs], ['Released by', info.user]],
-          recordedBy: info.user, counterparty: '',
-        });
-      }
-      so.modal?.addEventListener('hidden.bs.modal', () => {
-        if (stockOutBusy) return;
-        showStockOutReceipt();
-        resetStockOut();
-      });
-      // Don't let the modal close mid-confirm (rows are being issued one by one).
-      so.modal?.addEventListener('hide.bs.modal', (e) => { if (stockOutBusy) e.preventDefault(); });
-
-      // Enter inside the add-form adds the item instead of submitting the request;
-      // Enter inside a row qty just commits the edit.
-      so.form?.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
-        if (e.target === so.qty || e.target === so.search) { e.preventDefault(); if (!so.addBtn.disabled) addToStockOutCart(); }
-        else if (e.target.closest('[data-cart-idx]')) { e.preventDefault(); e.target.blur(); }
-      });
-
-      function setStockOutBusy(busy, label){
-        stockOutBusy = busy;
-        so.project.disabled = busy;
-        so.modal.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
-        so.confirm.innerHTML = busy
-          ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${label || 'Issuing\u2026'}`
-          : 'Confirm Stock Out';
-        onStockOutProjectChange();
-        renderStockOutCart();
-      }
-
-      so.form?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (stockOutBusy) return;
-        if (!so.project.value) { so.project.classList.add('is-invalid'); so.project.focus(); return; }
-        if (!stockOutCart.length || stockOutCart.some(r => rowQtyError(r))) return;
-        if (typeof window.submitStockOutRequest !== 'function') {
-          showToast('Stock Out is not connected to the server on this page.', 'error', 'bi-exclamation-triangle');
-          return;
-        }
-        const projectId = so.project.value;
-        const rows = stockOutCart.map(r => ({ ...r }));
-        const proj = (typeof PROJECTS !== 'undefined') ? PROJECTS.find(x => x.id === projectId) : null;
-        const txt = (el) => { const t = (el?.textContent || '').trim(); return t === '—' ? '' : t; };
-        stockOutReceiptInfo = { projectId, project: proj ? `${proj.id} — ${proj.name}` : projectId,
-          client: txt(so.client), address: txt(so.address), contact: txt(so.contact),
-          user: (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || '', when: window.receiptNow() };
-        hideStockOutResult();
-        setStockOutBusy(true, `Issuing 1 of ${rows.length}\u2026`);
-        let outcome;
-        try {
-          outcome = await window.submitStockOutRequest(rows, projectId,
-            (k, total) => { so.confirm.lastChild.textContent = `Issuing ${k} of ${total}\u2026`; });
-        } catch (err) {
-          outcome = { issued: [], failed: { row: rows[0], error: err.message || 'Unexpected error.' }, remaining: rows };
-        } finally {
-          setStockOutBusy(false);
-        }
-
-        stockOutIssued.push(...(outcome.issued || []));   // only server-confirmed deductions
-        if (!outcome.failed) {
-          bootstrap.Modal.getInstance(so.modal)?.hide();   // hidden.bs.modal shows the receipt, then resets the cart
-          showToast(`Stock issued for ${projectId} \u2014 ${plural(outcome.issued.length, 'item')}`, 'success');
-          return;
-        }
-        // Partial (or no) success: keep only the rows that were NOT issued, with
-        // their available qty refreshed from the latest inventory, so the user
-        // can adjust and confirm again without re-sending the issued rows.
-        stockOutCart = outcome.remaining.map(r => {
-          const i = inventoryStore.find(r.itemId);
-          return i ? { ...r, available: Number(i.qty) || 0 } : r;
-        });
-        renderStockOutCart();
-        const names = list => list.map(r => `<strong>${escapeHTML(r.name)}</strong> (${NUM(r.requestedQty)} ${escapeHTML(r.unit)})`).join(', ');
-        showStockOutResult(
-          (outcome.issued.length
-            ? `<div class="mb-1"><i class="bi bi-check-circle me-1"></i>Issued: ${names(outcome.issued)}.</div>`
-            : `<div class="mb-1"><i class="bi bi-x-circle me-1"></i>Nothing was issued.</div>`)
-          + `<div class="mb-1"><i class="bi bi-exclamation-triangle me-1"></i>Stopped at ${names([outcome.failed.row])}: ${escapeHTML(outcome.failed.error)}</div>`
-          + `<div>The ${plural(stockOutCart.length, 'item')} still listed ${stockOutCart.length === 1 ? 'was' : 'were'} not issued. Adjust or remove ${stockOutCart.length === 1 ? 'it' : 'them'}, then confirm again.</div>`
-          + (stockOutIssued.length ? `<div class="mt-1"><i class="bi bi-receipt me-1"></i>A receipt for the issued items appears when you finish or close this request.</div>` : ''));
-        if (outcome.issued.length) showToast(`${plural(outcome.issued.length, 'item')} issued for ${projectId} \u2014 ${plural(stockOutCart.length, 'item')} still pending`, 'warning', 'bi-exclamation-triangle');
-        else showToast(outcome.failed.error, 'error', 'bi-exclamation-triangle');
-      });
-
-      // First paint (before app.js finishes loading CUSTOMERS/PROJECTS).
-      // Once app.js's loader completes, it calls window.renderStockOutProjects()
-      // again which repopulates the dropdown with the real database rows.
-      renderStockOutProjects();
-      renderStockOutCart();
-
-      /* ---------- Record Return (Back Order): reference-code driven ----------
-       Pick the Stock Out reference (what Stock Out's own cart calls
-       "Purpose / Reference", stored as each ISSUANCE movement's `remarks`)
-       and every item ever stocked out under it - aggregated by material -
-       appears below with an editable Qty to Return. Confirm posts one
-       /api/inventory/return call per row with a quantity > 0, the same
-       one-row-at-a-time pattern Stock Out's own cart uses (see
-       window.submitStockOutRequest in app.js), including the same
-       partial-failure handling: rows already recorded are zeroed out so a
-       retry after a mid-request error doesn't double-record them. */
-      const ret = {
-        modal:  document.getElementById('returnModal'),
-        form:   document.getElementById('returnForm'),
-        search: document.getElementById('returnRefSearch'),
-        results: document.getElementById('returnRefResults'),
-        wrap:   document.getElementById('returnItemsWrap'),
-        body:   document.getElementById('returnItemsBody'),
-        submitBtn: document.getElementById('returnSubmitBtn'),
-        viewBackOrdersBtn: document.getElementById('returnViewBackOrdersBtn'),
-      };
-      let returnSelectedRef = '';   // '' until a real project has been picked
-      let returnRows = [];          // [{ itemId, name, unit, stockedOut }] for the selected project
-      let returnIssued = [];        // rows the server actually recorded, for the receipt
-      let returnLastInfo = null;
-      let returnBusy = false;
-
-      // Real projects (PROJECTS, the same list Stock Out's own Project
-      // dropdown uses - see renderStockOutProjects below), not a scan of
-      // whatever text happened to be typed into Stock Out's old free-text
-      // reference field. Stock Out always records each issuance's project
-      // id as that movement's `remarks` (see window.submitStockOutRequest /
-      // /api/inventory/stock-out), so a project's id is exactly what
-      // itemsForStockOutRef() below matches against.
-      // Only projects that actually have something stocked out under them -
-      // a project nothing was ever issued to has nothing a return could be
-      // against, so it's left out rather than shown as a dead end.
-      function allBackOrderProjects(){
-        return (typeof PROJECTS !== 'undefined' ? PROJECTS : [])
-          .map(p => ({ ref: p.id, label: p.name, stocked: itemsForStockOutRef(p.id) }))
-          .filter(p => p.stocked.length);
-      }
-
-      // Items stocked out under one project, aggregated by material (an
-      // item issued more than once under the same reference becomes a
-      // single row with the combined quantity).
-      // "Stocked Out" here is what is still out with the project: everything
-      // issued under it MINUS what has already been returned against it
-      // (back orders with that project as their Stock Out reference). An item
-      // that has been returned in full no longer appears.
-      function itemsForStockOutRef(ref){
-        const byItem = new Map();
-        (window.ALL_MOVEMENTS || []).filter(m => m.type === 'ISSUANCE' && m.remarks === ref).forEach(m => {
-          if (!byItem.has(m.id)) byItem.set(m.id, { itemId: m.id, name: m.name, unit: m.unit, stockedOut: 0 });
-          byItem.get(m.id).stockedOut += Number(m.qty) || 0;
-        });
-        (window.ALL_BACKORDERS || []).filter(b => b.stockOutRef === ref).forEach(b => {
-          const row = byItem.get(b.id);
-          if (row) row.stockedOut -= Number(b.qty) || 0;
-        });
-        return [...byItem.values()].filter(r => r.stockedOut > 0);
-      }
-
-      function renderReturnItems(){
-        if (!ret.body) return;
-        ret.body.innerHTML = returnRows.map(r => `
-          <tr data-item-id="${escapeHTML(r.itemId)}">
-            <td><div class="fw-medium">${escapeHTML(r.name)}</div><div class="small text-muted-2">${escapeHTML(r.itemId)}</div></td>
-            <td class="text-end">${NUM(r.stockedOut)} ${escapeHTML(r.unit)}</td>
-            <td><input type="number" class="form-control form-control-sm text-end return-qty-input" min="0" max="${r.stockedOut}" step="any" value="0"></td>
-          </tr>`).join('');
-      }
-
-      function resetReturnPicker(){
-        returnSelectedRef = '';
-        returnRows = [];
-        if (ret.search) { ret.search.value = ''; ret.search.setCustomValidity('Search and select a project from the list.'); }
-        if (ret.wrap) ret.wrap.style.display = 'none';
-        if (ret.body) ret.body.innerHTML = '';
-        ret.results?.classList.remove('show');
-      }
-
-      function renderReturnRefResults(query){
-        if (!ret.results) return;
-        const q = query.trim().toLowerCase();
-        const projects = allBackOrderProjects();
-        const matches = q
-          ? projects.filter(p => p.ref.toLowerCase().includes(q) || p.label.toLowerCase().includes(q))
-          : projects;
-        ret.results.innerHTML = matches.length
-          ? matches.slice(0, 8).map(p => {
-              const qty = p.stocked.reduce((s, r) => s + r.stockedOut, 0);
-              return `<div class="isr-item" data-ref="${escapeHTML(p.ref)}">
-                  <div class="fw-medium">${escapeHTML(p.ref)} — ${escapeHTML(p.label)}</div>
-                  <div class="small text-muted-2">${plural(p.stocked.length, 'item')} stocked out • ${NUM(qty)} total</div>
-                </div>`;
-            }).join('')
-          : `<div class="isr-empty">No matching project${projects.length ? '' : ' - nothing has been stocked out yet'}.</div>`;
-        ret.results.classList.add('show');
-        fitSearchResults(ret.search, ret.results);
-      }
-
-      if (ret.search && ret.results) {
-        ret.search.addEventListener('focus', () => renderReturnRefResults(ret.search.value));
-        ret.search.addEventListener('input', () => {
-          returnSelectedRef = '';
-          ret.search.setCustomValidity('Search and select a project from the list.');
-          if (ret.wrap) ret.wrap.style.display = 'none';
-          renderReturnRefResults(ret.search.value);
-        });
-        ret.results.addEventListener('mousedown', (e) => {
-          const item = e.target.closest('.isr-item'); if (!item) return;
-          const ref = item.dataset.ref;
-          returnSelectedRef = ref;
-          ret.search.value = ref;
-          ret.search.setCustomValidity('');
-          ret.results.classList.remove('show');
-          returnRows = itemsForStockOutRef(ref);
-          renderReturnItems();
-          if (ret.wrap) ret.wrap.style.display = returnRows.length ? '' : 'none';
-        });
-        ret.search.addEventListener('blur', () => { setTimeout(() => ret.results.classList.remove('show'), 150); });
-        ret.modal?.addEventListener('show.bs.modal', resetReturnPicker);
-      }
-
-      function setReturnBusy(busy, label){
-        returnBusy = busy;
-        ret.form?.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
-        if (ret.submitBtn) {
-          ret.submitBtn.disabled = busy;
-          ret.submitBtn.innerHTML = busy
-            ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${label || 'Recording…'}`
-            : 'Confirm Return';
-        }
-      }
-
-      function showReturnReceipt(){
-        if (!returnIssued.length || !returnLastInfo) return;
-        const info = returnLastInfo;
-        const items = returnIssued.map(r => {
-          const i = inventoryStore.find(r.itemId) || {};
-          return { movementId: r.backOrderId, id: r.itemId, name: r.name, cat: i.cat, qty: r.qty, unit: r.unit, price: Number(i.price) || 0 };
-        });
-        window.showTransactionReceipt('RETURN', items, {
-          when: info.when,
-          fields: [['Project Code', info.ref], ['Received By', info.customer],
-                   ['Reason for Return', info.remarks],
-                   ['Disposition', 'Pending (mark Reimbursed / Replaced in the Back Orders table)'],
-                   ['Recorded / Inspected by', info.user]],
-          recordedBy: info.user, counterparty: info.customer || '',
-          note: 'Back orders are logged for the record and do not change on-hand stock.',
-        });
-      }
-
-      // Scrolls the page down to the Back Orders table and flashes it, so the
-      // record(s) just added (or about to be looked up) are easy to spot.
-      // Shared by the "View Back Order" footer button and the success toast.
-      function scrollToBackOrdersTable(){
-        const table = document.getElementById('returnsTable');
-        const card = table?.closest('.card');
-        if (!card) return;
-        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        card.classList.add('highlight-flash');
-        setTimeout(() => card.classList.remove('highlight-flash'), 1800);
-      }
-
-      ret.viewBackOrdersBtn?.addEventListener('click', () => {
-        if (ret.modal.classList.contains('show')) {
-          // Wait for the modal to actually finish closing (and for its own
-          // hidden.bs.modal handler below to run) before scrolling, so we're
-          // not scrolling a page that still has the modal/backdrop over it.
-          ret.modal.addEventListener('hidden.bs.modal', scrollToBackOrdersTable, { once: true });
-          bootstrap.Modal.getInstance(ret.modal)?.hide();
-        } else {
-          scrollToBackOrdersTable();
-        }
-      });
-
-      ret.modal?.addEventListener('hidden.bs.modal', () => {
-        if (returnBusy) return;
-        showReturnReceipt();
-        returnIssued = []; returnLastInfo = null;
-        resetReturnPicker();
-        ret.form?.reset();
-      });
-      ret.modal?.addEventListener('hide.bs.modal', (e) => { if (returnBusy) e.preventDefault(); });
-
-      ret.form?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (returnBusy) return;
-        if (!returnSelectedRef) {
-          ret.search.setCustomValidity('Search and select a project from the list.');
-          ret.search.reportValidity();
-          return;
-        }
-        const rows = [...ret.body.querySelectorAll('tr')].map(tr => ({
-          itemId: tr.dataset.itemId,
-          qty: Number(tr.querySelector('.return-qty-input')?.value) || 0,
-        })).filter(r => r.qty > 0);
-        if (!rows.length) {
-          showToast('Set a Qty to Return greater than 0 for at least one item.', 'error', 'bi-exclamation-triangle');
-          return;
-        }
-
-        const d = Object.fromEntries(new FormData(ret.form));
-        const user = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER.name) || '';
-        returnIssued = [];
-        let failedRow = null, failedError = '';
-        setReturnBusy(true);
-        for (let k = 0; k < rows.length; k++) {
-          const row = rows[k];
-          const item = returnRows.find(r => r.itemId === row.itemId) || {};
-          setReturnBusy(true, `Recording ${k + 1} of ${rows.length}…`);
-          try {
-            const res = await fetch('/api/inventory/return', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ itemId: row.itemId, qty: row.qty, customer: d.customer, remarks: d.remarks, stockOutRef: returnSelectedRef }),
-            });
-            let json;
-            try { json = await res.json(); }
-            catch (_) { throw new Error(`The server returned an unexpected response (HTTP ${res.status}).`); }
-            if (!json.ok) throw new Error(json.error || `Request failed (HTTP ${res.status}).`);
-            returnIssued.push({ itemId: row.itemId, name: item.name, unit: item.unit, qty: row.qty, backOrderId: json.backOrderId });
-          } catch (err) {
-            failedRow = row;
-            failedError = err instanceof TypeError ? 'Could not connect to the server.' : err.message;
-            break;
-          }
-        }
-        setReturnBusy(false);
-
-        if (!failedRow) {
-          returnLastInfo = { when: window.receiptNow(), customer: d.customer, ref: returnSelectedRef, remarks: d.remarks, user };
-          await refreshInventory();
-          bootstrap.Modal.getInstance(ret.modal)?.hide();   // hidden.bs.modal shows the receipt, then resets the picker
-          // "View Back Order" button on the success toast - scrolls down to
-          // where the record(s) now live, in the Back Orders table.
-          showToast(`Back-order return recorded — ${plural(returnIssued.length, 'item')}`, 'success', undefined, {
-            label: 'View Back Order',
-            onClick: scrollToBackOrdersTable,
-          });
-          return;
-        }
-        // Partial (or no) success - same pattern as Stock Out: report what went
-        // through, re-fetch inventory if anything did, zero out the rows that
-        // already succeeded (so a retry doesn't double-record them), and leave
-        // the modal open so the rest can be adjusted and confirmed again.
-        if (returnIssued.length) {
-          await refreshInventory();
-          returnIssued.forEach(r => {
-            const input = ret.body.querySelector(`tr[data-item-id="${CSS.escape(r.itemId)}"] .return-qty-input`);
-            if (input) input.value = '0';
-          });
-        }
-        const failedItem = returnRows.find(r => r.itemId === failedRow.itemId) || {};
-        showToast(
-          (returnIssued.length ? `${plural(returnIssued.length, 'item')} recorded, ` : 'Nothing was recorded — ') +
-          `stopped at ${failedItem.name || failedRow.itemId}: ${failedError}`,
-          'error', 'bi-exclamation-triangle');
-      });
-
-      /* ---------- Stock In / Stock Out movement tables ----------
-       window.ALL_MOVEMENTS holds every stock_movements row (both
-       RECEIPT and ISSUANCE), fetched by app.js's refreshInventory()
-       alongside the materials list itself. This page filters/paginates
-       that array into two independent tables by `type`. */
-      window.ALL_MOVEMENTS = window.ALL_MOVEMENTS || [];
-      window.ALL_BACKORDERS = window.ALL_BACKORDERS || [];
-      window.STOCK_SUMMARY = window.STOCK_SUMMARY || [];
-
-      const MOVE_PAGE_SIZE = 10;
-      let stockInPage  = 1;
-      let stockOutPage = 1;
-      let returnsPage  = 1;
-      let summaryPage  = 1;
-      let moveSearchQuery = '';
-      let moveCategoryFilter = '';
-      let moveDateFrom = '';   // e.g. "2026-01-01" (yyyy-mm-dd from <input type="date">)
-      let moveDateTo = '';     // e.g. "2026-05-31"
-
-      function resetAllPages(){
-        stockInPage = 1; stockOutPage = 1; returnsPage = 1; summaryPage = 1;
-      }
-
-      document.getElementById('moveSearchInput')?.addEventListener('input', (e) => {
-        moveSearchQuery = e.target.value.toLowerCase().trim();
-        resetAllPages();
-        renderMovements(); renderBackOrders(); renderStockSummary();
-      });
-      document.getElementById('moveCategoryFilter')?.addEventListener('change', (e) => {
-        moveCategoryFilter = e.target.value;
-        resetAllPages();
-        renderMovements(); renderBackOrders(); renderStockSummary();
-      });
-      document.getElementById('moveDateFrom')?.addEventListener('change', (e) => {
-        moveDateFrom = e.target.value;
-        resetAllPages();
-        renderMovements(); renderBackOrders();
-      });
-      document.getElementById('moveDateTo')?.addEventListener('change', (e) => {
-        moveDateTo = e.target.value;
-        resetAllPages();
-        renderMovements(); renderBackOrders();
-      });
-      document.getElementById('moveDateClearBtn')?.addEventListener('click', () => {
-        moveDateFrom = ''; moveDateTo = ''; moveSearchQuery = '';
-        const fromEl = document.getElementById('moveDateFrom');
-        const toEl = document.getElementById('moveDateTo');
-        const searchEl = document.getElementById('moveSearchInput');
-        if (fromEl) fromEl.value = '';
-        if (toEl) toEl.value = '';
-        if (searchEl) searchEl.value = '';
-        resetAllPages();
-        renderMovements(); renderBackOrders(); renderStockSummary();
-      });
-
-      /* ---------- "Search" button ----------
-       #moveSearchInput and the From/To date inputs above already filter the
-       Stock In / Stock Out / Back Orders tables live as they're typed/picked
-       (see their own 'input'/'change' listeners). This button doesn't add a
-       filter of its own - it just re-runs that same search/date filter on
-       click, as an explicit, discoverable "go" action (and a plain button
-       press for anyone who'd rather click Search than wait for live
-       filtering). */
-      document.getElementById('stockTableSearchBtn')?.addEventListener('click', () => {
-        resetAllPages();
-        renderMovements(); renderBackOrders(); renderStockSummary();
-      });
-
-      function buildMovePagination(navId, ulId, currentPage, totalItems, onChange){
-        const totalPages = Math.max(1, Math.ceil(totalItems / MOVE_PAGE_SIZE));
-        const clampedPage = Math.min(currentPage, totalPages);
-        const nav = document.getElementById(navId);
-        const ul  = document.getElementById(ulId);
-        if (!nav || !ul) return clampedPage;
-        if (totalPages <= 1) { nav.style.display = 'none'; return clampedPage; }
-        nav.style.display = '';
-        const pageLink = (label, page, opts = {}) => `
-          <li class="page-item ${opts.active ? 'active' : ''} ${opts.disabled ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${page}">${label}</a>
-          </li>`;
-        let html = pageLink('<i class="bi bi-chevron-left"></i>', clampedPage - 1, { disabled: clampedPage === 1 });
-        buildPageWindow(clampedPage, totalPages).forEach(p => {
-          if (p === '\u2026') html += `<li class="page-item disabled"><span class="page-link">\u2026</span></li>`;
-          else html += pageLink(p, p, { active: p === clampedPage });
-        });
-        html += pageLink('<i class="bi bi-chevron-right"></i>', clampedPage + 1, { disabled: clampedPage === totalPages });
-        ul.innerHTML = html;
-        ul.onclick = (e) => {
-          const link = e.target.closest('[data-page]');
-          if (!link || link.closest('.disabled')) return;
-          e.preventDefault();
-          const page = parseInt(link.dataset.page, 10);
-          if (!page || page === clampedPage) return;
-          onChange(page);
-        };
-        return clampedPage;
-      }
-
-      /* Delivery confirmation (Stock Out only - TEMPORARY). A Stock Out is
-       Pending until "Mark as Delivered" is clicked; that saves the time and
-       the delivery-day weather (server side). */
-      function fmtDeliveredAt(iso){
-        const d = new Date(iso);
-        if (isNaN(d)) return '';
-        return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
-          + ' \u00b7 ' + d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
-      }
-      function deliveryInfo(m){
-        const weather = { temp: m.deliveryTemp, rain: m.deliveryRain, wind: m.deliveryWind };
-        if (m.deliveredAt) return { status: 'Delivered', at: fmtDeliveredAt(m.deliveredAt), weather };
-        if (m.deliveryFailedAt) return { status: 'Failed', at: fmtDeliveredAt(m.deliveryFailedAt),
-                                         reason: m.deliveryFailureReason || '', weather };
-        return { status: 'Pending', at: '', weather };
-      }
-      function deliveryCell(m){
-        if (m.deliveredAt) {
-          return `<td><span class="badge b-success"><i class="bi bi-check-circle-fill me-1"></i>Delivered</span>
-            <div class="small text-muted-2 mt-1">${escapeHTML(fmtDeliveredAt(m.deliveredAt))}</div></td>`;
-        }
-        if (m.deliveryFailedAt) {
-          const r = m.deliveryFailureReason || '';
-          return `<td><span class="badge b-danger"><i class="bi bi-x-octagon-fill me-1"></i>Failed</span>
-            <div class="small text-muted-2 mt-1">${escapeHTML(fmtDeliveredAt(m.deliveryFailedAt))}</div>
-            ${r ? `<div class="small mt-1" title="${escapeHTML(r)}">${escapeHTML(r.length > 60 ? r.slice(0,60)+'\u2026' : r)}</div>` : ''}</td>`;
-        }
-        return `<td><span class="badge b-warning me-1">Pending</span>
-          <div class="d-inline-flex gap-1 mt-1">
-            <button type="button" class="btn btn-sm btn-light-2 py-0 px-2" data-deliver data-movement-id="${m.movementId}">
-              <i class="bi bi-truck me-1"></i>Mark as Delivered</button>
-            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" data-deliver-fail data-movement-id="${m.movementId}">
-              <i class="bi bi-x-octagon me-1"></i>Failed</button>
-          </div></td>`;
-      }
-      async function postDeliveryOutcome(movementId, status, reason, btn){
-        if (btn) btn.disabled = true;
-        try {
-          const res = await fetch('/api/inventory/stock-out/deliver', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ movementId, status, reason }),
-          });
-          const json = await res.json();
-          if (!json.ok) throw new Error(json.error);
-          if (typeof window.refreshInventory === 'function') await window.refreshInventory();
-          showToast(status === 'Delivered' ? 'Stock Out marked as Delivered' : 'Stock Out marked as Failed',
-                    status === 'Delivered' ? 'success' : 'warning',
-                    status === 'Delivered' ? 'bi-truck' : 'bi-x-octagon');
-          return true;
-        } catch (err) {
-          if (btn) btn.disabled = false;
-          showToast(err.message, 'error', 'bi-exclamation-triangle');
-          return false;
-        }
-      }
-      async function markDelivered(movementId, btn){ return postDeliveryOutcome(movementId, 'Delivered', '', btn); }
-
-      // Delivery-failed modal: capture the reason first, then post.
-      (function wireDeliverFailModal(){
-        const modal = document.getElementById('deliverFailModal');
-        if (!modal) return;
-        const form = document.getElementById('deliverFailForm');
-        const reason = document.getElementById('deliverFailReason');
-        const movNo = document.getElementById('deliverFailMovNo');
-        const submit = document.getElementById('deliverFailSubmit');
-        let pending = null;   // the movement id waiting on this reason
-        window.openDeliverFailModal = (movementId) => {
-          pending = movementId;
-          reason.value = '';
-          submit.disabled = false;
-          movNo.textContent = 'MOV-' + String(movementId).padStart(4, '0');
-          bootstrap.Modal.getOrCreateInstance(modal).show();
-          setTimeout(() => reason.focus(), 200);
-        };
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const txt = reason.value.trim();
-          if (!txt) { reason.focus(); return; }
-          submit.disabled = true;
-          const ok = await postDeliveryOutcome(pending, 'Failed', txt, submit);
-          if (ok) bootstrap.Modal.getInstance(modal).hide();
-        });
-      })();
-
-      /* Movement rows get their own action buttons - View / Edit / Print /
-       Delete - kept separate from the shared actionBtns() helper (used on
-       Customers/Projects/etc.) so adding Print here doesn't affect those
-       other pages. View/Edit/Delete operate on the underlying MATERIAL
-       (via material id); Print operates on this specific movement record
-       (via movementId), since each material can have many movements. */
-      function moveActionBtns(m){
-        return `<div class="d-inline-flex">
-            <button class="act-btn" data-bs-toggle="tooltip" title="View" data-act="view" data-id="${m.id}"><i class="bi bi-eye"></i></button>
-            <button class="act-btn print-move" data-bs-toggle="tooltip" title="Print Slip" data-movement-id="${m.movementId}"><i class="bi bi-printer"></i></button>
-            <button class="act-btn danger" data-bs-toggle="tooltip" title="Delete" data-act="del" data-id="${m.id}"><i class="bi bi-trash"></i></button>
-          </div>`;
-      }
-
-      /* Back Orders only: the Actions column here isn't View/Print/Delete
-       (deleting a material from a back-order row never made much sense) -
-       it's two checkmark toggles for what staff decided to do with the
-       item once it came back: Reimbursed or Replaced. Mutually exclusive
-       (picking one clears the other); clicking the active one again
-       clears it back to "not yet marked". Persisted via
-       /api/inventory/return/disposition, keyed by movementId since each
-       back-order record needs its own disposition, not the material's. */
-      function backOrderActionBtns(m){
-        const reimbursed = m.disposition === 'Reimbursed';
-        const replaced = m.disposition === 'Replaced';
-        // Once Replaced or Reimbursed, the decision is final: both buttons
-        // lock (the server refuses any change too).
-        const locked = reimbursed || replaced;
-        const lockCls = locked ? ' is-locked' : '';
-        const lockAttr = locked ? ' aria-disabled="true"' : '';
-        const reimbursedTitle = reimbursed
-          ? `Reimbursed (${PESO(m.reimbursedAmount || 0)}) \u2014 final, can\u2019t be changed`
-          : (locked ? 'Already marked Replaced \u2014 can\u2019t be changed' : 'Mark as Reimbursed');
-        const replacedTitle = replaced
-          ? `Replaced (${NUM(m.replacedQty != null ? m.replacedQty : m.qty)} ${m.unit}) \u2014 final, can\u2019t be changed`
-          : (locked ? 'Already marked Reimbursed \u2014 can\u2019t be changed' : 'Mark as Replaced');
-        return `<div class="d-inline-flex gap-1">
-            <button type="button" class="disposition-btn${reimbursed ? ' is-active is-reimbursed' : ''}${lockCls}"${lockAttr}
-                    data-disposition-btn data-disposition="Reimbursed" data-movement-id="${m.movementId}"
-                    data-bs-toggle="tooltip" title="${reimbursedTitle}">
-              <i class="bi ${reimbursed ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Reimbursed
-            </button>
-            <button type="button" class="disposition-btn${replaced ? ' is-active is-replaced' : ''}${lockCls}"${lockAttr}
-                    data-disposition-btn data-disposition="Replaced" data-movement-id="${m.movementId}"
-                    data-bs-toggle="tooltip" title="${replacedTitle}">
-              <i class="bi ${replaced ? 'bi-check-circle-fill' : 'bi-circle'}"></i> Replaced
-            </button>
-            <button class="act-btn print-move" data-bs-toggle="tooltip" title="Print Receipt" data-movement-id="${m.movementId}"><i class="bi bi-printer"></i></button>
-          </div>`;
-      }
-
-      /* Reprint one recorded movement (row "Print" button). Same receipt as the
-       one shown right after Confirm (showTransactionReceipt in app.js). Uses
-       what the movement record stores; supplier / price / location come from
-       the item's CURRENT record, since movements don't store them yet. */
-      function showMoveSlip(movementId){
-        // Stock In/Out movements and Back Orders are two separate tables/
-        // arrays now - search whichever one actually has this id.
-        const m = (window.ALL_MOVEMENTS || []).find(x => x.movementId === movementId)
-               || (window.ALL_BACKORDERS || []).find(x => x.movementId === movementId);
-        if (!m) return;
-        const item = inventoryStore.find(m.id) || {};
-        const common = [['Date Recorded', m.date], ['Recorded by', m.recordedBy]];
-        const fields = m.type === 'RECEIPT'
-          ? [['Supplier', item.sup], ['Warehouse / Location', item.loc], ['Remarks / Reference', m.remarks], ...common]
-          : m.type === 'ISSUANCE'
-            ? [['Project / Reference', m.remarks], ['Location', item.loc], ...common]
-            : [['Project Code', m.stockOutRef], ['Received By', m.backOrderBy], ['Reason for Return', m.remarks],
-               ['Disposition', m.disposition || 'Pending'], ['Location', item.loc], ...common];
-        window.showTransactionReceipt(m.type, [{
-          movementId: m.movementId, id: m.id, name: m.name, cat: m.cat, qty: m.qty, unit: m.unit, price: Number(item.price) || 0,
-        }], {
-          when: m.date, fields,
-          weather: m.type === 'ISSUANCE' ? { temp: m.weatherTemp, rain: m.weatherRain, wind: m.weatherWind } : null,
-          delivery: m.type === 'ISSUANCE' ? deliveryInfo(m) : null,
-          recordedBy: m.recordedBy && m.recordedBy !== '\u2014' ? m.recordedBy : '',
-          counterparty: m.type === 'RECEIPT' ? (item.sup || '') : (m.type === 'RETURN' ? (m.backOrderBy || '') : ''),
-          note: 'Reprint of a recorded movement. Unit price shown is the item\u2019s current price.',
-        });
-      }
-
-      function renderMoveSection(rows, currentPage, ids, onPageChange, emptyNoun, showBackOrderedBy, showDelivery){
-        const totalPages = Math.max(1, Math.ceil(rows.length / MOVE_PAGE_SIZE));
-        const clampedPage = Math.min(currentPage, totalPages);
-        const start = (clampedPage - 1) * MOVE_PAGE_SIZE;
-        const pageItems = rows.slice(start, start + MOVE_PAGE_SIZE);
-        const colCount = (showBackOrderedBy || showDelivery) ? 8 : 7;
-
-        const tbody = document.getElementById(ids.tbody);
-        tbody.innerHTML = '';
-        if (pageItems.length === 0) {
-          const reason = (moveSearchQuery || moveCategoryFilter || moveDateFrom || moveDateTo) ? 'match your search or filter' : 'yet';
-          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="${colCount}" class="text-center text-muted-2 py-4">
-            No ${emptyNoun} records ${reason}.</td></tr>`);
-        }
-        pageItems.forEach(m => {
-          // Back Orders only: who initiated the return, shown as its own
-          // column rather than folded into Remarks.
-          const backOrderedByCell = showBackOrderedBy
-            ? `<td class="text-muted-2">${escapeHTML(m.backOrderBy || '\u2014')}</td>` : '';
-          tbody.insertAdjacentHTML('beforeend', `<tr>
-            <td><div class="fw-medium">${escapeHTML(m.name)}</div><div class="small text-muted-2">${m.id}</div></td>
-            <td><span class="tag-chip">${escapeHTML(m.cat)}</span></td>
-            <td class="text-end">${NUM(m.qty)} <span class="text-muted-2">${m.unit}</span></td>
-            <td class="text-muted-2">${m.date}</td>
-            <td class="text-muted-2">${escapeHTML(m.remarks || '\u2014')}</td>
-            ${backOrderedByCell}
-            <td class="text-muted-2">${escapeHTML(m.recordedBy || '\u2014')}</td>
-            ${showDelivery ? deliveryCell(m) : ''}
-            <td class="text-center">${showBackOrderedBy ? backOrderActionBtns(m) : moveActionBtns(m)}</td></tr>`);
-        });
-        initTooltips(tbody);
-        set(ids.count, pageItems.length === rows.length
-          ? `Showing ${rows.length} record${rows.length===1?'':'s'}`
-          : `Showing ${start+1}\u2013${start+pageItems.length} of ${rows.length} records`);
-        buildMovePagination(ids.nav, ids.ul, clampedPage, rows.length, onPageChange);
-        return clampedPage;
-      }
-
-      // Shared by renderMovements() (Stock In/Out) and renderBackOrders() -
-      // both read from the same toolbar controls (search, category, date
-      // range) even though they're two separate arrays (window.ALL_MOVEMENTS
-      // and window.ALL_BACKORDERS) now.
-      function matchesMoveFilters(m){
-        if (moveCategoryFilter && m.cat !== moveCategoryFilter) return false;
-        if (moveSearchQuery) {
-          const hay = `${m.id} ${m.name}`.toLowerCase();
-          if (!hay.includes(moveSearchQuery)) return false;
-        }
-        // m.date is "yyyy-mm-dd" (or a datetime string starting with that),
-        // which sorts/compares correctly as a plain string against the
-        // <input type="date"> values, so no Date parsing is needed.
-        const moveDate = (m.date || '').slice(0, 10);
-        if (moveDateFrom && moveDate < moveDateFrom) return false;
-        if (moveDateTo && moveDate > moveDateTo) return false;
-        return true;
-      }
-
-      function renderMovements(){
-        const filtered = (window.ALL_MOVEMENTS || []).filter(matchesMoveFilters);
-        const inRows  = filtered.filter(m => m.type === 'RECEIPT');
-        const outRows = filtered.filter(m => m.type === 'ISSUANCE');
-
-        stockInPage = renderMoveSection(inRows, stockInPage,
-          { tbody: 'stockInBody', count: 'stockInCount', nav: 'stockInPaginationNav', ul: 'stockInPagination' },
-          (p) => { stockInPage = p; renderMovements(); }, 'stock-in');
-
-        stockOutPage = renderMoveSection(outRows, stockOutPage,
-          { tbody: 'stockOutBody', count: 'stockOutCount', nav: 'stockOutPaginationNav', ul: 'stockOutPagination' },
-          (p) => { stockOutPage = p; renderMovements(); }, 'stock-out', false, true);
-      }
-      window.renderMovements = renderMovements;
-
-      /* ---------- Back Orders table ----------
-       Its own array/table/endpoint now (window.ALL_BACKORDERS, from
-       /api/inventory/backorders) - back orders are no longer rows inside
-       stock_movements, they're a separate record type with their own
-       lifecycle (pending -> Reimbursed/Replaced). Shares the same toolbar
-       filters as Stock In/Out via matchesMoveFilters() above. */
-      function renderBackOrders(){
-        const retRows = (window.ALL_BACKORDERS || []).filter(matchesMoveFilters);
-        returnsPage = renderMoveSection(retRows, returnsPage,
-          { tbody: 'returnsBody', count: 'returnsCount', nav: 'returnsPaginationNav', ul: 'returnsPagination' },
-          (p) => { returnsPage = p; renderBackOrders(); }, 'back-order', true);
-      }
-      window.renderBackOrders = renderBackOrders;
-
-      /* ---------- Stock Movement Summary (per-item aggregate) ----------
-       window.STOCK_SUMMARY holds one row per material with pre-aggregated
-       totals from /api/inventory/summary (SUM by movement_type on the
-       server). The search box and category dropdown from the toolbar
-       above filter this table too — the date range does NOT, since these
-       are all-time totals per item, not per-movement rows. */
-      function renderStockSummary(){
-        const rows = (window.STOCK_SUMMARY || []).filter(r => {
-          if (moveCategoryFilter && r.cat !== moveCategoryFilter) return false;
-          if (moveSearchQuery) {
-            const hay = `${r.id} ${r.name}`.toLowerCase();
-            if (!hay.includes(moveSearchQuery)) return false;
-          }
-          return true;
-        });
-        const totalPages  = Math.max(1, Math.ceil(rows.length / MOVE_PAGE_SIZE));
-        const clampedPage = Math.min(summaryPage, totalPages);
-        summaryPage = clampedPage;
-        const start     = (clampedPage - 1) * MOVE_PAGE_SIZE;
-        const pageItems = rows.slice(start, start + MOVE_PAGE_SIZE);
-
-        const tbody = document.getElementById('stockSummaryBody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        if (pageItems.length === 0) {
-          const reason = (moveSearchQuery || moveCategoryFilter) ? 'match your search or filter' : 'yet';
-          tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" class="text-center text-muted-2 py-4">
-            No items ${reason}.</td></tr>`);
-        }
-        pageItems.forEach(r => {
-          tbody.insertAdjacentHTML('beforeend', `<tr>
-            <td class="fw-id">${escapeHTML(r.id)}</td>
-            <td class="fw-medium">${escapeHTML(r.name)}</td>
-            <td><span class="tag-chip">${escapeHTML(r.cat)}</span></td>
-            <td class="text-end text-success">${NUM(r.totalIn)} <span class="text-muted-2">${r.unit}</span></td>
-            <td class="text-end text-danger">${NUM(r.totalOut)} <span class="text-muted-2">${r.unit}</span></td>
-            <td class="text-end" style="color:var(--primary)">${NUM(r.backOrder)} <span class="text-muted-2">${r.unit}</span></td>
-            <td class="text-end fw-medium">${NUM(r.netStock)} <span class="text-muted-2">${r.unit}</span></td>
-          </tr>`);
-        });
-        set('stockSummaryCount', pageItems.length === rows.length
-          ? `Showing ${rows.length} item${rows.length===1?'':'s'}`
-          : `Showing ${start+1}–${start+pageItems.length} of ${rows.length} items`);
-        buildMovePagination('stockSummaryPaginationNav', 'stockSummaryPagination',
-          clampedPage, rows.length,
-          (p) => { summaryPage = p; renderStockSummary(); });
-      }
-      window.renderStockSummary = renderStockSummary;
-
-      /* Back Orders only: persists a disposition click (Reimbursed /
-       Replaced) to the server. Once set it is final (no clearing or switching),
-       enforced on the server too. Unlike before, this CAN now
-       change the item's on-hand stock ("Replaced" adds it back - see
-       _set_back_order_disposition in app.py), so a full refreshInventory()
-       re-fetches materials/movements/back-orders/summary together, rather
-       than patching just the one row - keeping the Inventory table, Low
-       Stock badges, and Stock Movement Summary all in sync with the new
-       on-hand figure, not just the Back Orders table. */
-      async function setBackOrderDisposition(backOrderId, disposition, extra){
-        try {
-          const res = await fetch('/api/inventory/return/disposition', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Object.assign({ backOrderId, disposition }, extra || {})),
-          });
-          const json = await res.json();
-          if (!json.ok) throw new Error(json.error);
-          if (typeof window.refreshInventory === 'function') await window.refreshInventory();
-          showToast(json.disposition ? `Marked as ${json.disposition}` : 'Disposition cleared', 'success');
-          return true;
-        } catch (err) {
-          showToast(err.message, 'error', 'bi-exclamation-triangle');
-          return false;
-        }
-      }
-
-      /* Back Orders: the popup that confirms the details of a Replaced/
-       Reimbursed mark before it's persisted - item/supplier/receiver are
-       read-only (pulled straight from the back-order row and the item's
-       current record), only the qty actually replaced (capped at how much
-       was returned) or the peso amount reimbursed, plus a remarks note
-       about the disposition itself, are editable. Mirrors Record Return's
-       modal shape but for settling what happened to a returned item. */
-      const dispoModalEl = document.getElementById('dispositionModal');
-      const dispoModal = dispoModalEl ? new bootstrap.Modal(dispoModalEl) : null;
-      const dispo = {
-        form: document.getElementById('dispositionForm'),
-        title: document.getElementById('dispoTitle'),
-        itemName: document.getElementById('dispoItemName'),
-        itemId: document.getElementById('dispoItemId'),
-        supplier: document.getElementById('dispoSupplier'),
-        receivedBy: document.getElementById('dispoReceivedBy'),
-        qtyReturned: document.getElementById('dispoQtyReturned'),
-        date: document.getElementById('dispoDate'),
-        maxQtyHint: document.getElementById('dispoMaxQtyHint'),
-        replacedWrap: document.getElementById('dispoReplacedWrap'),
-        reimbursedWrap: document.getElementById('dispoReimbursedWrap'),
-        qtyInput: document.getElementById('dispoQtyInput'),
-        amountInput: document.getElementById('dispoAmountInput'),
-        notes: document.getElementById('dispoNotes'),
-        submitBtn: document.getElementById('dispoSubmitBtn'),
-      };
-      let dispoState = null;   // { backOrderId, disposition, maxQty }
-      let dispoBusy = false;
-
-      function setDispoBusy(busy, label){
-        dispoBusy = busy;
-        dispo.form?.querySelectorAll('[data-bs-dismiss="modal"]').forEach(b => b.disabled = busy);
-        if (dispo.submitBtn) {
-          dispo.submitBtn.disabled = busy;
-          dispo.submitBtn.innerHTML = busy
-            ? `<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>${label || 'Saving…'}`
-            : 'Confirm';
-        }
-      }
-
-      function openDispositionModal(m, disposition){
-        if (!dispoModal || !dispo.form) { setBackOrderDisposition(m.movementId, disposition); return; }
-        const item = inventoryStore.find(m.id) || {};
-        dispoState = { backOrderId: m.movementId, disposition, maxQty: Number(m.qty) || 0 };
-
-        dispo.title.innerHTML = disposition === 'Replaced'
-          ? '<i class="bi bi-check2-circle me-2" style="color:var(--primary)"></i>Mark as Replaced'
-          : '<i class="bi bi-check2-circle me-2" style="color:var(--primary)"></i>Mark as Reimbursed';
-        dispo.itemName.textContent = m.name;
-        dispo.itemId.textContent = m.id;
-        dispo.supplier.textContent = item.sup || '—';
-        dispo.receivedBy.textContent = m.backOrderBy || '—';
-        dispo.qtyReturned.textContent = `${NUM(m.qty)} ${m.unit}`;
-        dispo.date.textContent = m.date || '—';
-        dispo.maxQtyHint.textContent = `${NUM(m.qty)} ${m.unit}`;
-
-        const isReplaced = disposition === 'Replaced';
-        dispo.replacedWrap.style.display = isReplaced ? '' : 'none';
-        dispo.reimbursedWrap.style.display = isReplaced ? 'none' : '';
-        dispo.qtyInput.required = isReplaced;
-        dispo.amountInput.required = !isReplaced;
-
-        if (isReplaced) {
-          dispo.qtyInput.max = String(dispoState.maxQty);
-          dispo.qtyInput.value = m.replacedQty != null ? m.replacedQty : dispoState.maxQty;
-        } else {
-          const unitPrice = Number(item.price) || 0;
-          dispo.amountInput.value = m.reimbursedAmount != null
-            ? m.reimbursedAmount
-            : (dispoState.maxQty * unitPrice).toFixed(2);
-        }
-        dispo.notes.value = m.dispositionNotes || '';
-
-        setDispoBusy(false);
-        dispoModal.show();
-      }
-
-      dispo.form?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!dispoState || dispoBusy) return;
-        const { backOrderId, disposition, maxQty } = dispoState;
-        const extra = { notes: dispo.notes.value.trim() };
-
-        if (disposition === 'Replaced') {
-          const qty = parseFloat(dispo.qtyInput.value);
-          if (!Number.isFinite(qty) || qty <= 0) return showToast('Enter how many units were replaced.', 'error', 'bi-exclamation-triangle');
-          if (qty > maxQty) return showToast(`Qty Replaced can’t exceed ${NUM(maxQty)} (the amount returned).`, 'error', 'bi-exclamation-triangle');
-          extra.qty = qty;
-        } else {
-          const amount = parseFloat(dispo.amountInput.value);
-          if (!Number.isFinite(amount) || amount <= 0) return showToast('Enter the amount reimbursed.', 'error', 'bi-exclamation-triangle');
-          extra.amount = amount;
-        }
-
-        setDispoBusy(true);
-        const ok = await setBackOrderDisposition(backOrderId, disposition, extra);
-        setDispoBusy(false);
-        if (ok) dispoModal.hide();
-      });
-
-      /* ---------- Delegated row actions on the movement tables: View / Edit /
-       Delete (they operate on the underlying MATERIAL, same as before -
-       just triggered from a movement row instead of a snapshot row); Back
-       Orders also delegates its Reimbursed/Replaced checkmarks here. ---------- */
-      function handleRowAction(e){
-        const delBtn = e.target.closest('[data-deliver]');
-        if (delBtn) { markDelivered(parseInt(delBtn.dataset.movementId, 10), delBtn); return; }
-
-        const failBtn = e.target.closest('[data-deliver-fail]');
-        if (failBtn) { window.openDeliverFailModal(parseInt(failBtn.dataset.movementId, 10)); return; }
-
-        const printBtn = e.target.closest('.print-move');
-        if (printBtn) { showMoveSlip(parseInt(printBtn.dataset.movementId, 10)); return; }
-
-        const dispBtn = e.target.closest('[data-disposition-btn]');
-        if (dispBtn) {
-          const backOrderId = parseInt(dispBtn.dataset.movementId, 10);
-          const m = (window.ALL_BACKORDERS || []).find(x => x.movementId === backOrderId);
-          const clicked = dispBtn.dataset.disposition;
-          if (m && m.disposition) return;                // already Replaced/Reimbursed - final, nothing to do
-          if (m) openDispositionModal(m, clicked);       // newly marking - confirm details first
-          return;
-        }
-
-        const btn = e.target.closest('[data-act]'); if (!btn) return;
-        const i = inventoryStore.find(btn.dataset.id); if (!i) return;
-        if (btn.dataset.act === 'view') openDetail(i);
-        if (btn.dataset.act === 'del')
-          confirmDelete(`Delete "${i.name}" (${i.id})? This cannot be undone.`, () => {
-            inventoryStore.remove(i.id);
-            // Delete doesn't go through refreshInventory()'s server refetch,
-            // so purge this material's movement rows from the local array
-            // too - otherwise they'd linger in the Stock In/Out tables
-            // until the next full page reload.
-            window.ALL_MOVEMENTS = (window.ALL_MOVEMENTS || []).filter(m => m.id !== i.id);
-            window.ALL_BACKORDERS = (window.ALL_BACKORDERS || []).filter(m => m.id !== i.id);
-            renderInventory();
-            showToast(`${i.name} deleted`, 'success', 'bi-trash');
-          });
-      }
-      document.getElementById('stockInBody').addEventListener('click', handleRowAction);
-      document.getElementById('stockOutBody').addEventListener('click', handleRowAction);
-      document.getElementById('returnsBody')?.addEventListener('click', handleRowAction);
-
-      /* ---------- attention lists + sidebar badge + item dropdowns
-       (unchanged - still computed from the MATERIALS list, not movement
-       history) - and triggers the movement tables to re-render too, since
-       any mutation here (add/edit/delete/stock in/out) should refresh both.
-       The old KPI stat cards (Total Items / In Stock / Low Stock / Out of
-       Stock) and the Stock Summary card were removed from this page per
-       client request - Stock Summary now lives on Reports instead. ---------- */
-      function renderInventory(){
-        const items = inventoryStore.all();
-
-        const low = items.filter(i => i.status === 'Low Stock');
-        const out = items.filter(i => i.status === 'Out of Stock');
-        set('lowStockCount', low.length); set('outStockCount', out.length);
-        const row = (i, color, qtyText) => `
-          <div class="sl-item">
-            <div><div class="sl-name">${escapeHTML(i.name)}</div><div class="sl-sub">${i.loc} · Reorder at ${NUM(i.reorder)} ${i.unit}</div></div>
-            <div class="sl-qty" style="color:${color}">${qtyText}</div>
-          </div>`;
-        document.getElementById('lowStockList').innerHTML = low.length
-          ? low.map(i => row(i, 'var(--accent-dark)', `${NUM(i.qty)} ${i.unit}`)).join('')
-          : '<div class="stock-empty">No low-stock materials.</div>';
-        document.getElementById('outStockList').innerHTML = out.length
-          ? out.map(i => row(i, 'var(--primary)', `0 ${i.unit}`)).join('')
-          : '<div class="stock-empty">No out-of-stock materials.</div>';
-
-        // New Stock Materials: today's Stock In (RECEIPT) movements, newest
-        // first - see the comment above the card's markup for why movement
-        // order (not a time-of-day sort) is what "sorted by time" means here.
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const newStock = (window.ALL_MOVEMENTS || [])
-          .filter(m => m.type === 'RECEIPT' && (m.date || '').slice(0, 10) === todayStr);
-        set('newStockCount', newStock.length);
-        document.getElementById('newStockList').innerHTML = newStock.length
-          ? newStock.map(m => `
-            <div class="sl-item">
-              <div><div class="sl-name">${escapeHTML(m.name)}</div><div class="sl-sub">${escapeHTML(m.id)}${m.recordedBy && m.recordedBy !== '—' ? ' · ' + escapeHTML(m.recordedBy) : ''}</div></div>
-              <div class="sl-qty" style="color:var(--success)">+${NUM(m.qty)} ${escapeHTML(m.unit)}</div>
-            </div>`).join('')
-          : '<div class="stock-empty">No stock added yet today.</div>';
-
-        // Sidebar badge stays in sync with live data
-        const oos = out.length;
-        document.querySelectorAll('.sidebar__nav a[href="/inventory"] .badge')
-          .forEach(b => { b.textContent = oos; b.classList.toggle('d-none', oos === 0); });
-
-        renderMovements();
-        renderBackOrders();
-        renderStockSummary();
-      }
-
-      /* ---------- Detail modal (Supplier & Location live here) ---------- */
-      const detailModal = new bootstrap.Modal('#invDetailModal');
-      function openDetail(i){
-        currentDetailId = i.id;
-        set('idName', i.name); set('idId', i.id); set('idCat', i.cat);
-        set('idSup', i.sup); set('idLoc', i.loc); set('idPrice', PESO(i.price));
-        set('idQty', NUM(i.qty)+' '+i.unit); set('idReorder', NUM(i.reorder)+' '+i.unit); set('idAdded', i.added);
-        document.getElementById('idStatus').innerHTML = stockBadge(i.status);
-        detailModal.show();
-      }
-
-      /* ---------- Entity submits: Stock In, Stock Out, Return ----------
-       This listener is effectively unreachable dead code: app.js's wire()
-       intercepts all three forms in the capture phase and calls
-       stopImmediatePropagation(), so its own server-backed submit always
-       runs instead of this one. Left in place only as a harmless fallback
-       for local-only testing without app.js loaded. A brand-new item (with
-       its first stock) is registered through the Stock In modal's "New
-       Item" mode, which posts straight to /api/inventory/save via wire() -
-       not through this local-store path. */
-      document.addEventListener('entity:submit', (e) => {
-        const { entity, data } = e.detail;
-        if (entity === 'stock-in' || entity === 'stock-out' || entity === 'return') {
-          const i = inventoryStore.find(data.itemId); if (!i) return;
-          // Both stock-in and return add to stock; stock-out subtracts.
-          const delta = (parseInt(data.qty,10)||0) * (entity==='stock-out' ? -1 : 1);
-          const qty = Math.max(0, i.qty + delta);
-          inventoryStore.update(i.id, { qty, status:invStatus(qty, i.reorder) });
-          renderInventory();
-        }
-      });
-
-      renderInventory();
-      window.renderInventory = renderInventory;   // hook: lets app.js refresh after DB writes
-    });
-  </script>
-</body>
-</html>
+  <script src="{{ url_for('static', filename='js/pages/inventory.js') }}"></script>
+{% endblock %}

@@ -1,18 +1,10 @@
-"""
-Parabellum ISOS - Weather Data Service
-=================================================================
-Collects historical weather for Lipa City, Batangas from Open-Meteo's
-free Historical Weather API and syncs monthly aggregates into the
-`monthly_weather` table (D8).
-"""
-
 from __future__ import annotations
 import sys
-from datetime import date
+from datetime import date, timedelta
 import pandas as pd
 import requests
 
-from mlr_model import execute_query, _bulk_insert, log_audit
+from db import execute_query, bulk_insert, log_audit
 
 LOCATION_NAME = "Lipa City, Batangas, PH"
 LATITUDE = 13.9411
@@ -20,11 +12,8 @@ LONGITUDE = 121.1622
 TIMEZONE = "Asia/Manila"
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-# The archive API trails real time by several days, so a movement recorded
-# today (or in the last few weeks) is looked up on the forecast API instead,
-# which serves recent days and today.
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-MOVEMENT_WEATHER_TIMEOUT_SECONDS = 4   # a stock movement must never wait long on the weather
+MOVEMENT_WEATHER_TIMEOUT_SECONDS = 4
 DEFAULT_START_DATE = "2024-01-01"
 
 DAILY_VARS = ["temperature_2m_mean", "precipitation_sum", "rain_sum", "wind_speed_10m_max"]
@@ -56,19 +45,11 @@ def fetch_daily_weather(start_date=DEFAULT_START_DATE, end_date=None,
     })
 
 
-_day_weather_cache = {}        # date -> weather dict (successes only)
-_day_weather_failed_at = {}    # date -> time of last failure, to avoid retrying on every row
+_day_weather_cache = {}
+_day_weather_failed_at = {}
 
 
 def fetch_weather_for_day(day):
-    """
-    Weather for one day in Lipa City: {"temp_c", "rainfall_mm", "wind_kmh"}, or
-    None if it can't be had. Used to stamp each Stock In / Stock Out. This is
-    best-effort on purpose - it never raises, so a weather outage can't stop
-    a stock movement from being saved. Cached per day, and a failed lookup
-    isn't retried for 60 seconds (a Stock Out request with several items would
-    otherwise wait on the network once per item).
-    """
     import time
     day = str(day)
     if day in _day_weather_cache:
@@ -129,7 +110,7 @@ def sync_weather_to_db(db_config, start_date=DEFAULT_START_DATE, end_date=None,
              None if pd.isna(r["max_wind_kmh"]) else float(r["max_wind_kmh"]))
             for _, r in monthly_df.iterrows()]
 
-    _bulk_insert(db_config,
+    bulk_insert(db_config,
         """INSERT INTO monthly_weather
              (period_month, location, avg_temp_c, total_rainfall_mm,
               rainy_days, max_wind_kmh)
@@ -145,6 +126,22 @@ def sync_weather_to_db(db_config, start_date=DEFAULT_START_DATE, end_date=None,
         f"Synced {len(rows)} months of weather for {location_name} "
         f"({start_date} to {end_date or date.today().isoformat()}).", username)
     return len(rows)
+
+
+def sync_for_history(db_config, username="system"):
+    rows = execute_query(db_config, """
+        SELECT LEAST(
+            (SELECT MIN(movement_date) FROM stock_movements),
+            (SELECT MIN(period_month) FROM monthly_demand)) AS start;
+    """, fetch=True)
+    start = rows[0]["start"] if rows and rows[0]["start"] else None
+    if not start:
+        return 0
+    end = date.today() - timedelta(days=2)
+    if start > end:
+        return 0
+    return sync_weather_to_db(db_config, start_date=start.isoformat(), end_date=end.isoformat(),
+                              username=username)
 
 
 if __name__ == "__main__":

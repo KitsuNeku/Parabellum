@@ -1,25 +1,3 @@
-"""
-Parabellum ISOS - Authentication & Access Control
-=================================================================
-Implements what the capstone documentation requires under
-Objective 2.1 ("user authentication and role-based access control")
-and the ISO 25010 Security row ("Authentication, role-based access,
-password control, audit logs... are evaluated").
-
-What this gives you:
-  - Passwords are hashed (never stored or compared in plain text).
-  - Sessions are server-side, signed, HttpOnly cookies - the frontend
-    never holds a password after login.
-  - Role checks happen on the SERVER, not just by hiding sidebar
-    links in JavaScript. Hiding a link is a UI convenience; it is not
-    security, because anyone can call the API directly.
-  - Repeated wrong passwords lock the account for a short cooldown,
-    which blocks simple brute-force guessing.
-  - Every login attempt (success or failure) is written to audit_logs
-    (D7), matching Appendix B / your admin test table's requirement
-    that audit logs record important activity.
-"""
-
 from functools import wraps
 from datetime import datetime, timedelta, timezone
 import secrets
@@ -27,28 +5,18 @@ import secrets
 from flask import session, jsonify, redirect, url_for, request
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from mlr_model import execute_query, log_audit
+from db import execute_query, log_audit, get_security_settings
+import mailer
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_MINUTES = 15
 
-# Absolute session lifetime -- separate from the 30-minute IDLE timeout
-# (PERMANENT_SESSION_LIFETIME in app.py, refreshed on every request).
-# Without this, a session that's used continuously never expires. This
-# forces re-authentication at least once every 12 hours no matter how
-# active the user is -- a real cap on how long a stolen/left-open
-# session cookie stays useful to an attacker.
 ABSOLUTE_SESSION_HOURS = 12
 
 
 def _session_expired():
-    """True if the current session has outlived ABSOLUTE_SESSION_HOURS
-    since login, regardless of recent activity."""
     login_at = session.get("login_at")
     if not login_at:
-        # No timestamp recorded (e.g. a session from before this feature
-        # existed) -- treat as expired so it re-authenticates and picks
-        # up a fresh timestamp, rather than trusting it indefinitely.
         return True
     try:
         login_dt = datetime.fromisoformat(login_at)
@@ -58,29 +26,16 @@ def _session_expired():
         login_dt = login_dt.replace(tzinfo=timezone.utc)
     return (_now() - login_dt) > timedelta(hours=ABSOLUTE_SESSION_HOURS)
 
-# Minimum password length. 12 is the NIST recommended floor for
-# human-set passwords when combined with lockout + hashing. Longer is
-# better but shorter is a real vulnerability (8-char passwords fall to
-# offline attack in hours if the hash ever leaks).
 MIN_PASSWORD_LENGTH = 12
 
 
 def validate_password_strength(plain_password):
-    """
-    Raise ValueError with a user-facing message if the password is too
-    weak to accept. Called by both the login/password-change flow AND
-    by hash_password itself as a safety net.
-    """
     if not isinstance(plain_password, str):
         raise ValueError("Password must be a string.")
     if len(plain_password) < MIN_PASSWORD_LENGTH:
         raise ValueError(
             f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
         )
-    # Reject the most common structural weaknesses: whitespace-only or a
-    # single repeated character. Full password-blacklist checks belong in
-    # a dedicated service (e.g. HaveIBeenPwned's k-anonymity API) if you
-    # want to add that later.
     if plain_password.strip() == "":
         raise ValueError("Password cannot be whitespace only.")
     if len(set(plain_password)) < 3:
@@ -91,50 +46,26 @@ def hash_password(plain_password):
     validate_password_strength(plain_password)
     return generate_password_hash(plain_password)
 
-# Mirrors ROLE_PERMISSIONS in static/js/data.js. These are now only the
-# FALLBACK defaults - the live, editable source of truth is the
-# role_permissions DB table (Settings > Roles & Permissions), read by
-# get_role_permissions() below. This dict is used only if that table is
-# ever empty or unreachable, so the app degrades to its original
-# hardcoded behavior instead of locking everyone out.
 ROLE_PERMISSIONS = {
-    "System Administrator": {"dashboard", "inventory", "suppliers", "customers", "projects",
-                              "transactions", "forecasting",
+    "System Administrator": {"dashboard", "inventory", "outlook", "suppliers", "customers", "projects",
+                              "transactions", "support", "forecasting",
                               "reports", "settings", "profile"},
-    "Inventory Personnel":  {"dashboard", "inventory", "suppliers", "profile"},
-    "Operations Personnel": {"dashboard", "projects", "transactions", "profile"},
-    "Management/Owner":     {"dashboard", "projects", "transactions",
+    "Inventory Personnel":  {"dashboard", "inventory", "outlook", "suppliers", "profile"},
+    "Operations Personnel": {"dashboard", "projects", "transactions", "support", "profile"},
+    "Management/Owner":     {"dashboard", "outlook", "projects", "transactions", "support",
                               "forecasting", "reports", "profile"},
 }
 
-# The only valid role names. Permissions per role are now editable (see
-# role_permissions table), but the set of ROLES themselves is still fixed
-# here and in schema.sql's CHECK constraint on users.role.
 ROLE_NAMES = set(ROLE_PERMISSIONS.keys())
 
-# Every valid page-permission key. Used to sanitize `custom_permissions` so
-# a corrupted DB row or a stray value from the Settings UI can't accidentally
-# grant access to something that isn't a real page.
-ALL_PERMISSIONS = {"dashboard", "inventory", "suppliers", "customers", "projects",
-                   "transactions", "forecasting", "reports", "settings",
+ALL_PERMISSIONS = {"dashboard", "inventory", "outlook", "suppliers", "customers", "projects",
+                   "transactions", "support", "forecasting", "reports", "settings",
                    "profile"}
 
-# The "settings" key is special: only System Administrators can ever have it
-# (they need it to manage everyone else's access). Even if an override tries
-# to grant "settings" to a non-admin, it's stripped out at resolve time -
-# otherwise a non-admin could grant themselves back their own access.
 _ADMIN_ONLY_PERMISSIONS = {"settings"}
 
 
 def get_role_permissions(db_config):
-    """
-    Live role-default permissions from the role_permissions table
-    (Settings > Roles & Permissions), as {role: set(page_keys)}. Falls
-    back to the hardcoded ROLE_PERMISSIONS above if the table is empty
-    or the query fails for any reason (e.g. a database that hasn't run
-    the add_role_permissions_table.sql migration yet) - so this is
-    never the thing that locks everyone out.
-    """
     try:
         rows = execute_query(db_config, "SELECT role, permissions FROM role_permissions;", fetch=True)
     except Exception:
@@ -148,27 +79,12 @@ def get_role_permissions(db_config):
         if r["role"] != "System Administrator":
             parsed -= _ADMIN_ONLY_PERMISSIONS
         live[r["role"]] = parsed
-    # Any role missing a row (shouldn't normally happen) still falls back
-    # to its hardcoded default rather than getting zero pages.
     for role, perms in ROLE_PERMISSIONS.items():
         live.setdefault(role, set(perms))
     return live
 
 
 def resolve_permissions(role, custom_permissions_csv, role_permissions=None):
-    """
-    Return the effective set of allowed pages for one user, given their
-    role and their per-user `custom_permissions` column (Settings > Users >
-    Access). NULL / empty override = the role's current defaults (from
-    `role_permissions`, or the hardcoded ROLE_PERMISSIONS if the caller
-    doesn't pass one - pass get_role_permissions(db_config) wherever a DB
-    connection is available so role-level edits take effect). Any value
-    in the override REPLACES the role's defaults for that one user,
-    restricted to keys in ALL_PERMISSIONS. "settings" is always kept
-    admin-only, even in an override, so a compromised or fat-fingered
-    custom_permissions value can never quietly hand another role the
-    keys to the kingdom.
-    """
     if role_permissions is None:
         role_permissions = ROLE_PERMISSIONS
     role_defaults = role_permissions.get(role, set())
@@ -181,53 +97,31 @@ def resolve_permissions(role, custom_permissions_csv, role_permissions=None):
         parsed -= _ADMIN_ONLY_PERMISSIONS
     return parsed
 
-# Which permission-key each API endpoint falls under.
-API_PERMISSION = {
-    "api_materials":  "forecasting",
-    "api_aggregate":  "forecasting",
-    "api_forecast":   "forecasting",
-}
-
 
 def _now():
     return datetime.now(timezone.utc)
 
 
-# A fixed, valid password hash with no corresponding real password. Used
-# to burn the same amount of CPU time on an unknown-username login as a
-# real password check would take, so response TIMING doesn't leak
-# whether a username exists (on top of the error message already being
-# identical). Generated once and hardcoded -- it verifies against
-# nothing, which is exactly the point.
 _DUMMY_HASH = generate_password_hash(secrets.token_urlsafe(32))
 
 
 def verify_login(db_config, username, plain_password):
-    """
-    Checks credentials against the users table.
-    Returns (user_dict, error_message) - exactly one of the two is set.
-    """
     rows = execute_query(
         db_config,
-        """SELECT user_id, username, password_hash, full_name, role,
-                  is_active, failed_attempts, locked_until, custom_permissions
-           FROM users WHERE username = %s;""",
-        (username,),
+        """SELECT user_id, username, password_hash, full_name, role, email,
+                  is_active, failed_attempts, locked_until, custom_permissions,
+                  totp_enabled, must_change_password
+           FROM users
+           WHERE username = %s OR (POSITION('@' IN %s) > 0 AND LOWER(email) = LOWER(%s))
+           ORDER BY (username = %s) DESC LIMIT 1;""",
+        (username, username, username, username),
         fetch=True,
     )
     user = rows[0] if rows else None
 
-    # Same generic message whether the username doesn't exist or the
-    # password is wrong - confirming which one it was would tell an
-    # attacker which usernames are valid.
     generic_error = "Invalid username or password."
 
     if not user:
-        # Run a real (but pointless) hash comparison anyway, so this
-        # branch takes about the same time as the "wrong password"
-        # branch below. Without this, an unknown username returns
-        # measurably faster than a known one, which is itself an
-        # enumeration channel even though the error text is identical.
         check_password_hash(_DUMMY_HASH, plain_password)
         log_audit(db_config, "LOGIN_FAILED", f"Unknown username '{username}'.")
         return None, generic_error
@@ -268,67 +162,125 @@ def verify_login(db_config, username, plain_password):
         log_audit(db_config, "LOGIN_FAILED", f"Wrong password for '{username}' (attempt {attempts}).", username)
         return None, generic_error
 
-    # Success - clear the failure counter and lock.
     execute_query(
         db_config,
         "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE user_id = %s;",
         (user["user_id"],),
     )
-    log_audit(db_config, "LOGIN_SUCCESS", f"'{username}' signed in.", username)
+    return _session_user(db_config, user), None
 
+
+def _session_user(db_config, user):
     return {
         "user_id": user["user_id"],
         "username": user["username"],
         "name": user["full_name"] or user["username"],
         "role": user["role"],
-        # Resolved once at login and stashed in the session so per-request
-        # permission checks don't need another SELECT. The resolved set
-        # honors any per-user custom_permissions override configured in
-        # Settings > Users > Access, and the role's CURRENT defaults from
-        # Settings > Roles & Permissions, otherwise falls back to the
-        # hardcoded ROLE_PERMISSIONS. Because this is resolved at login,
-        # a role-permission edit takes effect for that role's users the
-        # next time they sign in - matching how a per-user Access edit
-        # already behaves.
+        "email": user.get("email") or "",
+        "two_factor": bool(user.get("totp_enabled")),
+        "must_change_password": bool(user.get("must_change_password")),
         "allowed_pages": sorted(resolve_permissions(
             user["role"], user.get("custom_permissions"),
             get_role_permissions(db_config))),
-    }, None
+    }
+
+
+def needs_2fa_setup(db_config, user):
+    return (user.get("role") == "System Administrator" and not user.get("two_factor")
+            and get_security_settings(db_config)["require_2fa_admins"])
+
+
+def finalize_login(db_config, user, ip, remember=True):
+    session.clear()
+    session["user"] = user
+    session["login_at"] = _now().isoformat()
+    session["checked_at"] = _now().timestamp()
+    session["last_seen"] = _now().timestamp()
+    session.permanent = bool(remember)
+    log_audit(db_config, "LOGIN_SUCCESS", f"'{user['username']}' signed in from {ip}.", user["username"])
+    rows = execute_query(db_config, "SELECT last_login_ip FROM users WHERE user_id = %s;",
+                         (user["user_id"],), fetch=True)
+    previous_ip = rows[0]["last_login_ip"] if rows else None
+    execute_query(db_config,
+                  "UPDATE users SET last_login_ip = %s, last_login_at = CURRENT_TIMESTAMP WHERE user_id = %s;",
+                  (ip, user["user_id"]))
+    if (previous_ip and previous_ip != ip and user.get("email")
+            and get_security_settings(db_config)["login_alerts"]):
+        mailer.send_async(
+            user["email"], "New sign-in to Parabellum ISOS",
+            f"Hi {user['name']},\n\nYour account ({user['username']}) was just signed in from a new "
+            f"location (IP {ip}) on {_now().astimezone().strftime('%B %d, %Y %I:%M %p')}.\n\n"
+            "If this was you, no action is needed. If not, change your password right away and "
+            "contact your administrator.\n\nParabellum ISOS")
+        log_audit(db_config, "LOGIN_ALERT_SENT", f"New-IP sign-in alert for '{user['username']}'.", user["username"])
+    return {
+        "mustChangePassword": user["must_change_password"],
+        "setup2fa": needs_2fa_setup(db_config, user),
+    }
+
+
+REVALIDATE_SECONDS = 60
+GATE_ALLOWED_PREFIXES = ("/profile", "/api/profile", "/api/me", "/api/logout", "/api/notifications",
+                         "/api/chat")
+
+
+def _refresh_session_user(db_config):
+    checked = session.get("checked_at", 0)
+    if _now().timestamp() - checked < REVALIDATE_SECONDS:
+        return True
+    rows = execute_query(db_config, """
+        SELECT user_id, username, full_name, role, email, is_active, custom_permissions,
+               totp_enabled, must_change_password
+        FROM users WHERE user_id = %s;
+    """, (session["user"].get("user_id"),), fetch=True)
+    if not rows or not rows[0]["is_active"] or rows[0]["username"] != session["user"].get("username"):
+        return False
+    session["user"] = _session_user(db_config, rows[0])
+    session["checked_at"] = _now().timestamp()
+    return True
+
+
+def _gate():
+    from config import DB_CONFIG
+    idle_limit = get_security_settings(DB_CONFIG)["session_timeout_min"] * 60
+    idle = _now().timestamp() - session.get("last_seen", _now().timestamp())
+    if "user" not in session or _session_expired() or idle > idle_limit \
+            or not _refresh_session_user(DB_CONFIG):
+        if "user" in session:
+            session.clear()
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "Not signed in."}), 401
+        return redirect(url_for("login"))
+    session["last_seen"] = _now().timestamp()
+    user = session["user"]
+    if (user.get("must_change_password") or needs_2fa_setup(DB_CONFIG, user)) \
+            and not request.path.startswith(GATE_ALLOWED_PREFIXES):
+        if request.path.startswith("/api/"):
+            msg = ("Please change your temporary password first." if user.get("must_change_password")
+                   else "Please set up two-factor authentication first.")
+            return jsonify({"ok": False, "error": msg}), 403
+        return redirect("/profile")
+    return None
 
 
 def login_required(view):
-    """Blocks the route entirely unless a session exists AND hasn't
-    exceeded the absolute lifetime. Applies to pages and APIs."""
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if "user" not in session or _session_expired():
-            session.clear()
-            if request.path.startswith("/api/"):
-                return jsonify({"ok": False, "error": "Not signed in."}), 401
-            return redirect(url_for("login"))
+        blocked = _gate()
+        if blocked is not None:
+            return blocked
         return view(*args, **kwargs)
     return wrapped
 
 
 def permission_required(key):
-    """
-    Enforces ROLE_PERMISSIONS on the SERVER for a given permission key
-    (e.g. "forecasting"). This is what actually protects the data - the
-    sidebar hiding a link in the browser is only ever a convenience.
-    """
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
-            if "user" not in session or _session_expired():
-                session.clear()
-                if request.path.startswith("/api/"):
-                    return jsonify({"ok": False, "error": "Not signed in."}), 401
-                return redirect(url_for("login"))
-
+            blocked = _gate()
+            if blocked is not None:
+                return blocked
             role = session["user"]["role"]
-            # Prefer the per-user resolved set stored at login time (honors
-            # any Settings > Users > Access override), fall back to role
-            # defaults for sessions established before that field existed.
             session_allowed = session["user"].get("allowed_pages")
             allowed = set(session_allowed) if session_allowed else ROLE_PERMISSIONS.get(role, set())
             if key not in allowed:
@@ -338,3 +290,13 @@ def permission_required(key):
             return view(*args, **kwargs)
         return wrapped
     return decorator
+
+
+PAGES = ["dashboard", "inventory", "outlook", "suppliers", "customers", "projects", "transactions", "support",
+         "forecasting", "reports", "settings", "profile"]
+
+
+def allowed_pages():
+    u = session.get("user") or {}
+    session_allowed = u.get("allowed_pages")
+    return set(session_allowed) if session_allowed else ROLE_PERMISSIONS.get(u.get("role"), set())

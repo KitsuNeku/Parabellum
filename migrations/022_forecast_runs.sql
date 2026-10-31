@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS forecast_runs (
+    run_id  SERIAL PRIMARY KEY,
+    run_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    run_by  VARCHAR(60),
+    result  JSONB NOT NULL
+);

@@ -1,24 +1,3 @@
-"""
-Seed sample operational data for Parabellum ISOS.
-=================================================================
-Monthly forecasting needs YEARS of history, not days. This generates
-30 months (Jan 2024 - Jun 2026) of materials, projects, transactions,
-and stock movements so the MLR model has something real to learn from.
-
-Run ONCE, after schema.sql:
-
-    python seed_data.py
-
-Demand here is generated from a genuine underlying relationship
-(previous demand + project activity + business volume + seasonality
-+ noise), which is how demand behaves in a real fabrication shop.
-The model has to discover that relationship from the records - it is
-not handed the answer.
-
-NOTE: this is SAMPLE data for development and defense rehearsal.
-Replace it with Parabellum's real historical records when available.
-"""
-
 import random
 from datetime import date, timedelta
 
@@ -29,7 +8,6 @@ from config import DB_CONFIG
 random.seed(42)
 
 MATERIALS = [
-    # code, name, unit, unit_cost, reorder, category, supplier, location
     ("STL-016", "Deformed Steel Bar 16mm",   "pcs",      285.00,  400, "Bars",   "SteelAsia",      "Warehouse A"),
     ("GIS-005", "GI Sheet Corrugated 0.5mm", "sheets",   640.00,   60, "Sheets", "Puyat Steel",    "Warehouse B"),
     ("MSP-006", "MS Plate 4x8 (6mm)",        "sheets",  2450.00,   40, "Plates", "Capitol Steel",  "Yard 1"),
@@ -40,8 +18,6 @@ MATERIALS = [
     ("FLB-014", "Flat Bar 1x1/4",            "length",   190.00,  200, "Bars",   "Pag-asa Steel",  "Yard 1"),
 ]
 
-# Baseline monthly appetite for each material, and how strongly each one
-# responds to project activity.
 PROFILE = {
     "STL-016": (150, 9.0), "GIS-005": (60, 4.5), "MSP-006": (45, 3.0),
     "ANG-506": (95, 6.0),  "HBM-200": (18, 2.2), "CPU-206": (120, 7.5),
@@ -75,7 +51,7 @@ def main():
         RESTART IDENTITY CASCADE;
     """)
 
-    # ---- Materials (D2) ----
+    # Materials (D2)
     ids = {}
     for code, name, unit, cost, reorder, category, supplier, location in MATERIALS:
         cur.execute(
@@ -88,8 +64,6 @@ def main():
         ids[code] = cur.fetchone()[0]
     print(f"  {len(ids)} materials")
 
-    # ---- Suppliers (names match MATERIALS' `supplier` column exactly, so
-    # the Suppliers page's "Materials Supplied" list links up automatically) ----
     SUPPLIER_INFO = {
         "SteelAsia":            ("Roberto Villanueva", "Raw Material Supplier",      "Net 30", "Calaca, Batangas"),
         "Puyat Steel":          ("Dennis Ramos",        "Raw Material Supplier",      "Net 30", "Mandaluyong City"),
@@ -114,8 +88,6 @@ def main():
         )
     print(f"  {len(supplier_names)} suppliers")
 
-    # ---- Employees (commission computation reads this) ----
-    # Codes must match the EMP-01..EMP-06 range projects.staff uses below.
     EMPLOYEES = [
         ("EMP-01", "Engr. Juan Dela Cruz", "Senior Sales Engineer", 5.0),
         ("EMP-02", "Engr. Maria Santos",   "Sales Engineer",        4.5),
@@ -132,7 +104,7 @@ def main():
         )
     print(f"  {len(EMPLOYEES)} employees")
 
-    # ---- Customers ----
+    # Customers
     contacts = ["Ramon Aquino", "Liza Tan", "Jose Marquez", "Grace Lim",
                 "Paolo Reyes", "Maria Santos", "Ben Cruz", "Ana Villar"]
     cust_ids = {}
@@ -151,12 +123,10 @@ def main():
         cust_ids[cname] = cur.fetchone()[0]
     print(f"  {len(cust_ids)} customers")
 
-    # ---- Projects: a growing shop, 2-7 running at any time ----
     project_ids = []
     priorities = ["High", "Medium", "Low"]
     for i in range(N_MONTHS):
         ms = month_start(i)
-        # gentle growth over time + seasonal dip in the rainy months
         n_new = random.randint(1, 2) + (1 if i > 14 else 0)
         if ms.month in (7, 8, 9):
             n_new = max(1, n_new - 1)
@@ -164,9 +134,6 @@ def main():
             dur = random.randint(2, 6)
             start = ms + timedelta(days=random.randint(0, 27))
 
-            # Jobs started near the end of the window are still running, so
-            # they carry into the forecast month. A real shop always has work
-            # in progress - and the forecast needs to know about it.
             still_running = (i + dur) >= N_MONTHS
             end = None if still_running else month_start(i + dur) + timedelta(days=20)
             cust_name = random.choice(CUSTOMERS)
@@ -180,10 +147,6 @@ def main():
                  f"Fabrication Job {ms.year}-{ms.month:02d}-{random.randint(100,999)}",
                  cust_name, cust_ids[cust_name], start, end,
                  "Ongoing" if still_running else "Completed",
-                 # Realistic small-shop fabrication job pricing (Parabellum
-                 # does gates, fences, handrails, structural steel for local
-                 # customers - not multi-million-peso infrastructure work).
-                 # Capped at PHP 60,000 per job.
                  round(random.uniform(8_000, 60_000), 2),
                  random.choice(priorities),
                  100 if not still_running else random.randint(20, 85),
@@ -193,7 +156,6 @@ def main():
                                 end or date(2099, 12, 31)))
     print(f"  {len(project_ids)} projects")
 
-    # ---- Transactions: business volume, tracks project activity ----
     n_txn = 0
     for i in range(N_MONTHS):
         ms = month_start(i)
@@ -204,28 +166,11 @@ def main():
             d = ms + timedelta(days=random.randint(0, (me - ms).days - 1))
             pid = random.choice(live)[0] if live else None
             cust_name = random.choice(CUSTOMERS)
-            mat = random.choice(MATERIALS)  # (code, name, unit, cost, reorder, cat, sup, loc)
-            price = round(mat[3] * random.uniform(1.15, 1.4), 2)  # markup over cost
+            mat = random.choice(MATERIALS)
+            price = round(mat[3] * random.uniform(1.15, 1.4), 2)
 
-            # Realistic small-shop transaction sizing: pick a target PRE-VAT
-            # total in a small-business range, then derive quantity from
-            # that target divided by this material's unit price. This
-            # naturally makes expensive materials (H-Beams at ~PHP 10k+
-            # each) sell in small quantities and cheap materials (flat
-            # bars, screws) sell in larger quantities - both more
-            # realistic than picking quantity independently of price, and
-            # it keeps the VAT-inclusive total (what the UI displays) under
-            # PHP 50,000 as requested. 44,000 * 1.12 = 49,280, safely
-            # under the cap even before rounding.
             target_total = random.uniform(500, 44_000)
             q = max(1, round(target_total / price))
-            # Safety clamp: rounding q to the nearest whole unit can
-            # occasionally push the VAT-inclusive total slightly over the
-            # 50,000 cap - most noticeable for expensive materials bought
-            # in small quantities, where each whole unit is a large
-            # fraction of the total (e.g. rounding 4.5 up to 5 units of a
-            # PHP 9,780 item overshoots by ~10%). Step down until the cap
-            # actually holds, rather than trusting division-then-round alone.
             while q > 1 and (q * price * 1.12) > 50_000:
                 q -= 1
             amount = round(q * price, 2)
@@ -243,14 +188,10 @@ def main():
             n_txn += 1
     print(f"  {n_txn} transactions")
 
-    # ---- Stock movements: demand driven by a real relationship ----
     prev_demand = {c: PROFILE[c][0] for c, *_ in MATERIALS}
     stock = {c: PROFILE[c][0] * 3 for c, *_ in MATERIALS}
     n_mov = 0
 
-    # Opening inventory MUST be recorded as a real movement. The forecasting
-    # service derives the stock balance by replaying receipts and issuances,
-    # so any stock that never appears as a receipt is invisible to it.
     for code, name, unit, cost, reorder, category, supplier, location in MATERIALS:
         cur.execute(
             """INSERT INTO stock_movements
@@ -272,9 +213,6 @@ def main():
         for code, name, unit, cost, reorder, category, supplier, location in MATERIALS:
             base, proj_beta = PROFILE[code]
 
-            # The relationship the model must recover from the data:
-            # demand = momentum + project pull + business volume
-            # + seasonality - drag from sitting stock + noise
             seasonal = 1.0 + 0.16 * np.sin(2 * np.pi * (ms.month - 3) / 12)
             demand = (
                 0.34 * prev_demand[code]
@@ -283,12 +221,9 @@ def main():
                 + 0.42 * base
                 - 0.012 * stock[code]
             ) * seasonal
-            demand *= random.uniform(0.88, 1.12)          # real-world noise
+            demand *= random.uniform(0.88, 1.12)
             demand = max(1, round(demand))
 
-            # Restock to roughly one month of cover. A fabrication shop buys
-            # per job - it does not sit on several months of steel - so stock
-            # is drawn down close to the bone and genuinely needs reordering.
             desired_opening = demand * random.uniform(1.05, 1.7)
             receipt = max(0, round(desired_opening - stock[code]))
             if receipt > 0:
@@ -303,7 +238,6 @@ def main():
                 stock[code] += receipt
                 n_mov += 1
 
-            # Issue the month's demand across several withdrawals.
             remaining = demand
             for _ in range(random.randint(3, 7)):
                 if remaining <= 0:
@@ -330,7 +264,6 @@ def main():
 
     print(f"  {n_mov} stock movements")
 
-    # Final live stock balance on the material master.
     for code in ids:
         cur.execute(
             "UPDATE materials SET current_stock = %s WHERE material_id = %s;",

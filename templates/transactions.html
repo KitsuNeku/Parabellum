@@ -1,134 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Transactions · Parabellum ISOS</title>
-  <link rel="icon" href="{{ url_for('static', filename='assets/img/favicon.svg') }}" type="image/svg+xml">
-  <!-- Google Font: Poppins -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Bootstrap 5 + Icons (CDN) -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <!-- Custom design system -->
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-</head>
-<body>
-<div class="backdrop"></div>
-<div class="app">
-  <!-- ============ SIDEBAR ============ -->
-  <aside class="sidebar">
-    <div class="sidebar__brand d-flex align-items-center gap-2">
-      <img src="{{ url_for('static', filename='assets/img/logo.svg') }}" class="logo-mark" alt="Parabellum logo">
-      <div>
-        <div class="brand-name">PARABELLUM</div>
-        <div class="brand-sub">STEEL &amp; IRON WORKS</div>
-      </div>
-    </div>
-
-    <div class="sidebar__user">
-      <div class="avatar-gold">{{ current_user_initials }}</div>
-      <div>
-        <div class="u-name">{{ current_user.name }}</div>
-        <div class="u-role">{{ current_user.role }}</div>
-      </div>
-    </div>
-
-    <nav class="sidebar__nav">
-      <div class="nav-section">MAIN</div>
-      {% if 'dashboard' in allowed_pages %}<a class="nav-link" href="/dashboard"><i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span></a>{% endif %}
-      <div class="nav-section">INVENTORY &amp; SALES</div>
-      {% if 'inventory' in allowed_pages %}<a class="nav-link" href="/inventory"><i class="bi bi-box-seam-fill"></i><span>Inventory</span> <span class="badge b-danger{% if not inventory_oos_count %} d-none{% endif %}">{{ inventory_oos_count }}</span></a>{% endif %}
-      {% if 'suppliers' in allowed_pages %}<a class="nav-link" href="/suppliers"><i class="bi bi-truck"></i><span>Suppliers</span></a>{% endif %}
-      {% if 'customers' in allowed_pages %}<a class="nav-link" href="/customers"><i class="bi bi-people-fill"></i><span>Customers</span></a>{% endif %}
-      {% if 'projects' in allowed_pages %}<a class="nav-link" href="/projects"><i class="bi bi-kanban-fill"></i><span>Projects</span></a>{% endif %}
-      {% if 'transactions' in allowed_pages %}<a class="nav-link active" href="/transactions"><i class="bi bi-receipt-cutoff"></i><span>Client Transactions</span></a>{% endif %}
-      <div class="nav-section">INTELLIGENCE</div>
-      {% if 'forecasting' in allowed_pages %}<a class="nav-link" href="/forecasting"><i class="bi bi-graph-up-arrow"></i><span>Forecasting</span></a>{% endif %}
-      {% if 'reports' in allowed_pages %}<a class="nav-link" href="/reports"><i class="bi bi-file-earmark-bar-graph-fill"></i><span>Reports</span></a>{% endif %}
-      <div class="nav-section">SYSTEM</div>
-      {% if 'settings' in allowed_pages %}<a class="nav-link" href="/settings"><i class="bi bi-gear-fill"></i><span>Settings</span></a>{% endif %}
-      {% if 'profile' in allowed_pages %}<a class="nav-link" href="/profile"><i class="bi bi-person-badge-fill"></i><span>Profile</span></a>{% endif %}
-    </nav>
-
-    <div class="sidebar__footer">
-      <a href="/login" class="btn-back-system d-block text-center text-decoration-none">
-        <i class="bi bi-box-arrow-right me-1"></i> Sign Out
-      </a>
-    </div>
-  </aside>
-  <!-- ============ MAIN ============ -->
-  <div class="main">
-    <!-- ============ TOPBAR ============ -->
-    <header class="topbar">
-      <button class="hamburger" aria-label="Toggle menu"><i class="bi bi-list"></i></button>
-
-      <div class="topbar__search dropdown">
-        <i class="bi bi-search"></i>
-        <input type="text" class="form-control" placeholder="Search inventory, customers, projects…"
-               data-bs-toggle="dropdown" aria-label="Global search" autocomplete="off">
-        <ul class="dropdown-menu dropdown-panel mt-2">
-          <li><div class="dp-head"><h6>Quick search</h6><span class="badge b-neutral">Global</span></div></li>
-          <a href="/inventory" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-box-seam"></i></div>
-            <div><div class="dp-title text-dark">Search Inventory</div><div class="dp-time">Open inventory module</div></div>
-          </a>
-          <a href="/suppliers" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-truck"></i></div>
-            <div><div class="dp-title text-dark">Search Suppliers</div><div class="dp-time">Open suppliers module</div></div>
-          </a>
-          <a href="/customers" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-people"></i></div>
-            <div><div class="dp-title text-dark">Search Customers</div><div class="dp-time">Open customers module</div></div>
-          </a>
-          <a href="/projects" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-kanban"></i></div>
-            <div><div class="dp-title text-dark">Search Projects</div><div class="dp-time">Open projects module</div></div>
-          </a>
-          <a href="/transactions" class="dp-item text-decoration-none">
-            <div class="dp-ic b-neutral"><i class="bi bi-receipt-cutoff"></i></div>
-            <div><div class="dp-title text-dark">Search Client Transactions</div><div class="dp-time">Open client transactions module</div></div>
-          </a>
-        </ul>
-      </div>
-
-      <div class="topbar__actions">
-        <!-- Notifications -->
-        <div class="dropdown">
-          <button class="icon-btn" data-bs-toggle="dropdown" aria-label="Notifications" data-bs-auto-close="outside">
-            <i class="bi bi-bell"></i><span class="dot d-none" data-notif-dot></span>
-          </button>
-          <div class="dropdown-menu dropdown-menu-end dropdown-panel mt-2">
-            <div class="dp-head"><h6>Notifications</h6><span class="badge b-neutral" data-notif-count>0</span></div>
-            <div data-notif-list><div class="text-center text-muted-2 small py-3">Loading…</div></div>
-          </div>
-        </div>
-
-        <!-- Help -->
-        <button class="icon-btn" data-bs-toggle="tooltip" title="Need help? Contact the Administrator" aria-label="Help &amp; Support"><i class="bi bi-question-circle"></i></button>
-
-        <!-- Profile -->
-        <div class="dropdown">
-          <div class="topbar__profile" data-bs-toggle="dropdown" role="button">
-            <div class="avatar-sm">{{ current_user_initials }}</div>
-            <div class="p-meta">
-              <div class="p-name">{{ current_user.name }}</div>
-              <div class="p-role">{{ current_user.role }}</div>
-            </div>
-            <i class="bi bi-chevron-down small text-muted-2"></i>
-          </div>
-          <ul class="dropdown-menu dropdown-menu-end mt-2" style="border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow-lg);min-width:200px;">
-            <li><a class="dropdown-item py-2" href="/profile"><i class="bi bi-person-circle me-2"></i>My Profile</a></li>
-            <li><a class="dropdown-item py-2" href="/settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item py-2 text-danger" href="/login"><i class="bi bi-box-arrow-right me-2"></i>Sign Out</a></li>
-          </ul>
-        </div>
-      </div>
-    </header>
-    <main class="page">
+{% extends "layout.html" %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
       <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Transactions</li></ol></nav>
       <div class="page-head">
         <div>
@@ -138,21 +10,22 @@
         <div class="d-flex gap-2 flex-wrap"><button class="btn btn-light-2 btn-sm" data-print><i class="bi bi-printer me-1"></i>Print</button></div>
       </div>
       <div class="row g-3 mb-4">
-        <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-receipt-cutoff"></i></div>
+        <div class="col-6 col-xl-3"><div class="stat-card" data-kpi="month"><div class="stat-ic"><i class="bi bi-receipt-cutoff"></i></div>
           <div class="stat-label">Total Transactions</div><div class="stat-value" id="txnStatTotal">&mdash;</div><div class="stat-desc">This month</div></div></div>
-        <div class="col-6 col-xl-3"><div class="stat-card is-success"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-success" data-kpi="paid"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
           <div class="stat-label">Paid</div><div class="stat-value" id="txnStatPaid">&mdash;</div><div class="stat-desc">Fully settled</div></div></div>
-        <div class="col-6 col-xl-3"><div class="stat-card is-gold"><div class="stat-ic"><i class="bi bi-hourglass-split"></i></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-gold" data-kpi="pending"><div class="stat-ic"><i class="bi bi-hourglass-split"></i></div>
           <div class="stat-label">Pending / Partial</div><div class="stat-value" id="txnStatPending">&mdash;</div><div class="stat-desc">Awaiting payment</div></div></div>
-        <div class="col-6 col-xl-3"><div class="stat-card"><div class="stat-ic"><i class="bi bi-cash-stack"></i></div>
+        <div class="col-6 col-xl-3"><div class="stat-card" data-kpi="revenue"><div class="stat-ic"><i class="bi bi-cash-stack"></i></div>
           <div class="stat-label">Monthly Revenue</div><div class="stat-value" style="font-size:1.55rem" id="txnStatRevenue">&mdash;</div><div class="stat-desc">Incl. 12% VAT</div></div></div>
       </div>
 
       <div class="card"><div class="card-body">
         <div class="toolbar">
           <div class="search-box"><i class="bi bi-search"></i>
-            <input type="text" class="form-control" placeholder="Search invoice or customer…" data-table-search="#txnTable"></div>
-          <select class="form-select" style="max-width:170px" data-filter-target="#txnTable" data-filter-col="6"><option value="">All Payments</option><option>Paid</option><option>Partial</option><option>Pending</option></select>
+            <input type="text" class="form-control" placeholder="Search invoice, customer or material…" id="txnSearch"></div>
+          <select class="form-select" style="max-width:170px" id="txnPayFilter"><option value="">All Payments</option><option>Paid</option><option>Partial</option><option>Pending</option><option value="Pending|Partial">Pending / Partial</option></select>
+          <select class="form-select" style="max-width:170px" id="txnMonthFilter"><option value="">All Months</option></select>
           <div class="ms-auto"><button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTxnModal"><i class="bi bi-plus-lg me-1"></i>Create Transaction</button></div>
         </div>
         <div class="table-wrap"><table class="table" id="txnTable">
@@ -189,183 +62,9 @@
         <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save Transaction</button></div>
         </form>
       </div></div></div>
-
-    </main>
-      <footer class="app-footer">
-        <span>&copy; 2026 Parabellum Steel &amp; Iron Works · Inventory &amp; Service Optimization System</span>
-        <div class="d-flex gap-3">
-          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Help</a>
-          <span class="text-muted-2">v1.0.0</span>
-        </div>
-      </footer>
-  </div>
-</div>
-  <!-- Scripts -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}
+{% block scripts %}
   <script src="{{ url_for('static', filename='js/data.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const tb = document.getElementById('txnBody');
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-      const TXN_PAGE_SIZE = 8;
-      let txnCurrentPage = 1;
-
-      const compactPeso = (n) => {
-        if (n >= 1_000_000) return `\u20b1${(n / 1_000_000).toFixed(2)}M`;
-        if (n >= 1_000) return `\u20b1${(n / 1_000).toFixed(1)}K`;
-        return PESO(n);
-      };
-
-      function renderTxnStats(){
-        // Scoped to the most recent calendar month that actually HAS
-        // transactions in it - NOT the browser's real-world clock. Those
-        // are two different things: this demo data was generated relative
-        // to whenever seed_data.py was last run, and doesn't move forward
-        // in time after that. The viewer's actual system clock keeps
-        // advancing regardless, so a strict "real today" filter would
-        // show all-zero stats for perfectly good data the moment the two
-        // drift apart - what happened here with 1121 real
-        // transactions all reporting as zero. Anchoring to the latest
-        // date actually present in the data guarantees a meaningful,
-        // non-zero figure whenever there's any data at all.
-        if (!TRANSACTIONS.length) {
-          set('txnStatTotal', 0); set('txnStatPaid', 0);
-          set('txnStatPending', 0); set('txnStatRevenue', compactPeso(0));
-          return;
-        }
-        const latestDate = TRANSACTIONS.reduce((max, t) => ((t.date || '') > max ? t.date : max), TRANSACTIONS[0].date || '');
-        const monthPrefix = latestDate.slice(0, 7);
-        const thisMonth = TRANSACTIONS.filter(t => (t.date || '').startsWith(monthPrefix));
-        const paid = thisMonth.filter(t => t.pay === 'Paid').length;
-        const pending = thisMonth.filter(t => t.pay === 'Pending' || t.pay === 'Partial').length;
-        const revenue = thisMonth.reduce((sum, t) => sum + (t.qty * t.price * 1.12), 0);
-
-        set('txnStatTotal', thisMonth.length);
-        set('txnStatPaid', paid);
-        set('txnStatPending', pending);
-        set('txnStatRevenue', compactPeso(revenue));
-      }
-
-      function renderTxnPaginationControls(totalItems){
-        const totalPages = Math.max(1, Math.ceil(totalItems / TXN_PAGE_SIZE));
-        if (txnCurrentPage > totalPages) txnCurrentPage = totalPages;
-        const nav = document.getElementById('txnPaginationNav');
-        const ul = document.getElementById('txnPagination');
-        if (totalPages <= 1) { nav.style.display = 'none'; return; }
-        nav.style.display = '';
-        const pageLink = (label, page, opts = {}) => `
-          <li class="page-item ${opts.active ? 'active' : ''} ${opts.disabled ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${page}">${label}</a>
-          </li>`;
-        let html = pageLink('<i class="bi bi-chevron-left"></i>', txnCurrentPage - 1, { disabled: txnCurrentPage === 1 });
-        buildPageWindow(txnCurrentPage, totalPages).forEach(p => {
-          if (p === '\u2026') html += `<li class="page-item disabled"><span class="page-link">\u2026</span></li>`;
-          else html += pageLink(p, p, { active: p === txnCurrentPage });
-        });
-        html += pageLink('<i class="bi bi-chevron-right"></i>', txnCurrentPage + 1, { disabled: txnCurrentPage === totalPages });
-        ul.innerHTML = html;
-      }
-
-      document.getElementById('txnPagination').addEventListener('click', (e) => {
-        const link = e.target.closest('[data-page]');
-        if (!link || link.closest('.disabled')) return;
-        e.preventDefault();
-        const page = parseInt(link.dataset.page, 10);
-        if (!page || page === txnCurrentPage) return;
-        txnCurrentPage = page;
-        renderTransactions();
-      });
-
-      function renderTransactions(){
-        const start = (txnCurrentPage - 1) * TXN_PAGE_SIZE;
-        const pageItems = TRANSACTIONS.slice(start, start + TXN_PAGE_SIZE);
-
-        tb.innerHTML = '';
-        pageItems.forEach(t => {
-        const sub = t.qty * t.price; const total = sub * 1.12;
-        tb.insertAdjacentHTML('beforeend', `<tr>
-          <td class="fw-id">${t.inv}</td><td class="fw-medium">${t.cust}</td>
-          <td>${t.material}</td><td class="text-end">${NUM(t.qty)}</td>
-          <td class="text-end">${PESO(t.price)}</td><td class="text-end fw-medium">${PESO(total)}</td>
-          <td>${payBadge(t.pay)}</td><td class="text-muted-2">${t.date}</td>
-          <td class="text-center">
-            <button class="act-btn print-inv" data-bs-toggle="tooltip" title="Invoice" data-inv="${t.inv}"><i class="bi bi-receipt"></i></button>
-            <button class="act-btn view-txn" data-bs-toggle="tooltip" title="View" data-inv="${t.inv}"><i class="bi bi-eye"></i></button>
-          </td></tr>`);
-        });
-        set('txnCount', pageItems.length === TRANSACTIONS.length
-          ? `Showing ${TRANSACTIONS.length} transaction${TRANSACTIONS.length===1?'':'s'}`
-          : `Showing ${start+1}\u2013${start+pageItems.length} of ${TRANSACTIONS.length} transactions`);
-        renderTxnPaginationControls(TRANSACTIONS.length);
-        renderTxnStats();
-        initTooltips();
-      }
-      renderTransactions();
-      window.renderTransactions = renderTransactions;   // hook: app.js refreshes after DB writes
-
-      /* View: read-only transaction details (same data, lighter than the invoice) */
-      document.body.insertAdjacentHTML('beforeend', `
-        <div class="modal fade" id="txnDetailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
-          <div class="modal-header"><h5 class="modal-title"><i class="bi bi-receipt-cutoff me-2" style="color:var(--primary)"></i>Transaction Details</h5>
-            <button class="btn-close" data-bs-dismiss="modal"></button></div>
-          <div class="modal-body" id="txnDetailBody"></div>
-          <div class="modal-footer"><button class="btn btn-light-2" data-bs-dismiss="modal">Close</button>
-            <button class="btn btn-primary" id="txnDetailInvoiceBtn"><i class="bi bi-receipt me-1"></i>Open Invoice</button></div>
-        </div></div></div>`);
-      const detailModal = new bootstrap.Modal('#txnDetailModal');
-      let currentTxn = null;
-      tb.addEventListener('click', (e) => {
-        const btn = e.target.closest('.view-txn'); if (!btn) return;
-        const t = transactionStore.find(btn.dataset.inv); if (!t) return;
-        currentTxn = t.inv;
-        const sub = t.qty * t.price, vat = sub*0.12, total = sub+vat;
-        document.getElementById('txnDetailBody').innerHTML = `
-          <div class="d-flex align-items-center justify-content-between mb-3">
-            <div><h5 class="mb-0">${t.inv}</h5><div class="small text-muted-2">${t.date}</div></div>
-            ${payBadge(t.pay)}
-          </div>
-          <div class="row g-2 small">
-            <div class="col-6"><div class="text-muted-2">Customer</div><div class="fw-medium">${escapeHTML(t.cust)}</div></div>
-            <div class="col-6"><div class="text-muted-2">Project</div><div class="fw-medium">${t.proj}</div></div>
-            <div class="col-6"><div class="text-muted-2">Material</div><div class="fw-medium">${escapeHTML(t.material)}</div></div>
-            <div class="col-6"><div class="text-muted-2">Quantity</div><div class="fw-medium">${NUM(t.qty)}</div></div>
-            <div class="col-6"><div class="text-muted-2">Unit Price</div><div class="fw-medium">${PESO(t.price)}</div></div>
-            <div class="col-6"><div class="text-muted-2">Payment Method</div><div class="fw-medium">${t.method}</div></div>
-            <div class="col-6"><div class="text-muted-2">VAT (12%)</div><div class="fw-medium">${PESO(vat)}</div></div>
-            <div class="col-6"><div class="text-muted-2">Total</div><div class="fw-bold" style="color:var(--primary)">${PESO(total)}</div></div>
-          </div>`;
-        detailModal.show();
-      });
-      document.getElementById('txnDetailInvoiceBtn').addEventListener('click', () => {
-        detailModal.hide();
-        document.querySelector(`.print-inv[data-inv="${currentTxn}"]`)?.click();
-      });
-
-      const modal = new bootstrap.Modal('#invoiceModal');
-      tb.addEventListener('click', (e) => {
-        const btn = e.target.closest('.print-inv'); if (!btn) return;
-        const t = TRANSACTIONS.find(x => x.inv === btn.dataset.inv); if (!t) return;
-        const sub = t.qty * t.price; const vat = sub*0.12; const total = sub+vat;
-        document.getElementById('invoiceBody').innerHTML = `
-          <div class="d-flex justify-content-between align-items-start mb-3">
-            <div class="d-flex gap-2 align-items-center"><img src="{{ url_for('static', filename='assets/img/logo.svg') }}" style="width:40px"><div><div class="fw-bold" style="color:var(--primary)">PARABELLUM</div><div class="small text-muted-2">Steel &amp; Iron Works</div></div></div>
-            <div class="text-end"><div class="h5 mb-0">INVOICE</div><div class="small text-muted-2">${t.inv}</div></div>
-          </div><hr>
-          <div class="row small mb-3"><div class="col-6"><div class="text-muted-2">Billed To</div><div class="fw-medium">${t.cust}</div><div>Project: ${t.proj}</div></div>
-          <div class="col-6 text-end"><div class="text-muted-2">Date</div><div class="fw-medium">${t.date}</div><div>Method: ${t.method}</div></div></div>
-          <div class="table-responsive"><table class="table table-soft"><thead><tr><th>Material</th><th class="text-end">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Amount</th></tr></thead>
-          <tbody><tr><td>${t.material}</td><td class="text-end">${NUM(t.qty)}</td><td class="text-end">${PESO(t.price)}</td><td class="text-end">${PESO(sub)}</td></tr></tbody></table></div>
-          <div class="d-flex justify-content-end"><div class="table-responsive"><table class="small" style="min-width:240px">
-            <tr><td class="text-muted-2 pe-4 py-1">Subtotal</td><td class="text-end">${PESO(sub)}</td></tr>
-            <tr><td class="text-muted-2 pe-4 py-1">VAT (12%)</td><td class="text-end">${PESO(vat)}</td></tr>
-            <tr><td class="text-muted-2 pe-4 py-1">Discount</td><td class="text-end">₱0.00</td></tr>
-            <tr style="border-top:2px solid var(--primary)"><td class="fw-bold pe-4 py-2">TOTAL</td><td class="text-end fw-bold py-2" style="color:var(--primary);font-size:1.1rem">${PESO(total)}</td></tr>
-          </table></div>
-          <div class="mt-3">${payBadge(t.pay)} <span class="small text-muted-2 ms-1">Payment status</span></div>`;
-        modal.show();
-      });
-    });
-  </script>
-</body>
-</html>
+  <script src="{{ url_for('static', filename='js/pages/transactions.js') }}"></script>
+{% endblock %}

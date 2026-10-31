@@ -1,7 +1,3 @@
-/* =====================================================================
- PARABELLUM ISOS - Charts (Chart.js, brand-themed)
- Each chart only initializes if its <canvas> exists on the page.
- ===================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof Chart === 'undefined') return;
 
@@ -34,9 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const el = (id) => document.getElementById(id);
 
-  // For charts whose categories run down the LEFT side (indexAxis:'y'): make sure
-  // the FIRST category is at the top and the last at the bottom, whichever way
-  // this Chart.js build orders a vertical category axis by default.
   const firstOnTop = (chart) => {
     const sy = chart.scales && chart.scales.y;
     const n = chart.data.labels.length;
@@ -47,13 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /* ---------- Inventory Usage (bar) - dashboard, gold current period + daily/weekly/monthly toggle ----------
-   Starts EMPTY. app.js fills each range from /api/dashboard (real
-   stock_movements issuances) via window.setUsageData(range, labels, values).
-   It used to be pre-loaded with made-up "tons" figures, and the Daily and
-   Weekly buttons only ever showed sample arrays. The figures are total
-   QUANTITY issued across all materials - materials are counted in mixed
-   units (pcs, sheets, lengths...), so the honest label is "units", not tons. */
   if (el('chartMaterialUsage')) {
     const goldLast = (labels) => labels.map((_, i) => i === labels.length - 1 ? C.gold : C.primary);
     const NOTES = {
@@ -79,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
       usageChart.data.datasets[0].backgroundColor = goldLast(d.labels);
       usageChart.update();
     };
-    // Daily / Weekly / Monthly toggle (wired in app.js). Returns the caption for the range.
     window.updateUsageChart = (range) => { currentRange = range; paint(); return NOTES[range] || ''; };
     window.setUsageData = (range, labels, values) => {
       sets[range] = { labels: labels || [], data: values || [] };
@@ -88,92 +73,82 @@ document.addEventListener('DOMContentLoaded', () => {
     window.usageNote = (range) => NOTES[range] || '';
   }
 
-  /* ---------- Forecasting page: Monthly Forecast Graph ---------- */
+  /* Forecasting page: Monthly Forecast Graph */
   let forecastChart;
   if (el('chartMonthlyForecast')) {
     forecastChart = new Chart(el('chartMonthlyForecast'), {
-      type:'line',
+      type:'bar',
       data:{ labels:[],
         datasets:[
           { label:'Historical demand', data:[],
-            borderColor:C.primary, backgroundColor:C.primary, tension:.35, borderWidth:2.5, pointRadius:3 },
+            backgroundColor:C.primary, borderRadius:4, maxBarThickness:46 },
           { label:'Forecast', data:[],
-            borderColor:C.gold, backgroundColor:C.goldSoft, borderDash:[6,5], tension:.35, borderWidth:2.5, pointRadius:4, fill:true }
+            backgroundColor:C.gold, borderRadius:4, maxBarThickness:46 },
         ]},
-      // indexAxis:'y' swaps the axes: the months run down the LEFT side
-      // (oldest at the top, forecast month at the bottom) and the units sit
-      // along the BOTTOM.
-      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
+      options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ position:'top', align:'end' } },
-        scales:{ x:axis({ beginAtZero:true }),
-                 y:{ grid:{ display:false }, ticks:{ color:C.grayText } } } }
+        scales:{ x:Object.assign({ stacked:true }, noGridX),
+                 y:axis({ beginAtZero:true, stacked:true }) } }
     });
     window.updateForecastChart = (historyPoints, forecastLabel, predicted) => {
       const labels = historyPoints.map(p => p.month).concat([forecastLabel]);
       const histSeries = historyPoints.map(p => p.demand).concat([null]);
-      const fcSeries   = historyPoints.map(_ => null);
-      if (histSeries.length >= 2) fcSeries[fcSeries.length - 1] = histSeries[histSeries.length - 2];
-      fcSeries.push(predicted);
+      const fcSeries   = historyPoints.map(_ => null).concat([predicted]);
       forecastChart.data.labels = labels;
       forecastChart.data.datasets[0].data = histSeries;
       forecastChart.data.datasets[1].data = fcSeries;
       forecastChart.update();
-      firstOnTop(forecastChart);          // oldest month at the top, forecast month at the bottom
     };
   }
 
-  /* ---------- Forecasting page: Historical Demand (month picker) ----------
-   Pick a month (#histMonthSelect, newest by default); the bars show how many
-   units of each MATERIAL were consumed that month, most consumed at the top.
-   Source: the per-material `history` the forecast returns (its last months).
-   Materials are counted in their own units (pcs, sheets, kg ...), so the
-   ranking compares raw numbers across different units - the tooltip shows
-   each bar's unit. Materials with no consumption that month are left out. */
   let historicalChart;
   if (el('chartHistoricalDemand')) {
-    let histForecasts = [];
+    const matPalette = [C.primary, C.gold, C.info, C.success, '#7c3aed', '#d97b34', '#0f766e', '#9aa1ad', '#c94a3f', '#0f172a'];
     historicalChart = new Chart(el('chartHistoricalDemand'), {
       type:'bar',
-      data:{ labels:[], datasets:[{ label:'Units consumed', data:[], units:[],
-        backgroundColor:C.primary, borderRadius:4, maxBarThickness:26 }] },
-      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:false },
-          tooltip:{ callbacks:{ label:(c)=> ' ' + Number(c.raw).toLocaleString('en-PH') + ' ' + ((c.dataset.units || [])[c.dataIndex] || '') } } },
-        scales:{ x:axis({ beginAtZero:true }), y:{ grid:{ display:false } } } }
+      data:{ labels:[], datasets:[] },
+      options:{ responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'nearest', intersect:true },
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ callbacks:{ label:(c)=> ' ' + c.dataset.label + ': ' + Number(c.raw).toLocaleString('en-PH') + ' ' + (c.dataset.unit || '') } } },
+        scales:{ x:Object.assign({ stacked:true }, noGridX),
+                 y:axis({ beginAtZero:true, stacked:true }) } }
     });
-    const draw = () => {
-      const sel = el('histMonthSelect');
-      const month = sel ? sel.value : '';
-      const rows = [];
-      histForecasts.forEach(f => {
-        const p = (f.history || []).find(h => h.month === month);
-        const v = p ? Number(p.demand) || 0 : 0;
-        if (v > 0) rows.push({ name: f.material_name, unit: f.unit, v });
-      });
-      rows.sort((a, b) => b.v - a.v);                      // most consumed first (top)
-      const ds = historicalChart.data.datasets[0];
-      historicalChart.data.labels = rows.map(r => r.name);
-      ds.data = rows.map(r => r.v);
-      ds.units = rows.map(r => r.unit);
-      historicalChart.update();
-    };
-    el('histMonthSelect')?.addEventListener('change', draw);
     window.updateHistoricalChart = (forecasts) => {
-      histForecasts = forecasts || [];
-      const months = [];                                   // month labels, oldest first
-      histForecasts.forEach(f => (f.history || []).forEach(p => { if (!months.includes(p.month)) months.push(p.month); }));
-      const sel = el('histMonthSelect');
-      if (sel) {
-        const keep = sel.value;
-        sel.innerHTML = months.slice().reverse().map(m => `<option value="${m}">${m}</option>`).join('');
-        sel.value = months.includes(keep) ? keep : (months[months.length - 1] || '');
-        sel.disabled = !months.length;
-      }
-      draw();
+      const fcs = forecasts || [];
+      const months = [];
+      fcs.forEach(f => (f.history || []).forEach(p => { if (!months.includes(p.month)) months.push(p.month); }));
+      historicalChart.data.labels = months;
+      historicalChart.data.datasets = fcs.map((f, i) => {
+        const byMonth = {};
+        (f.history || []).forEach(p => { byMonth[p.month] = Number(p.demand) || 0; });
+        return { label: f.material_name, unit: f.unit,
+                 data: months.map(m => byMonth[m] || 0),
+                 backgroundColor: matPalette[i % matPalette.length], borderWidth:0, maxBarThickness:46 };
+      });
+      historicalChart.update();
+      renderHistLegend();
     };
+    const renderHistLegend = () => {
+      const box = el('histLegend');
+      if (!box) return;
+      box.innerHTML = historicalChart.data.datasets.map((d, i) => {
+        const hidden = !historicalChart.isDatasetVisible(i);
+        return `<li><button type="button" class="legend-item${hidden ? ' is-off' : ''}" data-ds="${i}" aria-pressed="${!hidden}">
+          <span class="legend-swatch" style="background:${d.backgroundColor}"></span>
+          <span class="legend-name">${escapeHTML(d.label)}</span></button></li>`;
+      }).join('');
+    };
+    el('histLegend')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-ds]'); if (!btn) return;
+      const i = Number(btn.dataset.ds);
+      historicalChart.setDatasetVisibility(i, !historicalChart.isDatasetVisible(i));
+      historicalChart.update();
+      renderHistLegend();
+    });
   }
 
-  /* ---------- Forecasting page: Inventory Trend (line) ---------- */
   let inventoryChart;
   if (el('chartInventoryTrend')) {
     const ctx = el('chartInventoryTrend').getContext('2d');
@@ -194,9 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Reports: monthly revenue (bar) ----------
-   Starts empty; the Reports page fills it from /api/reports/overview via
-   window.setRevenueChart(labels, pesos). (Was a fixed Jan-Jun series.) */
   if (el('chartRevenue')) {
     const revChart = new Chart(el('chartRevenue'), {
       type:'bar',
@@ -216,9 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Reports: inventory value by category (pie) ----------
-   Starts empty; filled from /api/reports/overview via
-   window.setCategoryChart(labels, pesoValues). (Was a made-up distribution.) */
   if (el('chartCategory')) {
     const palette = [C.primary,'#c94a3f','#d97b34','#e6a817','#2b6cb0','#1f9d55','#9aa1ad','#7c3aed','#0f172a'];
     const catChart = new Chart(el('chartCategory'), {
@@ -235,9 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Profile mini activity (line) ----------
-   Starts empty; the Profile page fills it from /api/profile (the user's own
-   audit-log entries per day, last 7 days) via window.setActivityChart. */
   if (el('chartActivity')) {
     const ctx = el('chartActivity').getContext('2d');
     const actChart = new Chart(ctx, {

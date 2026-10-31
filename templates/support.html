@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block title %}Customer Support{% endblock %}
+{% block content %}
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Customer Support</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Customer Support</h1>
+          <p class="page-subtitle">Concerns sent by customers from the website's Need Support chat.</p>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="stat-card is-danger" data-kpi="unread"><div class="stat-ic"><i class="bi bi-envelope-exclamation"></i></div>
+          <div class="stat-label">New Messages</div><div class="stat-value" id="spKpiUnread">&mdash;</div><div class="stat-desc">Tickets waiting for a reply</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-gold" data-kpi="Open"><div class="stat-ic"><i class="bi bi-hourglass-split"></i></div>
+          <div class="stat-label">Open</div><div class="stat-value" id="spKpiOpen">&mdash;</div><div class="stat-desc">Customer is waiting</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-success" data-kpi="Answered"><div class="stat-ic"><i class="bi bi-reply"></i></div>
+          <div class="stat-label">Answered</div><div class="stat-value" id="spKpiAnswered">&mdash;</div><div class="stat-desc">Staff replied last</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card" data-kpi="Closed"><div class="stat-ic"><i class="bi bi-check2-circle"></i></div>
+          <div class="stat-label">Closed</div><div class="stat-value" id="spKpiClosed">&mdash;</div><div class="stat-desc">Resolved concerns</div></div></div>
+      </div>
+
+      <div class="card mb-4"><div class="card-body p-0">
+        <div class="support-wrap">
+          <div class="support-list">
+            <div class="p-3 border-bottom">
+              <div class="search-box mb-2"><i class="bi bi-search"></i><input type="search" class="form-control" id="spSearch" placeholder="Search name, company, ticket&hellip;"></div>
+              <div class="seg-toggle btn-group btn-group-sm w-100" role="group" id="spTabs">
+                <button type="button" class="btn active" data-tab="">All</button>
+                <button type="button" class="btn" data-tab="Open">Open</button>
+                <button type="button" class="btn" data-tab="Answered">Answered</button>
+                <button type="button" class="btn" data-tab="Closed">Closed</button>
+              </div>
+            </div>
+            <div class="support-items" id="spList"><div class="text-center text-muted-2 py-4 small">Loading&hellip;</div></div>
+          </div>
+          <div class="support-thread" id="spThread">
+            <div class="support-placeholder"><i class="bi bi-chat-square-text"></i><div>Select a ticket to view the conversation.</div></div>
+          </div>
+        </div>
+      </div></div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/pages/support.js') }}"></script>
+{% endblock %}

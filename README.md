@@ -2,313 +2,200 @@
 ### Inventory and Service Optimization System for Demand Forecasting and Operational Efficiency
 Parabellum Steel and Iron Works — Capstone Project
 
-A web-based system that centralizes inventory, customer/project transactions,
-commissions, and reporting, with a machine-learning module that forecasts
-**short-term monthly material demand** using Multiple Linear Regression.
+A web-based system that centralizes inventory, suppliers, customers, projects,
+client transactions and reporting, with a machine-learning module that
+forecasts **next month's demand for each material** using Multiple Linear
+Regression (MLR).
 
 ---
 
-## 1. What works right now
-
-| Area | Status |
-|------|--------|
-| All 12 pages served through Flask | Working |
-| Clean routes (`/dashboard`, `/inventory`, …) | Working |
-| Database schema (all 7 DFD data stores) | Working |
-| Monthly demand forecasting (real MLR) | Working |
-| Model evaluation — MAE, RMSE, MAPE, R² (out-of-sample) | Working |
-| Forecast + metrics saved to the database | Working |
-| Audit logging of forecast runs | Working |
-| Sample data generator (30 months) | Working |
-| Login (verifies credentials on the server) | **Working** — hashed passwords, sessions, lockout, audit log |
-| Role-based access control | **Working** — enforced on the server, not just the sidebar |
-| Dashboard shows real database data | **Working** |
-| Inventory: receipts, issuances, negative-stock guard, reorder flags | **Working** |
-| Customers: add / edit / delete, live project & transaction counts | **Working** |
-| Projects: add / edit / delete, linked to customers | **Working** |
-| Transactions: create + list, auto-deducts inventory (Obj. 1.3) | **Working** |
-| Reports: real PDF & Excel export, on-screen preview | **Working** |
-| Commission computation from the database | **Working** |
-| User Management: add / edit / deactivate accounts | **Working** |
-| System Logs & Audit Trail (Settings) | **Working** — reads the real `audit_logs` table |
-| Profile photo upload | **Working** |
-| Two-Factor Auth, Backup & Restore, Notifications (Settings) | **Not built** — decorative UI only, would need new subsystems, not just wiring existing data |
-
-The **forecasting engine and authentication are complete**. The remaining
-work is the standard CRUD backend.
-
----
-
-## 2. Technology used (as actually built)
+## 1. Technology
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | HTML, CSS, JavaScript (Bootstrap 5 via CDN) |
-| Backend / web server | **Python + Flask** |
-| Database | **PostgreSQL** (managed with pgAdmin) |
-| Forecasting | scikit-learn — Multiple Linear Regression |
-| Data processing | pandas, NumPy |
+| Frontend | HTML, CSS, JavaScript, Bootstrap 5, Chart.js |
+| Backend | Python + Flask (Blueprints) |
+| Database | PostgreSQL (Supabase or local pgAdmin) |
+| Forecasting | scikit-learn (Multiple Linear Regression), pandas, NumPy |
+| Weather data | Open-Meteo API (Lipa City, Batangas) |
+| Reports | ReportLab (PDF), openpyxl (Excel) |
+| Hosting | Gunicorn on Render |
 
-> **Note for the documentation:** the ASIA paper's technology table lists
-> PHP / Laravel + MySQL, with Flask only as a separate forecasting service.
-> This implementation uses **Flask for the whole backend and PostgreSQL**
-> instead — one language, one database, far less integration work. Update
-> the technology-stack table and Appendix D in the paper to match, or a
-> panelist will notice the difference between the document and the code.
-
----
-
-## 3. Project structure
+## 2. Project structure
 
 ```
 Parabellum/
-├── app.py              Flask server: 12 page routes + forecast API
-├── config.py           Database credentials + session secret key
-├── auth.py             Login, sessions, role enforcement
-├── mlr_model.py        Monthly-demand forecasting model
-├── seed_data.py         Generates 30 months of sample operational data
-├── seed_users.py        Creates demo user accounts (run once)
-├── schema.sql          Database tables (run in pgAdmin)
-├── requirements.txt    Python libraries
-├── .gitignore          Keeps config.py (your password) out of GitHub
-│
-├── templates/          The 12 HTML pages (Flask renders these)
-│   ├── index.html          public landing page
-│   ├── login.html          sign-in screen
-│   ├── dashboard.html
-│   ├── inventory.html
-│   ├── customers.html
-│   ├── projects.html
-│   ├── transactions.html
-│   ├── commissions.html
-│   ├── forecasting.html
-│   ├── reports.html
-│   ├── settings.html
-│   └── profile.html
-│
-└── static/             Served automatically by Flask
-    ├── css/styles.css
-    ├── js/  (app.js, charts.js, data.js)
-    └── assets/img/  (logo, favicon, background)
+├── app.py              App setup, page routes, error handling
+├── config.py           Database credentials + settings
+├── db.py               Database helpers + audit log
+├── auth.py             Login, sessions, role permissions
+├── security.py         Security headers, CSRF, rate limiting
+├── mlr_model.py        Monthly demand forecasting (MLR)
+├── weather_api.py      Open-Meteo weather sync
+├── scheduler.py        Nightly automatic retrain (2:00 AM)
+├── backup.py           Settings > Backup & Restore
+├── reports_export.py   PDF / Excel report builders
+├── seed_users.py       Demo accounts (one per role)
+├── seed_data.py        30 months of sample data
+├── schema.sql          Full database schema
+├── routes/             API endpoints, one file per module
+│   ├── auth_api.py  dashboard.py  chat.py  profile.py
+│   ├── inventory.py outlook.py    support.py    suppliers.py  customers.py  projects.py
+│   └── transactions.py users.py settings.py reports.py forecast.py
+├── templates/
+│   ├── layout.html     Shared sidebar, top bar and footer
+│   └── <page>.html     One template per page (extends layout.html)
+├── static/
+│   ├── css/styles.css
+│   └── js/
+│       ├── app.js, data.js, charts.js, chat.js   shared scripts
+│       └── pages/<page>.js                        page-specific scripts
+├── migrations/         Upgrades for databases created with an older schema
+└── demo_data/          Training datasets (see demo_data/README.md)
 ```
 
----
+## 3. Setup
 
-## 4. Setup and run
+1. `pip install -r requirements.txt`
+2. Set the database connection in `config.py` (or the `DB_*` environment variables).
+3. New database: run `schema.sql` in the Supabase SQL Editor or pgAdmin.
+4. `python seed_users.py` — creates one demo account per role and prints the logins.
+5. Optional: `python seed_data.py` for sample data, or load a dataset from `demo_data/`.
+6. `python app.py` and open http://127.0.0.1:5000
 
-### Prerequisites
-- Python 3.10 or newer
-- PostgreSQL with pgAdmin (already installed and running)
+Existing database created with an older `schema.sql`: run the files in
+`migrations/` in number order instead of step 3.
 
-### Step 1 — Install the Python libraries
-From inside the `Parabellum` folder:
+## 4. Roles
+
+| Role | Pages |
+|------|-------|
+| System Administrator | All pages |
+| Inventory Personnel | Dashboard, Inventory, Stock Outlook, Suppliers, Profile |
+| Operations Personnel | Dashboard, Projects, Transactions, Customer Support, Profile |
+| Management/Owner | Dashboard, Stock Outlook, Projects, Transactions, Customer Support (view only), Forecasting, Reports, Profile |
+
+Role defaults can be changed in Settings > User Management, and per-user
+overrides are supported. Access is enforced on the server, not only by hiding
+sidebar links.
+
+## 5. Forecasting
+
+Process (matches the DFD, processes 3.0 and 4.0):
+
+1. **Sync weather**: monthly weather for Lipa City is downloaded from Open-Meteo.
+2. **Aggregate** Stock Out (issuance) records into monthly demand per material.
+3. **Build features** for each material-month.
+4. **Evaluate**: train on older months, test on the most recent 3-6 months the model never saw.
+5. **Forecast** next month's demand and save the results.
+
+Features:
+- Demand in the previous month and the month before
+- Month of the year (sine/cosine cycle)
+- Total rainfall and number of rainy days in the month
+
+Evaluation compares three models on the same test months: the MLR, the same MLR without
+the weather inputs, and a naive guess (next month = last month). MAE, RMSE, MAPE and R²
+are reported for each, so the effect of weather is measured instead of assumed.
+
+Model selection: each material with at least 15 months of history gets its own MLR; materials
+with less history use one combined MLR across all materials.
+
+Recommended restock = predicted demand − current stock. Status is *Will run out* when stock is
+below the predicted demand and *Low* when it is within 25% of it.
+
+The forecast runs automatically every night at 2:00 AM (Philippine time) and can be run
+manually with **Run Forecast**. The page shows the latest saved run.
+
+## 6. Security
+
+- Hashed passwords (werkzeug), signed HttpOnly session cookies
+- Session timeout set in Settings > Security (15 min to 2 hours of inactivity)
+- Two-factor authentication with any authenticator app (My Profile); can be required for administrators
+- Admin password reset with a one-time temporary password the user must change
+- Deactivated accounts are signed out within a minute
+- Login alerts by email when an account signs in from a new location
+- Account lockout for 15 minutes after 5 failed logins
+- Server-side role checks on every page and API
+- CSRF tokens on every state-changing request
+- Rate limiting (login, forecasting, report export)
+- Security headers (CSP, X-Frame-Options, HSTS, nosniff)
+- Every login attempt and important action is written to the audit trail
+
+## 7. How to use
+
+**Stock Outlook (sidebar, below Inventory)**
+- Lists every material with current stock, critical level, reorder level, status,
+  next month's forecast and the recommended restock (forecast minus current stock).
+- Status: Out of Stock, Critical (at or below critical level), Low (at or below reorder level), OK.
+- Critical level is set per material by a System Administrator (click the value).
+  It is the lowest the stock should ever reach; reorder level stays as the "time to buy" mark.
+- Delivery Risk shows today's and tomorrow's weather in Lipa City and the chance a
+  delivery fails. Once a weather type (Dry, Light rain, Heavy rain) has at least 5
+  recorded deliveries, the risk comes from their failure rate (under 15% Low,
+  under 35% Medium, else High). Before that it uses the weather alone. Wind of
+  50 km/h or more raises the risk one level.
+
+**Customer Support (service management)**
+1. On the landing page a customer clicks **Need Support?** (or the chat button at the bottom right).
+2. They fill in company (optional), name, email, phone, order/transaction no. (optional) and their concern.
+3. On submit they get a ticket number (e.g. TKT-0001) and the chat opens. The chat stays in that browser;
+   on another device they use **Already have a ticket?** with the ticket number and email.
+4. Staff answer in **Customer Support** in the sidebar. Statuses: Open (customer waiting),
+   Answered (staff replied), Closed. A new customer message reopens a closed ticket.
+5. Administrators and Operations Personnel can reply and close tickets; Management can view.
+   If an order no. matches a transaction (TXN-0012), its details are shown beside the chat.
+6. When email is set up (section 8), the customer gets the ticket number and every staff reply by email.
+
+**Deliveries (Inventory > Stock Out, or Stock Outlook)**
+1. A new Stock Out starts as **Pending**.
+2. **Delivered** finishes it. **Failed** asks for a reason and puts it on **Standby**.
+   Materials on standby are not back in inventory.
+3. From Standby: **Re-deliver** (back to Pending) or **Return to inventory**
+   (quantity goes back to stock and the Stock Out no longer counts as demand in the forecast).
+4. Every attempt is saved with the day's weather, which feeds the Delivery Risk.
+
+
+**Two-factor authentication (2FA)**
+1. Install Google Authenticator or Microsoft Authenticator on your phone.
+2. My Profile > Two-Factor Authentication > **Turn On**, scan the QR code, enter the 6-digit code.
+3. From then on, sign-in asks for the current code from the app.
+4. To turn it off: enter your password and a current code in the same card.
+
+**Lost phone / reset 2FA**
+- Another administrator: Settings > User Management > phone icon (Reset 2FA) on that user.
+- If you are the only administrator, run in the project folder:
+  ```
+  venv/bin/python -c "from db import execute_query; from config import DB_CONFIG; execute_query(DB_CONFIG, \"UPDATE users SET totp_enabled=FALSE, totp_secret=NULL WHERE username='admin'\")"
+  ```
+
+**Forgotten password**
+- An administrator opens Settings > User Management > key icon (Reset Password). A one-time
+  temporary password is shown; the user must set a new password right after signing in.
+
+## 8. Email (login alerts and weekly digest)
+
+Emails are sent only when these environment variables are set (on Render: Environment tab;
+locally: `export` them before `python app.py`):
+
 ```
-pip install -r requirements.txt
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=youraccount@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_FROM=youraccount@gmail.com
 ```
 
-### Step 2 — Set your database credentials
-Open `config.py` and change these to match your setup:
-```python
-"dbname":   "parabellum_db",   # your database name
-"user":     "postgres",        # usually "postgres"
-"password": "CHANGE_ME",       # the password you set when installing PostgreSQL
-```
-The `dbname` must be a database you have already created in pgAdmin.
+For Gmail, create an App Password (Google Account > Security > 2-Step Verification > App passwords).
+The weekly digest goes out every Monday at 8:00 AM (Philippine time) to users who turned it on.
 
-### Step 3 — Create the tables
-In pgAdmin: right-click your database → **Query Tool** → open `schema.sql`
-→ Run (**F5**). This creates all the tables.
+## 9. Notes
 
-### Step 4 — Create demo accounts (run once)
-```
-python seed_users.py
-```
-This creates one account per role so you can demonstrate role-based access
-control. It prints the demo usernames and passwords to your terminal.
+- `seed_data.py` and most of `demo_data/` are synthetic data. See
+  `demo_data/README.md` for which rows are real.
+- Demo accounts are for development and defense only.
 
-### Step 5 — Load sample operational data (run once)
-```
-python seed_data.py
-```
-This fills the database with 30 months of realistic materials, projects,
-transactions, and stock movements so the model has history to learn from.
-
-### Step 6 — Start the system
-```
-python app.py
-```
-Open **http://127.0.0.1:5000** in your browser, sign in with one of the demo
-accounts (shown by `seed_users.py`), then go to the **Forecasting** page and
-click **Run Forecast**.
-
-**Using it on your phone:** see `MOBILE.md` for step-by-step instructions.
-The short version: run `python app.py` on your PC, find your PC's IP with
-`ipconfig`, and browse to `http://<your-ip>:5000` on your phone (both
-devices on the same Wi-Fi).
-
-**Moving the database to Supabase:** see `SUPABASE.md` for step-by-step
-instructions. This lets your whole team (and your defense panel) work
-against the same live database instead of everyone's separate local copy.
-
----
-
-## 5. Security
-
-This matches Objective 2.1 ("user authentication and role-based access
-control") and the ISO 25010 Security row in the documentation.
-
-- **Passwords are hashed**, never stored or compared as plain text
-  (`werkzeug.security`, which ships with Flask — no extra install needed).
-- **Sessions are server-side**, signed, and `HttpOnly` (JavaScript cannot
-  read the session cookie, so it can't be stolen through an XSS bug), with
-  `SameSite=Lax` to block most cross-site request forgery attempts.
-- **Role checks are enforced on the server** (`auth.py`), not only by
-  hiding sidebar links in the browser. Calling a restricted API directly —
-  bypassing the UI entirely — is still blocked with a `403`.
-- **Repeated wrong passwords lock the account** for 15 minutes after 5
-  failed attempts, which blocks simple password-guessing.
-- **Every login attempt is written to `audit_logs`** (D7) — success,
-  failure, and lockouts — matching Appendix B and the admin testing table.
-- **Login errors are generic** ("Invalid username or password") whether
-  the username doesn't exist or the password is wrong, so a bad actor can't
-  use error messages to find out which usernames are valid.
-- **API errors never reveal internal details to the browser** — every
-  endpoint catches exceptions, writes the real error (with full traceback,
-  for your own debugging) to the server's log, and returns a generic
-  message to the client. Raw database errors can otherwise leak table
-  names, column names, and query structure — details useful for planning
-  a more targeted attack.
-- **Rate limiting on every endpoint** (`security.py`), tuned per cost:
-  10 attempts/minute on login (brute-force protection), 6/minute on
-  running a forecast (which trains a model — expensive), 15/minute on
-  PDF/Excel report generation (also expensive — each one re-queries the
-  database and rebuilds the file from scratch), and 200/minute as the
-  default ceiling everywhere else.
-- **Server-side input validation** rejects nonsensical values before they
-  reach the database — negative prices, negative budgets, quantities of
-  zero or less, progress values outside 0–100 — even if a request bypasses
-  the browser UI entirely and hits the API directly.
-- **Security headers on every response**: Content-Security-Policy (blocks
-  most XSS injection even if a bug lets a script slip through),
-  X-Frame-Options (blocks clickjacking), X-Content-Type-Options (blocks
-  MIME-sniffing attacks), and HSTS (forces HTTPS once you have it set up).
-- **Flask's debug mode is off unless you explicitly enable it** — debug
-  mode exposes an interactive Python console on error pages, which is a
-  serious risk on anything reachable by more than just your own machine.
-
-**What's intentionally out of scope for a class capstone**, so nobody is
-surprised later: this app is not served over HTTPS by default (fine for
-local/LAN demoing; the code is ready for it — see `SESSION_COOKIE_SECURE`
-in `app.py` — but you need a reverse proxy with a TLS certificate in front,
-e.g. Caddy or nginx with Let's Encrypt, or a hosting platform that
-terminates TLS for you). The rate limits above defend against brute-force
-login attempts and casual API abuse, but **cannot stop a real DDoS
-attack** — that needs infrastructure in front of the app (Cloudflare's
-free tier is the standard answer), not application code, since a large
-enough flood of traffic exhausts your server's network connection before
-Flask ever gets a chance to apply a rate limit. The login lockout counter
-also resets if you restart the Flask process, since it's tracked per
-account in the database rather than needing extra infrastructure.
-
----
-
-## 6. How commission is calculated
-
-Each employee (`employees` table, seeded with 6 sales/project engineers)
-has a fixed commission rate. Projects are linked to the employee who
-handled them via `projects.staff` (e.g. `EMP-01`).
-
-- **Total Sales** = sum of the `budget` of every project that employee has
-  **completed**, all-time. Ongoing projects don't count yet — only
-  finished work is commission-eligible.
-- **Commission** = Total Sales × their commission rate.
-- **Monthly** = Commission ÷ the number of distinct calendar months in
-  which they completed a project. This is an *average* monthly rate, not
-  strictly "this calendar month's total" — with a demo database, a literal
-  "this month only" figure could show ₱0 for every employee just because
-  no project happened to finish in the current month, which would look
-  broken even though the underlying data and math are correct. Averaging
-  over their active months gives a stable, explainable number instead.
-
-**Still sample data, by design, not yet wired:** the "Commission Overview"
-chart and "Commission History" panel on the Commissions page. Those would
-need a separate payouts ledger (recording *when* a commission was actually
-paid out, not just what's owed) — a different feature from computing what
-someone has earned, which is what's implemented here.
-
----
-
-## 7. How the forecasting works
-
-The model predicts **next month's demand for every material** and follows the
-process in the Data Flow Diagram:
-
-1. **Aggregate** raw stock movements into a monthly table (DFD 3.2 → D4).
-   Material *issuances* are treated as demand.
-2. **Preprocess** — build the predictor variables (DFD 4.1).
-3. **Train** a Multiple Linear Regression model (DFD 4.2).
-4. **Evaluate** it on recent months it never trained on (DFD 4.3 → D6).
-5. **Forecast** next month and **save** the results (DFD 4.4 → D5).
-
-### Predictor variables (from the documentation)
-- Past demand (previous month, and the month before — captures trend)
-- Transaction volume (previous month)
-- Inventory balance entering the month
-- Inventory value entering the month
-- Active projects scheduled for the month
-
-Every predictor is something known **before** the forecast month begins, so
-the model never sees the answer in advance.
-
-### Evaluation
-Metrics are computed on a **chronological hold-out** — the most recent months
-are set aside for testing and never used for training. Time-series data is
-never shuffled, because that would let the model learn from the future.
-Reported metrics: **MAE, RMSE, MAPE, R²**.
-
-### Why Multiple Linear Regression
-It is interpretable. After a run, the model's coefficients show how each
-factor affects demand — e.g. each additional active project adds roughly N
-units of monthly demand. That transparency is the reason the paper chose MLR
-over a black-box model.
-
----
-
-## 7. API endpoints
-
-These are URLs the frontend calls — not folders.
-
-| Method | URL | Purpose |
-|--------|-----|---------|
-| GET | `/api/materials` | List materials (fills the forecast dropdown) |
-| POST | `/api/aggregate` | Rebuild the monthly demand table from raw records |
-| POST | `/api/forecast` | Train, evaluate, forecast next month, and save |
-
-**What-if planning:** `POST /api/forecast` accepts an optional body such as
-`{"overrides": {"active_projects": 12}}` to answer questions like *"if we take
-on 12 projects next month, how much steel will we need?"*
-
----
-
-## 7. Important notes
-
-- **Sample data is not real data.** `seed_data.py` produces realistic but
-  synthetic records so the system is demonstrable. Replace it with Parabellum's
-  actual historical records when they are available.
-- **Do not commit your password.** `config.py` is listed in `.gitignore`.
-  Keep it that way before pushing to GitHub.
-- **Login is now real** — but the demo accounts from `seed_users.py` are for
-  development only. Change their passwords, or replace them with real
-  accounts and disable the demo ones, before any real deployment.
-- **Sharing the database with teammates:** the database itself is not in this
-  folder (a database can't live in a zip). Each person runs `schema.sql`,
-  then `python seed_users.py`, then `python seed_data.py` on their own
-  machine. To share *real* data instead, use pgAdmin → right-click the
-  database → **Backup…** to create a dump file.
-
----
-
-## 8. Team
+## 10. Team
 
 | Name | Role |
 |------|------|

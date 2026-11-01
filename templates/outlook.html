@@ -1,0 +1,105 @@
+{% extends "layout.html" %}
+{% block title %}Stock Outlook{% endblock %}
+{% block content %}
+      <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/dashboard">Home</a></li><li class="breadcrumb-item active" aria-current="page">Stock Outlook</li></ol></nav>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Stock Outlook</h1>
+          <p class="page-subtitle">Every material's stock against its critical level, next month's forecast, and delivery status.</p>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="stat-card" data-kpi="critical"><div class="stat-ic"><i class="bi bi-exclamation-octagon"></i></div>
+          <div class="stat-label">Critical / Out</div><div class="stat-value" id="olKpiCritical">&mdash;</div><div class="stat-desc">At or below critical level</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-gold" data-kpi="low"><div class="stat-ic"><i class="bi bi-exclamation-triangle"></i></div>
+          <div class="stat-label">Low Stock</div><div class="stat-value" id="olKpiLow">&mdash;</div><div class="stat-desc">At or below reorder level</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card" data-kpi="runout"><div class="stat-ic"><i class="bi bi-graph-down-arrow"></i></div>
+          <div class="stat-label">Will Run Out</div><div class="stat-value" id="olKpiRunout">&mdash;</div><div class="stat-desc" id="olKpiRunoutDesc">Based on next month's forecast</div></div></div>
+        <div class="col-6 col-xl-3"><div class="stat-card is-success" data-kpi="standby"><div class="stat-ic"><i class="bi bi-truck"></i></div>
+          <div class="stat-label">On Standby</div><div class="stat-value" id="olKpiStandby">&mdash;</div><div class="stat-desc" id="olKpiPending">Failed deliveries waiting</div></div></div>
+      </div>
+
+      <div class="row g-3 mb-4">
+        <div class="col-lg-8"><div class="card h-100"><div class="card-body">
+          <div class="card-title-row mb-1">
+            <h2 class="panel-title mb-0"><i class="bi bi-cloud-sun me-1"></i>Delivery Risk</h2>
+            <span class="badge b-neutral">Lipa City</span>
+          </div>
+          <p class="panel-sub mb-3">Chance that a delivery fails, from today's weather and how past deliveries went in similar weather.</p>
+          <div class="row g-3" id="olRiskCards">
+            <div class="col-md-6"><div class="result-line text-muted-2">Loading&hellip;</div></div>
+          </div>
+        </div></div></div>
+        <div class="col-lg-4"><div class="card h-100"><div class="card-body">
+          <h2 class="panel-title mb-1">Past Deliveries by Weather</h2>
+          <p class="panel-sub mb-3">Recorded outcomes, grouped by rain on the delivery day.</p>
+          <div class="table-wrap"><table class="table table-soft mb-0">
+            <thead><tr><th>Weather</th><th class="text-end">Deliveries</th><th class="text-end">Failed</th></tr></thead>
+            <tbody id="olRiskHistory"><tr><td colspan="3" class="text-center text-muted-2 py-3">&mdash;</td></tr></tbody>
+          </table></div>
+        </div></div></div>
+      </div>
+
+      <div class="card mb-4"><div class="card-body">
+        <div class="card-title-row mb-1">
+          <h2 class="panel-title mb-0"><i class="bi bi-boxes me-2" style="color:var(--primary)"></i>Materials</h2>
+          <span class="badge b-neutral" id="olForecastMonth">Forecast: &mdash;</span>
+        </div>
+        <p class="panel-sub mb-3" id="olCriticalHelp">Critical level is the lowest stock a material should ever reach.</p>
+        <div class="toolbar">
+          <div class="search-box"><i class="bi bi-search"></i><input type="search" class="form-control" id="olSearch" placeholder="Search material or code&hellip;"></div>
+          <select class="form-select" style="max-width:190px" id="olStatusFilter">
+            <option value="">All Status</option><option value="Critical">Critical / Out</option><option value="Low">Low</option><option value="OK">OK</option><option value="runout">Will run out</option>
+          </select>
+        </div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr>
+            <th>Material</th><th class="text-end">Current Stock</th><th style="min-width:170px">Critical Level</th>
+            <th class="text-end">Reorder Level</th><th>Status</th><th class="text-end">Next Month</th>
+            <th class="text-end">Restock</th><th class="text-end">On Standby</th>
+          </tr></thead>
+          <tbody id="olMatBody"><tr><td colspan="8" class="text-center text-muted-2 py-4">Loading&hellip;</td></tr></tbody>
+        </table></div>
+        <div class="small text-muted-2 mt-2" id="olMatCount"></div>
+      </div></div>
+
+      <div class="card mb-4" id="olDeliveries"><div class="card-body">
+        <div class="card-title-row mb-1">
+          <h2 class="panel-title mb-0"><i class="bi bi-truck me-2" style="color:var(--primary)"></i>Deliveries</h2>
+        </div>
+        <p class="panel-sub mb-3">Stock Outs waiting for delivery, failed ones on standby, and those finished in the last 30 days. Materials on standby are not back in inventory until returned.</p>
+        <div class="seg-toggle btn-group btn-group-sm mb-3" role="group" id="olDelTabs">
+          <button type="button" class="btn active" data-tab="">All</button>
+          <button type="button" class="btn" data-tab="Pending">Pending</button>
+          <button type="button" class="btn" data-tab="Standby">Standby</button>
+          <button type="button" class="btn" data-tab="Delivered">Delivered</button>
+          <button type="button" class="btn" data-tab="Returned">Returned</button>
+        </div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>Ref</th><th>Material</th><th class="text-end">Qty</th><th>Date</th><th>Weather</th><th>Status</th><th class="text-end">Actions</th></tr></thead>
+          <tbody id="olDelBody"><tr><td colspan="7" class="text-center text-muted-2 py-4">Loading&hellip;</td></tr></tbody>
+        </table></div>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-2">
+          <div class="small text-muted-2" id="olDelCount"></div>
+          <nav><ul class="pagination pagination-sm mb-0" id="olDelPager"></ul></nav>
+        </div>
+      </div></div>
+
+      <div class="modal fade" id="olFailModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <form id="olFailForm" novalidate>
+          <div class="modal-header"><h5 class="modal-title"><i class="bi bi-x-octagon me-2" style="color:var(--primary)"></i>Delivery Failed &middot; <span id="olFailRef"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">
+            <p class="small text-muted-2 mb-2">The materials go on standby. You can re-deliver them later or return them to inventory.</p>
+            <label class="form-label">Reason</label>
+            <textarea class="form-control" id="olFailReason" rows="3" maxlength="500" required placeholder="e.g. Heavy rain, road flooded"></textarea>
+          </div>
+          <div class="modal-footer"><button type="button" class="btn btn-light-2" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" id="olFailSubmit">Mark as Failed</button></div>
+        </form>
+      </div></div></div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/pages/outlook.js') }}"></script>
+{% endblock %}

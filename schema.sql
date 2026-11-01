@@ -1,13 +1,8 @@
--- =================================================================
--- Parabellum ISOS — Database Schema
--- Maps directly to the data stores in your Data Flow Diagram.
---
--- Run in pgAdmin:  right-click your database > Query Tool > paste > F5
--- =================================================================
 
-DROP TABLE IF EXISTS chat_messages, audit_logs, model_metrics, forecast_results,
-                     monthly_weather, monthly_demand, stock_movements, transactions,
-                     projects, customers, suppliers, employees, materials, users CASCADE;
+DROP TABLE IF EXISTS support_messages, support_tickets, delivery_attempts, forecast_runs, company_settings, role_permissions, back_orders, chat_messages, audit_logs,
+                     model_metrics, forecast_results, monthly_weather, monthly_demand,
+                     stock_movements, transactions, projects, customers, suppliers, employees,
+                     materials, users CASCADE;
 
 -- ---- D1: User Records -------------------------------------------
 CREATE TABLE users (
@@ -18,23 +13,20 @@ CREATE TABLE users (
     email           VARCHAR(150),
     department      VARCHAR(80),
     avatar_path     VARCHAR(255),
-    -- These four values MUST exactly match the keys in ROLE_PERMISSIONS
-    -- in both static/js/data.js (frontend) and auth.py (backend). A
-    -- mismatch here silently locks everyone out of everything, the same
-    -- class of bug as the sidebar-link issue fixed earlier.
     role            VARCHAR(30)  NOT NULL DEFAULT 'Inventory Personnel'
                     CHECK (role IN ('System Administrator', 'Inventory Personnel',
                                     'Operations Personnel', 'Management/Owner')),
     is_active       BOOLEAN      NOT NULL DEFAULT TRUE,
     failed_attempts INT          NOT NULL DEFAULT 0,
     locked_until    TIMESTAMPTZ,
-    -- Per-user access override (Settings > Users > Access). Comma-separated
-    -- list of page keys drawn from ROLE_PERMISSIONS (dashboard, inventory,
-    -- customers, projects, transactions, forecasting, reports, settings,
-    -- profile). NULL = use the role's defaults; any value REPLACES them for
-    -- this one user only. Kept as TEXT (not JSON/array) so it's readable and
-    -- editable with plain SQL when needed.
     custom_permissions TEXT,
+    preferences     JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    totp_secret     VARCHAR(64),
+    totp_enabled    BOOLEAN      NOT NULL DEFAULT FALSE,
+    totp_last_step  BIGINT,
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+    last_login_ip   VARCHAR(64),
+    last_login_at   TIMESTAMPTZ,
     created_at      TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,7 +39,7 @@ CREATE TABLE materials (
     unit_cost     NUMERIC(12,2) NOT NULL DEFAULT 0,
     current_stock NUMERIC(12,2) NOT NULL DEFAULT 0,
     reorder_level NUMERIC(12,2) NOT NULL DEFAULT 0,
-    -- Descriptive fields shown on the inventory page.
+    critical_level NUMERIC(12,2) NOT NULL DEFAULT 0,
     category      VARCHAR(40)  DEFAULT 'Uncategorized',
     supplier      VARCHAR(80),
     location      VARCHAR(60)  DEFAULT 'Warehouse A',
@@ -68,14 +60,6 @@ CREATE TABLE customers (
 );
 
 -- ---- Suppliers --------------------------------------------------
--- Companies Parabellum buys materials from (Suppliers page). Kept as
--- its own table, separate from materials.supplier (a free-text field
--- that's been on `materials` since the start) rather than replacing
--- it, so existing material rows keep working unchanged - the Suppliers
--- page links to materials by matching this table's `name` against
--- materials.supplier, the same way the Customers/Projects link works
--- by code. Suppliers are deactivated, never deleted, so a material's
--- Stock In history always stays traceable back to who supplied it.
 CREATE TABLE suppliers (
     supplier_id    SERIAL PRIMARY KEY,
     supplier_code  VARCHAR(40)  UNIQUE NOT NULL,
@@ -102,14 +86,12 @@ CREATE TABLE projects (
     start_date    DATE NOT NULL,
     end_date      DATE,
     status        VARCHAR(30) DEFAULT 'Ongoing',
-    -- Extra fields shown on the projects page.
     budget        NUMERIC(14,2) DEFAULT 0,
     priority      VARCHAR(20)  DEFAULT 'Medium',
     progress      INT          DEFAULT 0,
     staff         VARCHAR(40)
 );
 
--- ---- Transactions (source of the "transaction volume" predictor)-
 CREATE TABLE transactions (
     transaction_id SERIAL PRIMARY KEY,
     project_id     INT REFERENCES projects(project_id),
@@ -125,7 +107,6 @@ CREATE TABLE transactions (
 );
 
 -- ---- D3: Stock Movement Records (receipts + issuances) ----------
--- Material ISSUANCES are what we treat as demand.
 CREATE TABLE stock_movements (
     movement_id   SERIAL PRIMARY KEY,
     material_id   INT NOT NULL REFERENCES materials(material_id),
@@ -135,86 +116,49 @@ CREATE TABLE stock_movements (
     movement_date DATE NOT NULL,
     project_id    INT REFERENCES projects(project_id),
     remarks       TEXT,
-    recorded_by   VARCHAR(80), -- display name of the user who performed this movement
-    -- Weather in Lipa City on the day of this movement (Open-Meteo), stored for
-    -- the forecasting model to read. Never shown in the app; NULL if the
-    -- weather service couldn't be reached when the movement was recorded.
+    recorded_by   VARCHAR(80),
     weather_temp_c       NUMERIC(5,2),
     weather_rainfall_mm  NUMERIC(8,2),
     weather_wind_kmh     NUMERIC(6,2),
-    -- Delivery confirmation (Stock Out rows only). delivered_at stays NULL
-    -- while the Stock Out is Pending; "Mark as Delivered" fills it in along
-    -- with the weather in Lipa City on the delivery day.
     delivered_at           TIMESTAMPTZ,
     delivery_temp_c        NUMERIC(5,2),
     delivery_rainfall_mm   NUMERIC(8,2),
     delivery_wind_kmh      NUMERIC(6,2),
-    -- Failed delivery (TEMPORARY): if the delivery didn't push through, when
-    -- it was recorded as failed and why. Mutually exclusive with delivered_at.
     delivery_failed_at       TIMESTAMPTZ,
-    delivery_failure_reason  TEXT
+    delivery_failure_reason  TEXT,
+    delivery_attempts        INT NOT NULL DEFAULT 0,
+    returned_at              TIMESTAMPTZ,
+    returned_by              VARCHAR(80)
 );
 CREATE INDEX idx_movement_material_date
     ON stock_movements (material_id, movement_date);
 
 -- ---- Back Orders (material returned by a customer/project) -----
--- Its own table, separate from stock_movements, since a back order isn't
--- a Stock In or Stock Out movement - it's a record of something that
--- came back, with its own lifecycle (pending -> Reimbursed/Replaced).
 CREATE TABLE back_orders (
     back_order_id SERIAL PRIMARY KEY,
     material_id   INT NOT NULL REFERENCES materials(material_id),
     quantity      NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
     return_date   DATE NOT NULL,
-    -- The original Stock Out this item came back from, if known (free text
-    -- - e.g. "MOV-0102" or a project code - not a hard FK to stock_movements).
     stock_out_ref VARCHAR(120),
     remarks       TEXT,
-    -- The customer or project that returned the material, i.e. who
-    -- initiated the back order. Kept separate from recorded_by (the staff
-    -- member who typed it in) and from remarks (reason for the return).
     back_order_by VARCHAR(120),
     recorded_by   VARCHAR(80),
-    -- What happened to the item once it came back. NULL = not yet decided.
-    -- 'Replaced' = the item itself is fine and goes back on the shelf -
-    -- this is the ONLY disposition that adds back to materials.current_stock.
-    -- 'Reimbursed' = the customer was given their money back instead;
-    -- this one is written off and never restocks.
     disposition   VARCHAR(20)
                   CHECK (disposition IS NULL OR disposition IN ('Reimbursed', 'Replaced')),
-    -- True only while this row's quantity is CURRENTLY included in
-    -- materials.current_stock (i.e. disposition = 'Replaced'). Tracked
-    -- explicitly so toggling the disposition adds/removes that quantity
-    -- exactly once, instead of re-deriving it from disposition alone.
     restocked     BOOLEAN NOT NULL DEFAULT FALSE,
-    -- Exact quantity CURRENTLY added into materials.current_stock for this
-    -- row (0 when not restocked). Not always equal to `quantity` - staff
-    -- can mark fewer units than were returned as actually replaced (e.g.
-    -- only 3 of 5 returned units were undamaged). Stored explicitly (not
-    -- re-derived from replaced_qty) so clearing/switching the disposition
-    -- always reverses exactly what was actually added, even if replaced_qty
-    -- is edited on a later pass.
     restocked_qty      NUMERIC(12,2) NOT NULL DEFAULT 0,
-    -- How many of the returned units were marked "Replaced" (<= quantity).
-    -- NULL when disposition isn't currently 'Replaced'.
     replaced_qty        NUMERIC(12,2) CHECK (replaced_qty IS NULL OR replaced_qty > 0),
-    -- Peso amount actually refunded when marked "Reimbursed". NULL when
-    -- disposition isn't currently 'Reimbursed'. Doesn't affect stock.
     reimbursed_amount    NUMERIC(12,2) CHECK (reimbursed_amount IS NULL OR reimbursed_amount > 0),
-    -- Free-text note entered at the moment the disposition was set (e.g.
-    -- "repackaged and inspected" / "refunded in cash") - separate from
-    -- `remarks` above, which is the ORIGINAL reason the item came back.
     disposition_notes    TEXT
 );
 CREATE INDEX idx_back_order_material_date
     ON back_orders (material_id, return_date);
 
 -- ---- D4: Monthly Demand Records (forecasting-ready panel) -------
--- Built by aggregate_monthly_demand() — DFD process 3.2.
 CREATE TABLE monthly_demand (
     id                 SERIAL PRIMARY KEY,
     material_id        INT  NOT NULL REFERENCES materials(material_id),
-    period_month       DATE NOT NULL,          -- first day of the month
+    period_month       DATE NOT NULL,
     demand_qty         NUMERIC(12,2) NOT NULL DEFAULT 0,
     transaction_volume INT           NOT NULL DEFAULT 0,
     inventory_balance  NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -264,10 +208,10 @@ CREATE TABLE model_metrics (
 -- ---- Employees (for commission computation) ---------------------
 CREATE TABLE employees (
     employee_id      SERIAL PRIMARY KEY,
-    employee_code    VARCHAR(20)  UNIQUE NOT NULL,  -- matches projects.staff (e.g. "EMP-01")
+    employee_code    VARCHAR(20)  UNIQUE NOT NULL,
     name             VARCHAR(120) NOT NULL,
     role             VARCHAR(80),
-    commission_rate  NUMERIC(5,2) DEFAULT 0,          -- percent, e.g. 4.50
+    commission_rate  NUMERIC(5,2) DEFAULT 0,
     status           VARCHAR(20)  DEFAULT 'Active'
 );
 
@@ -281,27 +225,50 @@ CREATE TABLE audit_logs (
 );
 
 -- ---- Chat: one-to-one messages between accounts ------------------
--- Deleting an account also deletes its conversations.
 CREATE TABLE chat_messages (
     message_id   SERIAL PRIMARY KEY,
     sender_id    INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     recipient_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     body         TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
     sent_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    read_at      TIMESTAMPTZ,                 -- NULL until the recipient opens the conversation
+    read_at      TIMESTAMPTZ,
     CHECK (sender_id <> recipient_id)
 );
 CREATE INDEX idx_chat_pair   ON chat_messages (sender_id, recipient_id, message_id);
 CREATE INDEX idx_chat_unread ON chat_messages (recipient_id) WHERE read_at IS NULL;
 
+-- ---- Customer support tickets ----
+CREATE TABLE support_tickets (
+    ticket_id        SERIAL PRIMARY KEY,
+    token_hash       CHAR(64) NOT NULL UNIQUE,
+    company          VARCHAR(150),
+    contact_name     VARCHAR(120) NOT NULL,
+    email            VARCHAR(150) NOT NULL,
+    phone            VARCHAR(40)  NOT NULL,
+    order_ref        VARCHAR(60),
+    transaction_id   INT REFERENCES transactions(transaction_id) ON DELETE SET NULL,
+    status           VARCHAR(12)  NOT NULL DEFAULT 'Open' CHECK (status IN ('Open','Answered','Closed')),
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    staff_read_at    TIMESTAMPTZ,
+    customer_read_at TIMESTAMPTZ,
+    closed_at        TIMESTAMPTZ,
+    closed_by        VARCHAR(120)
+);
+CREATE INDEX idx_support_tickets_status ON support_tickets (status, updated_at DESC);
+
+CREATE TABLE support_messages (
+    message_id     SERIAL PRIMARY KEY,
+    ticket_id      INT NOT NULL REFERENCES support_tickets(ticket_id) ON DELETE CASCADE,
+    sender         VARCHAR(10) NOT NULL CHECK (sender IN ('customer','staff')),
+    staff_user_id  INT REFERENCES users(user_id) ON DELETE SET NULL,
+    staff_name     VARCHAR(120),
+    body           TEXT NOT NULL,
+    sent_at        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_support_messages_ticket ON support_messages (ticket_id, message_id);
+
 -- ---- Role default permissions (Settings > Roles & Permissions) ---
--- Lets an admin edit which modules each ROLE gets by default, from the
--- UI, instead of that being frozen in Python code. A per-user override
--- (users.custom_permissions above) still wins over whatever is here for
--- that one user. One row per role; `permissions` is the same
--- comma-separated page-key format as custom_permissions. Seeded with the
--- same defaults auth.py shipped with, so behavior doesn't change until
--- someone actually edits a cell in the matrix.
 CREATE TABLE role_permissions (
     role        VARCHAR(30) PRIMARY KEY
                 CHECK (role IN ('System Administrator', 'Inventory Personnel',
@@ -310,29 +277,52 @@ CREATE TABLE role_permissions (
 );
 
 INSERT INTO role_permissions (role, permissions) VALUES
-    ('System Administrator', 'dashboard,inventory,suppliers,customers,projects,transactions,forecasting,reports,settings,profile'),
-    ('Inventory Personnel',  'dashboard,inventory,suppliers,profile'),
-    ('Operations Personnel', 'dashboard,projects,transactions,profile'),
-    ('Management/Owner',     'dashboard,projects,transactions,forecasting,reports,profile');
+    ('System Administrator', 'dashboard,inventory,outlook,suppliers,customers,projects,transactions,support,forecasting,reports,settings,profile'),
+    ('Inventory Personnel',  'dashboard,inventory,outlook,suppliers,profile'),
+    ('Operations Personnel', 'dashboard,projects,transactions,support,profile'),
+    ('Management/Owner',     'dashboard,outlook,projects,transactions,support,forecasting,reports,profile');
 
--- =================================================================
--- MIGRATION — run this instead on a database that already has data
--- =================================================================
--- Re-running everything above would DROP every table (see the top of this
--- file) and wipe your existing data. If back_orders already exists and you
--- just need the new "Replaced"/"Reimbursed" detail columns (added for the
--- Back Order disposition popup - Qty Replaced / Amount Reimbursed /
--- disposition remarks), run ONLY this block instead, once, in pgAdmin's
--- Query Tool:
---
--- ALTER TABLE back_orders
---     ADD COLUMN IF NOT EXISTS restocked_qty      NUMERIC(12,2) NOT NULL DEFAULT 0,
---     ADD COLUMN IF NOT EXISTS replaced_qty        NUMERIC(12,2) CHECK (replaced_qty IS NULL OR replaced_qty > 0),
---     ADD COLUMN IF NOT EXISTS reimbursed_amount    NUMERIC(12,2) CHECK (reimbursed_amount IS NULL OR reimbursed_amount > 0),
---     ADD COLUMN IF NOT EXISTS disposition_notes    TEXT;
---
--- -- Back-fill restocked_qty for any back order already marked "Replaced"
--- -- before this migration, so its exact restocked amount (= quantity, the
--- -- only option that existed before this change) is tracked correctly:
--- UPDATE back_orders SET restocked_qty = quantity
---  WHERE disposition = 'Replaced' AND restocked = TRUE AND restocked_qty = 0;
+-- ---- Company settings (Settings > Company) ----
+CREATE TABLE company_settings (
+    id           INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    company_name VARCHAR(150) NOT NULL DEFAULT 'Parabellum Steel & Iron Works',
+    tin          VARCHAR(30),
+    email        VARCHAR(150),
+    phone        VARCHAR(40),
+    address      VARCHAR(250),
+    currency     VARCHAR(10)  NOT NULL DEFAULT 'PHP',
+    vat_rate     NUMERIC(5,2) NOT NULL DEFAULT 12 CHECK (vat_rate >= 0 AND vat_rate <= 100),
+    session_timeout_min INT  NOT NULL DEFAULT 30,
+    require_2fa_admins BOOLEAN NOT NULL DEFAULT FALSE,
+    login_alerts BOOLEAN      NOT NULL DEFAULT FALSE,
+    last_digest_at TIMESTAMPTZ,
+    updated_at   TIMESTAMPTZ  DEFAULT CURRENT_TIMESTAMP,
+    updated_by   VARCHAR(60)
+);
+INSERT INTO company_settings (id, company_name, email, address)
+VALUES (1, 'Parabellum Steel & Iron Works', 'info@parabellumsteel.ph', 'Lipa City, Batangas, Philippines');
+
+-- ---- Material supplier link ----
+ALTER TABLE materials ADD COLUMN supplier_id INT REFERENCES suppliers(supplier_id) ON DELETE SET NULL;
+
+-- ---- Forecast runs ----
+CREATE TABLE forecast_runs (
+    run_id  SERIAL PRIMARY KEY,
+    run_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    run_by  VARCHAR(60),
+    result  JSONB NOT NULL
+);
+
+-- ---- Delivery attempts ----
+CREATE TABLE delivery_attempts (
+    attempt_id   SERIAL PRIMARY KEY,
+    movement_id  INT NOT NULL REFERENCES stock_movements(movement_id) ON DELETE CASCADE,
+    outcome      VARCHAR(12) NOT NULL CHECK (outcome IN ('Delivered', 'Failed')),
+    reason       TEXT,
+    attempted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    temp_c       NUMERIC(5,2),
+    rainfall_mm  NUMERIC(8,2),
+    wind_kmh     NUMERIC(6,2),
+    recorded_by  VARCHAR(80)
+);
+CREATE INDEX idx_delivery_attempts_movement ON delivery_attempts (movement_id);

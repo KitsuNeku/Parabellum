@@ -1,26 +1,7 @@
-"""
-Seed demo user accounts for Parabellum ISOS.
-=================================================================
-Run ONCE, after schema.sql:
-
-    python seed_users.py
-
-Creates one account per role so you can demonstrate role-based access
-control at your defense. Passwords are hashed with werkzeug's
-generate_password_hash before they ever touch the database - the
-database never stores or sees the plain-text password.
-
-IMPORTANT: these are DEMO credentials for development and your
-defense rehearsal. Change them (or create real accounts and disable
-these) before any real deployment.
-"""
-
 import psycopg2
 from werkzeug.security import generate_password_hash
 from config import DB_CONFIG
 
-# username, password, full name, role, email, department
-# Role strings MUST exactly match ROLE_PERMISSIONS in data.js / auth.py.
 DEMO_USERS = [
     ("admin",      "Admin!2026",      "Admin User",        "System Administrator",
      "admin@parabellumsteel.com.ph", "IT / Management"),

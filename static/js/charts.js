@@ -1,7 +1,3 @@
-/* =====================================================================
- PARABELLUM ISOS - Charts (Chart.js, brand-themed)
- Each chart only initializes if its <canvas> exists on the page.
- ===================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof Chart === 'undefined') return;
 
@@ -34,9 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const el = (id) => document.getElementById(id);
 
-  // For charts whose categories run down the LEFT side (indexAxis:'y'): make sure
-  // the FIRST category is at the top and the last at the bottom, whichever way
-  // this Chart.js build orders a vertical category axis by default.
   const firstOnTop = (chart) => {
     const sy = chart.scales && chart.scales.y;
     const n = chart.data.labels.length;
@@ -47,13 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  /* ---------- Inventory Usage (bar) - dashboard, gold current period + daily/weekly/monthly toggle ----------
-   Starts EMPTY. app.js fills each range from /api/dashboard (real
-   stock_movements issuances) via window.setUsageData(range, labels, values).
-   It used to be pre-loaded with made-up "tons" figures, and the Daily and
-   Weekly buttons only ever showed sample arrays. The figures are total
-   QUANTITY issued across all materials - materials are counted in mixed
-   units (pcs, sheets, lengths...), so the honest label is "units", not tons. */
   if (el('chartMaterialUsage')) {
     const goldLast = (labels) => labels.map((_, i) => i === labels.length - 1 ? C.gold : C.primary);
     const NOTES = {
@@ -79,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
       usageChart.data.datasets[0].backgroundColor = goldLast(d.labels);
       usageChart.update();
     };
-    // Daily / Weekly / Monthly toggle (wired in app.js). Returns the caption for the range.
     window.updateUsageChart = (range) => { currentRange = range; paint(); return NOTES[range] || ''; };
     window.setUsageData = (range, labels, values) => {
       sets[range] = { labels: labels || [], data: values || [] };
@@ -88,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.usageNote = (range) => NOTES[range] || '';
   }
 
-  /* ---------- Forecasting page: Monthly Forecast Graph ---------- */
+  /* Forecasting page: Monthly Forecast Graph */
   let forecastChart;
   if (el('chartMonthlyForecast')) {
     forecastChart = new Chart(el('chartMonthlyForecast'), {
@@ -100,8 +85,6 @@ document.addEventListener('DOMContentLoaded', () => {
           { label:'Forecast', data:[],
             backgroundColor:C.gold, borderRadius:4, maxBarThickness:46 },
         ]},
-      // Months run along the BOTTOM, units up the LEFT. History bars are
-      // primary-coloured; the forecast month's bar is gold.
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ position:'top', align:'end' } },
         scales:{ x:Object.assign({ stacked:true }, noGridX),
@@ -109,9 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     window.updateForecastChart = (historyPoints, forecastLabel, predicted) => {
       const labels = historyPoints.map(p => p.month).concat([forecastLabel]);
-      // Two datasets, one coloured per bar - a given month's value sits in
-      // only one of them (the other has null), so each month shows a single
-      // bar in the right colour.
       const histSeries = historyPoints.map(p => p.demand).concat([null]);
       const fcSeries   = historyPoints.map(_ => null).concat([predicted]);
       forecastChart.data.labels = labels;
@@ -121,12 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Forecasting page: Historical Demand (stacked bars) ----------
-   One bar per MONTH (oldest to newest along the bottom), stacked by material.
-   Each coloured segment inside a bar is one material; the tooltip shows the
-   material name, how many units, and the unit. Materials have different
-   units (pcs, sheets, kg ...), so a bar's total height mixes units - read
-   the segments, not the total height. */
   let historicalChart;
   if (el('chartHistoricalDemand')) {
     const matPalette = [C.primary, C.gold, C.info, C.success, '#7c3aed', '#d97b34', '#0f766e', '#9aa1ad', '#c94a3f', '#0f172a'];
@@ -136,14 +110,14 @@ document.addEventListener('DOMContentLoaded', () => {
       options:{ responsive:true, maintainAspectRatio:false,
         interaction:{ mode:'nearest', intersect:true },
         plugins:{
-          legend:{ position:'bottom', labels:{ boxWidth:8, padding:10, font:{ size:11 } } },
+          legend:{ display:false },
           tooltip:{ callbacks:{ label:(c)=> ' ' + c.dataset.label + ': ' + Number(c.raw).toLocaleString('en-PH') + ' ' + (c.dataset.unit || '') } } },
         scales:{ x:Object.assign({ stacked:true }, noGridX),
                  y:axis({ beginAtZero:true, stacked:true }) } }
     });
     window.updateHistoricalChart = (forecasts) => {
       const fcs = forecasts || [];
-      const months = [];                                   // oldest first
+      const months = [];
       fcs.forEach(f => (f.history || []).forEach(p => { if (!months.includes(p.month)) months.push(p.month); }));
       historicalChart.data.labels = months;
       historicalChart.data.datasets = fcs.map((f, i) => {
@@ -154,10 +128,27 @@ document.addEventListener('DOMContentLoaded', () => {
                  backgroundColor: matPalette[i % matPalette.length], borderWidth:0, maxBarThickness:46 };
       });
       historicalChart.update();
+      renderHistLegend();
     };
+    const renderHistLegend = () => {
+      const box = el('histLegend');
+      if (!box) return;
+      box.innerHTML = historicalChart.data.datasets.map((d, i) => {
+        const hidden = !historicalChart.isDatasetVisible(i);
+        return `<li><button type="button" class="legend-item${hidden ? ' is-off' : ''}" data-ds="${i}" aria-pressed="${!hidden}">
+          <span class="legend-swatch" style="background:${d.backgroundColor}"></span>
+          <span class="legend-name">${escapeHTML(d.label)}</span></button></li>`;
+      }).join('');
+    };
+    el('histLegend')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-ds]'); if (!btn) return;
+      const i = Number(btn.dataset.ds);
+      historicalChart.setDatasetVisibility(i, !historicalChart.isDatasetVisible(i));
+      historicalChart.update();
+      renderHistLegend();
+    });
   }
 
-  /* ---------- Forecasting page: Inventory Trend (line) ---------- */
   let inventoryChart;
   if (el('chartInventoryTrend')) {
     const ctx = el('chartInventoryTrend').getContext('2d');
@@ -178,9 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Reports: monthly revenue (bar) ----------
-   Starts empty; the Reports page fills it from /api/reports/overview via
-   window.setRevenueChart(labels, pesos). (Was a fixed Jan-Jun series.) */
   if (el('chartRevenue')) {
     const revChart = new Chart(el('chartRevenue'), {
       type:'bar',
@@ -200,9 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Reports: inventory value by category (pie) ----------
-   Starts empty; filled from /api/reports/overview via
-   window.setCategoryChart(labels, pesoValues). (Was a made-up distribution.) */
   if (el('chartCategory')) {
     const palette = [C.primary,'#c94a3f','#d97b34','#e6a817','#2b6cb0','#1f9d55','#9aa1ad','#7c3aed','#0f172a'];
     const catChart = new Chart(el('chartCategory'), {
@@ -219,9 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  /* ---------- Profile mini activity (line) ----------
-   Starts empty; the Profile page fills it from /api/profile (the user's own
-   audit-log entries per day, last 7 days) via window.setActivityChart. */
   if (el('chartActivity')) {
     const ctx = el('chartActivity').getContext('2d');
     const actChart = new Chart(ctx, {

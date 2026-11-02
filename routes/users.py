@@ -68,6 +68,13 @@ def api_users_permissions():
         return jsonify({"ok": False, "error": "User not found."}), 404
     target = rows[0]
 
+    # The admin account's permissions are fixed - cannot be changed from here.
+    # Blocks both a toggle-apply and a "reset" (both would alter the admin's
+    # effective access).
+    if target["username"] == "admin":
+        return jsonify({"ok": False,
+            "error": "The admin account's permissions cannot be changed."}), 400
+
     if reset:
         new_value = None
         log_detail = f"Cleared custom permissions for {target['username']} — role defaults now apply."

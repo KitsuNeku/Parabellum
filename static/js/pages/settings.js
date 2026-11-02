@@ -190,11 +190,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('permCheckboxes');
     const isSelf = CURRENT_USER && CURRENT_USER.user_id === parseInt(u.id.split('-')[1], 10);
     const isAdmin = u.role === 'System Administrator';
+    // The admin account itself is fully locked - cannot change its access from
+    // here. Every checkbox is disabled and the Apply/Reset buttons are hidden.
+    const isAdminAccount = u.username === 'admin';
     container.innerHTML = ACCESS_MODULES.map(([key, label]) => {
       const checked  = effective.has(key) ? 'checked' : '';
-      const disabled = (key === 'settings' && !isAdmin) ? 'disabled' : '';
-      const settingsAdminSelfLock = (key === 'settings' && isSelf && isAdmin);
-      const lockedNote = disabled ? '<div class="small text-muted-2">Only System Administrators can hold this.</div>' : '';
+      const disabled = (isAdminAccount || (key === 'settings' && !isAdmin)) ? 'disabled' : '';
+      const settingsAdminSelfLock = (key === 'settings' && isSelf && isAdmin && !isAdminAccount);
+      const lockedNote = (!isAdminAccount && disabled)
+        ? '<div class="small text-muted-2">Only System Administrators can hold this.</div>' : '';
       const selfLockAttr = settingsAdminSelfLock ? 'data-self-locked="1"' : '';
       return `<div class="col-md-6">
         <div class="form-check">
@@ -206,7 +210,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
 
     document.getElementById('permAdminSelfHint').style.display =
-      (isSelf && isAdmin) ? '' : 'none';
+      (isSelf && isAdmin && !isAdminAccount) ? '' : 'none';
+
+    // Hide Apply/Reset for the admin account; show a locked notice instead.
+    const applyBtn = document.getElementById('permApplyBtn');
+    const resetBtn = document.getElementById('permResetBtn');
+    let lockedBanner = document.getElementById('permAdminLockBanner');
+    if (isAdminAccount) {
+      if (applyBtn) applyBtn.style.display = 'none';
+      if (resetBtn) resetBtn.style.display = 'none';
+      if (!lockedBanner) {
+        lockedBanner = document.createElement('div');
+        lockedBanner.id = 'permAdminLockBanner';
+        lockedBanner.className = 'alert alert-soft-info small mt-2 mb-0';
+        lockedBanner.innerHTML = '<i class="bi bi-shield-lock me-1"></i>The admin account has fixed access and cannot be changed from here.';
+        container.parentElement.appendChild(lockedBanner);
+      } else {
+        lockedBanner.style.display = '';
+      }
+    } else {
+      if (applyBtn) applyBtn.style.display = '';
+      if (resetBtn) resetBtn.style.display = '';
+      if (lockedBanner) lockedBanner.style.display = 'none';
+    }
 
     permEditor.style.display = '';
   }

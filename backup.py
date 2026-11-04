@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timezone
 
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 
 from db import connect_db
 
@@ -11,6 +11,8 @@ BACKUP_TABLES = [
     "monthly_weather", "forecast_results", "model_metrics", "forecast_runs", "support_tickets", "support_messages", "audit_logs",
 ]
 
+JSON_TYPE_OIDS = {114, 3802}
+
 
 def generate_sql_backup(db_config):
     conn = connect_db(db_config)
@@ -18,7 +20,7 @@ def generate_sql_backup(db_config):
         lines = [
             "-- =================================================================",
             "-- Parabellum ISOS -- Database Backup",
-            f"-- Generated: {datetime.now(timezone.utc).isoformat(timespec='seconds')}Z",
+            f"-- Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
             "-- ",
             "-- RESTORE: run schema.sql on an EMPTY database first (it creates",
             "-- the tables), then run this file to reload the data. Tables are",
@@ -32,6 +34,7 @@ def generate_sql_backup(db_config):
             for table in BACKUP_TABLES:
                 cur.execute(f"SELECT * FROM {table} ORDER BY 1;")
                 rows = cur.fetchall()
+                json_cols = {d.name for d in cur.description if d.type_code in JSON_TYPE_OIDS}
                 lines.append(f"-- ---- {table} ({len(rows)} row{'s' if len(rows) != 1 else ''}) ----")
                 if not rows:
                     lines.append("-- (no rows)")
@@ -40,10 +43,19 @@ def generate_sql_backup(db_config):
                 columns = list(rows[0].keys())
                 col_list = ", ".join(columns)
                 for row in rows:
-                    values = tuple(row[c] for c in columns)
-                    stmt = cur.mogrify(
-                        f"INSERT INTO {table} ({col_list}) VALUES %s;", (values,)
+                  
+                    values = tuple(
+                        Json(row[c]) if c in json_cols and row[c] is not None else row[c]
+                        for c in columns
                     )
+                    try:
+                        stmt = cur.mogrify(
+                            f"INSERT INTO {table} ({col_list}) VALUES %s;", (values,)
+                        )
+                    except Exception:
+                 
+                        print(table, {c: type(row[c]).__name__ for c in columns})
+                        raise
                     lines.append(stmt.decode("utf-8"))
                 lines.append("")
         lines.append("COMMIT;")

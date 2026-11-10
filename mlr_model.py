@@ -14,7 +14,11 @@ NAIVE_NAME = "Naive (last month)"
 LOCATION_NAME = "Lipa City, Batangas, PH"
 
 WEATHER_FEATURES = ["avg_temp_c", "total_rainfall_mm", "rainy_days"]
-LAG_FEATURES = ["prev_demand", "prev_demand_2"]
+# prev_year_demand is the demand for the same calendar month 12 months prior.
+# Captures the year-over-year seasonal signal directly (e.g. Nov 2026's forecast
+# uses Nov 2025 as one of its inputs), on top of the month_sin/month_cos
+# encoding of the time of year.
+LAG_FEATURES = ["prev_demand", "prev_demand_2", "prev_year_demand"]
 SEASON_FEATURES = ["month_sin", "month_cos"]
 MODEL_WEATHER = ["total_rainfall_mm", "rainy_days"]
 FEATURES = LAG_FEATURES + SEASON_FEATURES + MODEL_WEATHER

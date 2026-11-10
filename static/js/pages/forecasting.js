@@ -10,39 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let onlyRunout = false;
   let viewMode = 'monthly';
 
-  const MONTH_IDX = { Jan:1, Feb:2, Mar:3, Apr:4, May:5, Jun:6, Jul:7, Aug:8, Sep:9, Oct:10, Nov:11, Dec:12 };
-  const parseMonth = (s) => {
-    const parts = String(s || '').split(' ');
-    const m = MONTH_IDX[parts[0]] || 0;
-    const y = parseInt(parts[1], 10) || 0;
-    return { m, y };
-  };
-  // Northern-hemisphere four-season calendar. Winter spans Dec of year Y-1
-  // through Feb of year Y; it is labeled by Y (the year the winter ends in).
-  const seasonOf = (m) => {
-    if (m === 12 || m <= 2) return { q: 1, label: 'Winter' };
-    if (m >= 3 && m <= 5)   return { q: 2, label: 'Spring' };
-    if (m >= 6 && m <= 8)   return { q: 3, label: 'Summer' };
-    return { q: 4, label: 'Autumn' };
-  };
-  const seasonYear = (m, y) => (m === 12 ? y + 1 : y);
-  function groupBySeason(historyPoints, forecastLabel, predicted){
-    const b = {};
-    const add = (monthStr, histVal, fcVal) => {
-      const d = parseMonth(monthStr);
-      if (!d.m) return;
-      const s = seasonOf(d.m);
-      const sy = seasonYear(d.m, d.y);
-      const key = `${s.label} ${sy}`;
-      if (!b[key]) b[key] = { key, label: key, historical: 0, forecast: 0, order: sy * 10 + s.q };
-      b[key].historical += histVal || 0;
-      b[key].forecast   += fcVal   || 0;
-    };
-    (historyPoints || []).forEach(p => add(p.month, Number(p.demand) || 0, 0));
-    if (forecastLabel && predicted != null) add(forecastLabel, 0, Number(predicted) || 0);
-    return Object.values(b).sort((a, b) => a.order - b.order);
-  }
-
   const trendOf = (f) => (f.prev_demand ? ((f.predicted_demand - f.prev_demand) / f.prev_demand) * 100 : null);
   const trendHTML = (t) => t === null ? '<span class="text-muted-2">—</span>'
     : t >= 0 ? `<span class="text-danger"><i class="bi bi-arrow-up"></i> ${t.toFixed(1)}%</span>`
@@ -96,26 +63,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!f) return;
     select.value = f.material_name;
     document.querySelectorAll('.fc-row').forEach(r => r.classList.toggle('is-active', r.dataset.mat === f.material_name));
-    set('fcResPredicted', `${fmt(f.predicted_demand)} ${f.unit}`);
+    const useSeasonal = (viewMode === 'seasonal') && (f.seasonal_naive_demand != null);
+    const shownPredicted = useSeasonal ? f.seasonal_naive_demand : f.predicted_demand;
+    const shownReorder = Math.max(0, (shownPredicted || 0) - (f.current_stock || 0));
+    set('fcResPredicted', `${fmt(shownPredicted ?? 0)} ${f.unit}`);
     set('fcResStock', `${fmt(f.current_stock)} ${f.unit}`);
-    html('fcResTrend', trendHTML(trendOf(f)));
-    set('fcResCover', coverText(f));
-    html('fcResReorder', f.reorder_qty > 0
-      ? `Order about <strong>${fmt(f.reorder_qty)} ${escapeHTML(f.unit)}</strong> before ${escapeHTML(RESULT.forecast_month)} to cover the predicted demand.`
+    html('fcResTrend', trendHTML(f.prev_demand ? ((shownPredicted - f.prev_demand) / f.prev_demand) * 100 : null));
+    set('fcResCover', shownPredicted > 0
+      ? (() => { const d = Math.round(f.current_stock / (shownPredicted / 30.0)); return d >= 90 ? '3+ months' : `${d} days`; })()
+      : '—');
+    html('fcResReorder', shownReorder > 0
+      ? `Order about <strong>${fmt(shownReorder)} ${escapeHTML(f.unit)}</strong> before ${escapeHTML(RESULT.forecast_month)} to cover the predicted demand.`
       : `Current stock should be enough for ${escapeHTML(RESULT.forecast_month)}. No restock needed yet.`);
     let insight = escapeHTML(f.weather_insight || '—');
     if (f.sample_size_warning) insight += ` <span class="text-muted-2">(Based on only ${f.training_rows} months of history.)</span>`;
     html('fcWxInsight', `<i class="bi bi-info-circle me-1"></i>${insight}`);
+    // Seasonal mode uses the demand from the same calendar month one year ago
+    // as the forecast value (seasonal naive). Monthly mode uses the MLR output.
+    const forecastValue = useSeasonal ? f.seasonal_naive_demand : f.predicted_demand;
     if (viewMode === 'seasonal') {
-      const seasons = groupBySeason(f.history || [], f.forecast_label || RESULT.forecast_month, f.predicted_demand);
       set('fcDetailChartTitle', 'Seasonal Demand & Forecast');
-      set('fcDetailChartSub', 'Historical demand grouped by 3-month season; the predicted month is stacked on the season it falls in.');
-      window.updateForecastChartSeasonal?.(seasons);
+      if (f.seasonal_naive_demand == null) {
+        set('fcDetailChartSub', `No data from ${RESULT.forecast_month} of last year yet, so no seasonal forecast for this material.`);
+      } else {
+        set('fcDetailChartSub', `Forecast for ${RESULT.forecast_month} uses the actual demand from the same month last year.`);
+      }
     } else {
       set('fcDetailChartTitle', 'Monthly Demand & Forecast');
       set('fcDetailChartSub', "Last 6 months of actual demand and next month's forecast.");
-      window.updateForecastChart?.(f.history || [], f.forecast_label || RESULT.forecast_month, f.predicted_demand);
     }
+    window.updateForecastChart?.(f.history || [], f.forecast_label || RESULT.forecast_month, forecastValue);
     window.updateInventoryChart?.(f.history || []);
   }
 

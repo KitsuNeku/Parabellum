@@ -14,11 +14,7 @@ NAIVE_NAME = "Naive (last month)"
 LOCATION_NAME = "Lipa City, Batangas, PH"
 
 WEATHER_FEATURES = ["avg_temp_c", "total_rainfall_mm", "rainy_days"]
-# prev_year_demand is the demand for the same calendar month 12 months prior.
-# Captures the year-over-year seasonal signal directly (e.g. Nov 2026's forecast
-# uses Nov 2025 as one of its inputs), on top of the month_sin/month_cos
-# encoding of the time of year.
-LAG_FEATURES = ["prev_demand", "prev_demand_2", "prev_year_demand"]
+LAG_FEATURES = ["prev_demand", "prev_demand_2"]
 SEASON_FEATURES = ["month_sin", "month_cos"]
 MODEL_WEATHER = ["total_rainfall_mm", "rainy_days"]
 FEATURES = LAG_FEATURES + SEASON_FEATURES + MODEL_WEATHER
@@ -251,7 +247,6 @@ def prepare_dataset(panel):
     g = df.groupby("material_id")["demand_qty"]
     df["prev_demand"] = g.shift(1)
     df["prev_demand_2"] = g.shift(2)
-    df["prev_year_demand"] = g.shift(12)
     return df.dropna(subset=LAG_FEATURES).reset_index(drop=True)
 
 
@@ -404,12 +399,13 @@ def run_forecast(db_config, overrides=None, username="system"):
         hist = full_panel[full_panel["material_id"] == mid]
         prev1 = float(hist["demand_qty"].iloc[-1])
         prev2 = float(hist["demand_qty"].iloc[-2]) if len(hist) > 1 else prev1
-        # Same-month-last-year demand for the month being forecasted.
-        # hist ends at the latest recorded month; forecast_month is one month
-        # after that, so prev_year_demand sits 12 positions back from the end.
-        prev12 = float(hist["demand_qty"].iloc[-12]) if len(hist) >= 12 else prev1
+        # Seasonal naive reference: demand of the same calendar month one year
+        # ago. The MLR itself does not use this; it is returned alongside the
+        # MLR prediction so the UI can show a pure "same month last year"
+        # forecast when the Seasonal toggle is active.
+        seasonal_naive = (round(float(hist["demand_qty"].iloc[-12]), 2)
+                          if len(hist) >= 12 else None)
         row = pd.DataFrame([{"material_id": mid, "prev_demand": prev1, "prev_demand_2": prev2,
-                             "prev_year_demand": prev12,
                              **season, "total_rainfall_mm": wx["total_rainfall_mm"],
                              "rainy_days": wx["rainy_days"]}])
         if len(own) >= MIN_PER_MATERIAL_ROWS - 2:
@@ -434,6 +430,7 @@ def run_forecast(db_config, overrides=None, username="system"):
             "material_name": mat["material_name"],
             "unit": mat["unit"],
             "predicted_demand": predicted,
+            "seasonal_naive_demand": seasonal_naive,
             "current_stock": round(stock, 2),
             "reorder_qty": max(round(predicted - stock, 2), 0.0),
             "prev_demand": round(prev1, 2),

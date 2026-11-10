@@ -8,6 +8,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const runBtn = $('fcRunBtn');
   let RESULT = null;
   let onlyRunout = false;
+  let viewMode = 'monthly';
+
+  const MONTH_IDX = { Jan:1, Feb:2, Mar:3, Apr:4, May:5, Jun:6, Jul:7, Aug:8, Sep:9, Oct:10, Nov:11, Dec:12 };
+  const parseMonth = (s) => {
+    const parts = String(s || '').split(' ');
+    const m = MONTH_IDX[parts[0]] || 0;
+    const y = parseInt(parts[1], 10) || 0;
+    return { m, y };
+  };
+  // Northern-hemisphere four-season calendar. Winter spans Dec of year Y-1
+  // through Feb of year Y; it is labeled by Y (the year the winter ends in).
+  const seasonOf = (m) => {
+    if (m === 12 || m <= 2) return { q: 1, label: 'Winter' };
+    if (m >= 3 && m <= 5)   return { q: 2, label: 'Spring' };
+    if (m >= 6 && m <= 8)   return { q: 3, label: 'Summer' };
+    return { q: 4, label: 'Autumn' };
+  };
+  const seasonYear = (m, y) => (m === 12 ? y + 1 : y);
+  function groupBySeason(historyPoints, forecastLabel, predicted){
+    const b = {};
+    const add = (monthStr, histVal, fcVal) => {
+      const d = parseMonth(monthStr);
+      if (!d.m) return;
+      const s = seasonOf(d.m);
+      const sy = seasonYear(d.m, d.y);
+      const key = `${s.label} ${sy}`;
+      if (!b[key]) b[key] = { key, label: key, historical: 0, forecast: 0, order: sy * 10 + s.q };
+      b[key].historical += histVal || 0;
+      b[key].forecast   += fcVal   || 0;
+    };
+    (historyPoints || []).forEach(p => add(p.month, Number(p.demand) || 0, 0));
+    if (forecastLabel && predicted != null) add(forecastLabel, 0, Number(predicted) || 0);
+    return Object.values(b).sort((a, b) => a.order - b.order);
+  }
 
   const trendOf = (f) => (f.prev_demand ? ((f.predicted_demand - f.prev_demand) / f.prev_demand) * 100 : null);
   const trendHTML = (t) => t === null ? '<span class="text-muted-2">—</span>'
@@ -72,7 +106,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let insight = escapeHTML(f.weather_insight || '—');
     if (f.sample_size_warning) insight += ` <span class="text-muted-2">(Based on only ${f.training_rows} months of history.)</span>`;
     html('fcWxInsight', `<i class="bi bi-info-circle me-1"></i>${insight}`);
-    window.updateForecastChart?.(f.history || [], f.forecast_label || RESULT.forecast_month, f.predicted_demand);
+    if (viewMode === 'seasonal') {
+      const seasons = groupBySeason(f.history || [], f.forecast_label || RESULT.forecast_month, f.predicted_demand);
+      set('fcDetailChartTitle', 'Seasonal Demand & Forecast');
+      set('fcDetailChartSub', 'Historical demand grouped by 3-month season; the predicted month is stacked on the season it falls in.');
+      window.updateForecastChartSeasonal?.(seasons);
+    } else {
+      set('fcDetailChartTitle', 'Monthly Demand & Forecast');
+      set('fcDetailChartSub', "Last 6 months of actual demand and next month's forecast.");
+      window.updateForecastChart?.(f.history || [], f.forecast_label || RESULT.forecast_month, f.predicted_demand);
+    }
     window.updateInventoryChart?.(f.history || []);
   }
 
@@ -199,6 +242,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   select.addEventListener('change', () => renderDetail(select.value));
   runBtn.addEventListener('click', runForecast);
+  document.querySelectorAll('input[name="fcViewMode"]').forEach(r => {
+    r.addEventListener('change', () => {
+      viewMode = document.querySelector('input[name="fcViewMode"]:checked')?.value || 'monthly';
+      if (RESULT) renderDetail(select.value);
+    });
+  });
   window.onKpiFilter = (key) => {
     onlyRunout = key === 'runout';
     if (RESULT) renderTable();

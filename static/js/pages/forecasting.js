@@ -83,10 +83,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const forecastValue = useSeasonal ? f.seasonal_naive_demand : f.predicted_demand;
     if (viewMode === 'seasonal') {
       set('fcDetailChartTitle', 'Seasonal Demand & Forecast');
+      // Build "<Month> <year-1>" from the forecast month string, so the
+      // subtitle names the actual prior-year month (e.g. "December 2025").
+      const priorYearMonth = (() => {
+        const parts = String(RESULT.forecast_month || '').trim().split(' ');
+        const y = parseInt(parts[1], 10);
+        return (parts.length >= 2 && !isNaN(y)) ? `${parts[0]} ${y - 1}` : 'the same month last year';
+      })();
       if (f.seasonal_naive_demand == null) {
-        set('fcDetailChartSub', `No data from ${RESULT.forecast_month} of last year yet, so no seasonal forecast for this material.`);
+        set('fcDetailChartSub', `No data from ${priorYearMonth} yet, so no seasonal forecast for this material.`);
       } else {
-        set('fcDetailChartSub', `Forecast for ${RESULT.forecast_month} uses the actual demand from the same month last year.`);
+        set('fcDetailChartSub', `Forecast for ${RESULT.forecast_month} uses the actual demand from ${priorYearMonth}.`);
       }
     } else {
       set('fcDetailChartTitle', 'Monthly Demand & Forecast');

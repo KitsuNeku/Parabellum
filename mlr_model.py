@@ -247,6 +247,7 @@ def prepare_dataset(panel):
     g = df.groupby("material_id")["demand_qty"]
     df["prev_demand"] = g.shift(1)
     df["prev_demand_2"] = g.shift(2)
+    df["prev_year_demand"] = g.shift(12)
     return df.dropna(subset=LAG_FEATURES).reset_index(drop=True)
 
 
@@ -399,7 +400,12 @@ def run_forecast(db_config, overrides=None, username="system"):
         hist = full_panel[full_panel["material_id"] == mid]
         prev1 = float(hist["demand_qty"].iloc[-1])
         prev2 = float(hist["demand_qty"].iloc[-2]) if len(hist) > 1 else prev1
+        # Same-month-last-year demand for the month being forecasted.
+        # hist ends at the latest recorded month; forecast_month is one month
+        # after that, so prev_year_demand sits 12 positions back from the end.
+        prev12 = float(hist["demand_qty"].iloc[-12]) if len(hist) >= 12 else prev1
         row = pd.DataFrame([{"material_id": mid, "prev_demand": prev1, "prev_demand_2": prev2,
+                             "prev_year_demand": prev12,
                              **season, "total_rainfall_mm": wx["total_rainfall_mm"],
                              "rainy_days": wx["rainy_days"]}])
         if len(own) >= MIN_PER_MATERIAL_ROWS - 2:

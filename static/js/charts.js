@@ -99,6 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
       forecastChart.data.datasets[1].data = fcSeries;
       forecastChart.update();
     };
+    window.updateForecastChartSeasonal = (seasons) => {
+      forecastChart.data.labels = seasons.map(s => s.label);
+      forecastChart.data.datasets[0].data = seasons.map(s => s.historical > 0 ? s.historical : null);
+      forecastChart.data.datasets[1].data = seasons.map(s => s.forecast > 0 ? s.forecast : null);
+      forecastChart.update();
+    };
   }
 
   let historicalChart;
